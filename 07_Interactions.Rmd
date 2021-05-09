@@ -1,0 +1,316 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Interactions {#interactions}
+
+## Building an interaction
+
+Load the data, log transform the gdp measure, remove incomplete cases and create
+a character column for Africa or n Not Africa.
+
+```{r}
+data(rugged)
+detach(package:rethinking, unload = TRUE)
+d <- rugged %>%
+  filter(complete.cases(rgdppc_2000)) %>%
+  mutate(log_gdp = log(rgdppc_2000),
+         is_africa = if_else(cont_africa == 1, "Africa", "Not Africa"),
+         is_africa = as.factor(is_africa))
+
+# str(d)
+
+```
+
+and split the data into countries from Africa and not.
+
+```{r}
+lst <- d %>%
+  split(d$is_africa)
+# str(lst)
+```
+
+and now creating a simple univariate model
+
+$$
+\log{(gdp_i)} \sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i = \alpha + \beta \cdot rugged_i \\
+\alpha \sim \mathcal{N}(8, 100) \\
+\beta \sim \mathcal{N}(0, 1) \\
+\sigma \sim \mathcal{HalfCauchy}(0, 2)
+$$
+
+fit the models with and without Africa. Please note that, as McElreath mentions it,
+**In general It is not a good idea to split the data**.  See p. 213 and p. 214,
+very useful comments.
+
+```{r}
+a_file <- here::here("fits", "b07_01.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b7.1 <- readRDS(file = a_file)  # load the file
+# b7.1 <- brm(
+#   data = lst[["Africa"]],
+#   family = gaussian,
+#   log_gdp ~ 1 + rugged,
+#   prior = c(
+#     prior(normal(8, 100), class = Intercept),
+#     prior(normal(0, 1), class = b),
+#     prior(cauchy(0, 2), class = sigma)
+#     ),
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   seed = 7,
+#   file = a_file
+#   )
+```
+
+note the use of of `update()`
+
+```{r}
+a_file <- here::here("fits", "b07_02.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b7.2 <- readRDS(file = a_file)  # load the file
+# b7.2 <- update(
+#   object = b7.1,
+#   newdata = lst[["Not Africa"]],
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   seed = 7,
+#   file = a_file
+#   )
+```
+add the fitted estimate to each dataframe
+
+```{r}
+lst[["Africa"]] <- fitted(b7.1) %>%
+  as_tibble() %>%
+  bind_cols(lst[["Africa"]]) %>%
+  rename(fit = Estimate, fit_err = Est.Error, fit_Q2.5 = Q2.5, fit_Q97.5 = Q97.5)
+# str(lst[["Africa"]])
+
+lst[["Not Africa"]] <- fitted(b7.2) %>%
+  as_tibble() %>%
+  bind_cols(lst[["Not Africa"]]) %>%
+  rename(fit = Estimate, fit_err = Est.Error, fit_Q2.5 = Q2.5, fit_Q97.5 = Q97.5)
+# glimpse(lst)
+```
+
+and create the plot, but first we need to unlist the data
+
+```{r}
+# str(lst)
+# unsplit does not work!!
+# dd <- unsplit(lst, f = "is_africa")
+# str(dd)
+dd <- do.call(rbind, lst)
+# str(dd)
+```
+and create the plot
+
+```{r}
+ggplot(dd, aes(x = rugged, y = log_gdp)) +
+  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
+              fill = "olivedrab1", alpha = 0.5) +
+  geom_line(aes(y = fit), color = "olivedrab4") +
+  geom_point(aes(color = is_africa)) +
+  scale_color_manual(values = c("Africa" = "purple", "Not Africa" = "blue")) +
+  theme_minimal() +
+  facet_wrap(. ~ is_africa)
+```
+
+### Adding a dummy variable doesn't work
+
+the model without the dummy
+
+```{r}
+a_file <- here::here("fits", "b07_03.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b7.3 <- readRDS(file = a_file)  # load the file
+# b7.3 <-
+#   update(object = b7.1,
+#   newdata = dd,
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   seed = 7,
+#   file = a_file)
+```
+and the model with the dummy
+
+```{r}
+a_file <- here::here("fits", "b07_04.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b7.4 <- readRDS(file = a_file)  # load the file
+# b7.4 <-
+#   update(object = b7.3,
+#   newdata = dd,
+#   formula = log_gdp ~ 1 + rugged + cont_africa,
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   seed = 7,
+#   file = a_file)
+```
+as described in chapter , we use `ass_criterion` and `loo_compare`.
+
+```{r}
+b7.3 <- add_criterion(b7.3, criterion = c("loo", "waic"))
+b7.4 <- add_criterion(b7.4, criterion = c("loo", "waic"))
+```
+and we compare the model with *waic* and *loo*
+
+```{r}
+loo_compare(b7.3, b7.4, criterion = "waic")
+```
+```{r}
+loo_compare(b7.3, b7.4, criterion = "loo")
+```
+
+we have the smae results so we use the weights from *WAIC*, the same weights
+are otained when using *LOO*
+
+```{r}
+model_weights(b7.3, b7.4, weights = "wai") %>%
+  round(digits = 3)
+```
+
+so lets plot the results using the model **b7.4**
+
+```{r}
+# create the data
+nd <- crossing(cont_africa = 0:1,
+               rugged = seq(from = min(dd$rugged), to = max(dd$rugged),
+                            length.out = 50))
+# get the fit from the model
+f <- fitted(object = b7.4, newdata = nd) %>%
+  as_tibble() %>%
+  bind_cols(nd) %>%
+  mutate(is_africa = if_else(cont_africa == 1, "Africa", "Not Africa"))
+# str(f)
+```
+
+and create the plot
+
+```{r}
+ggplot(dd, aes(x = rugged, y = log_gdp, color = is_africa)) +
+  geom_ribbon(data = f[f$cont_africa == 0, ], aes(x = rugged, ymin = Q2.5, ymax = Q97.5),
+              fill = "lightblue1", alpha = 0.5, inherit.aes = FALSE) +
+  geom_line(data = f[f$cont_africa == 0, ], aes(x = rugged, y = Estimate), 
+            color = "lightblue4", inherit.aes = FALSE) +
+  geom_ribbon(data = f[f$cont_africa == 1, ], aes(x = rugged, ymin = Q2.5, ymax = Q97.5),
+              fill = "thistle1", alpha = 0.5, inherit.aes = FALSE) +
+  geom_line(data = f[f$cont_africa == 1, ], aes(x = rugged, y = Estimate), 
+            color = "thistle4", inherit.aes = FALSE) +
+  geom_point(aes(color = is_africa)) +
+  scale_color_manual(values = c("Africa" = "purple", "Not Africa" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = c(0.75, 0.95),
+        legend.title = element_blank(),
+        legend.direction = "horizontal") +
+  labs(title = "Multivariable without Interaction",
+       x = "Terrain Ruggedness Index", y = "log GDB, year 2000")
+```
+
+
+### Adding a linear interaction does work
+
+So let's add interaction since the Africa/Not seems to make a big difference.
+The model with interaction is
+
+$$
+\log{(gdp_i)} \sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i = \alpha + \gamma_i \cdot rugged_i + \beta_2 \cdot cont\_africa_i \\
+\gamma_i = \beta_1 + \beta_3 \cdot cont\_africa_i \\
+\alpha \sim \mathcal{N}(8, 100) \\
+\beta \sim \mathcal{N}(0, 1) \\
+\sigma \sim \mathcal{HalfCauchy}(0, 2)
+$$
+```{r}
+a_file <- here::here("fits", "b07_05.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b7.5 <- readRDS(file = a_file)  # load the file
+# NOTE: you can also use the notation rugged:cont_africa for interaction
+# b7.5 <-
+#   update(object = b7.4,
+#   formula = log_gdp ~ 1 + rugged * cont_africa,
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   seed = 7,
+#   file = a_file)
+posterior_summary(b7.5)
+```
+
+
+
+let's use *LOO* to compare the 3 last models
+
+```{r}
+b7.5 <- add_criterion(b7.5, c("loo", "waic"))
+l <- loo_compare(b7.3, b7.4, b7.5, criterion = "loo")
+print(l, simplify = FALSE)
+```
+and convert tot rafitional metrics as used by McElreath
+
+```{r}
+cbind(loo_diff = l[, 1] * -2, se = l[, 2] * 2)
+```
+
+and weight the models using *LOO*
+
+```{r}
+model_weights(b7.3, b7.4, b7.5, weights = "loo") %>%
+  round(digits = 3)
+```
+
+and plot the interaction
+
+```{r}
+# create the data
+nd <- crossing(cont_africa = 0:1,
+               rugged = seq(from = min(dd$rugged), to = max(dd$rugged),
+                            length.out = 50))
+# get the fit from the model
+f <- fitted(object = b7.5, newdata = nd) %>%
+  as_tibble() %>%
+  bind_cols(nd) %>%
+  mutate(is_africa = if_else(cont_africa == 1, "Africa", "Not Africa"))
+# str(f)
+```
+
+```{r}
+ggplot(dd, aes(x = rugged, y = log_gdp, color = is_africa)) +
+  geom_ribbon(data = f[f$cont_africa == 0, ], aes(x = rugged, ymin = Q2.5, ymax = Q97.5),
+              fill = "lightblue1", alpha = 0.5, inherit.aes = FALSE) +
+  geom_line(data = f[f$cont_africa == 0, ], aes(x = rugged, y = Estimate),
+            color = "lightblue4", inherit.aes = FALSE) +
+  geom_ribbon(data = f[f$cont_africa == 1, ], aes(x = rugged, ymin = Q2.5, ymax = Q97.5),
+              fill = "thistle1", alpha = 0.5, inherit.aes = FALSE) +
+  geom_line(data = f[f$cont_africa == 1, ], aes(x = rugged, y = Estimate),
+            color = "thistle4", inherit.aes = FALSE) +
+  geom_point(aes(color = is_africa)) +
+  scale_color_manual(values = c("Africa" = "purple", "Not Africa" = "steelblue")) +
+  theme_minimal() +
+  theme(legend.position = c(0.75, 0.95),
+        legend.title = element_blank(),
+        legend.direction = "horizontal") +
+  labs(title = "With Interaction",
+       x = "Terrain Ruggedness Index", y = "log GDB, year 2000")
+```
+
+## Symmetry of the linear interaction
+
+
+
+
+
+## Continuous interactions
+
+
+## Interactions in design formulas
+
+
+## Summary
+
+
+## Practice
+

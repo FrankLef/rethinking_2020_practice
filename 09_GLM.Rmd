@@ -1,0 +1,90 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Big Entropy and the Generalized Linear Model {#GLM}
+
+
+## Maximum Entropy
+
+The example of pebbles and bucket is also very well explained
+by a NASA scientist at [monkey](http://maximum-entropy-blog.blogspot.com/2013/11/monkeys-and-multiplicity.html).
+
+The nb of ways tp put the pebble is as follows.  Let $N_i$ be the number of
+pebbles we put in bucket $i$. with the total nb of pebble being $N$ defined as
+$N = \sum_1^5N_i= 10$.
+
+Then the nb of ways to put the $N$ pebbles in 5 buckests is
+
+$$
+\text{nb ways to put } N_1 \text{ pebbles in bucket } 1 \times \\
+\text{nb ways to put } N_2 = N-N_1 \text{ pebbles in bucket } 2 \times \\
+\text{nb ways to put } N_3 = N-N_2-N_1 =  \text{ pebbles in bucket } 3 \times \\
+\text{nb ways to put } N_4 = N-N_3-N_2-N_1 =  \text{ pebbles in bucket } 4 \times \\
+\text{nb ways to put } N_5 = N-N_4-N_3-N_2-N_1 =  \text{ pebbles in bucket } 5 \times \\
+$$
+
+which is
+
+$$
+\binom{10}{N_1} \cdot \binom{10}{N_2} \cdot \binom{10}{N_3} \cdot \binom{10}{N_4} \cdot \binom{10}{N_5} =
+\binom{10}{N_1,N_2,N_3,N_4,N_5}
+$$
+
+so, for example, for plot B we have
+
+$$
+\binom{10}{0,1,8,1,0} = 90
+$$
+
+
+```{r}
+p <- list(
+  "A" = c(0, 0, 10, 0, 0),
+  "B" = c(0, 1, 8, 1, 0),
+  "C" = c(0, 2, 6, 2, 0),
+  "D" = c(1, 2, 4, 2, 1),
+  "E" = c(2, 2, 2, 2, 2)
+)
+```
+
+
+```{r}
+p_norm <- lapply(p, function(q) q / sum(q))
+```
+
+and the entropy is
+
+```{r}
+H <- sapply(p_norm, FUN = function(x) -sum(ifelse(x!=0, x * log(x), 0)))
+H
+```
+
+### Gaussian
+
+
+### Binomial
+
+
+
+## Generalized linear models
+
+
+
+## Maximum entropy priors
+
+
+
+## Summary
+
+
+
+## Practice
+

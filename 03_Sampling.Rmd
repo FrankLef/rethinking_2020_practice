@@ -1,0 +1,380 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(dplyr)
+# ggplot2 is loaded by tidybayes
+library(tidybayes)
+library(paletteer)
+```
+
+# Sampling the Imaginary
+
+```{r}
+p_grid <- seq(from = 0, to = 1, length.out = 1000)
+prior <- rep(1, length(p_grid))
+likelihood <- dbinom(x = 6, size = 9, prob = p_grid)
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+set.seed(100)
+samples <- sample(x = p_grid, size = 1e4, prob = posterior, replace = TRUE)
+```
+
+
+## 3E1 {-}
+
+note: published solution on internet has 5 instead of 4!
+I verified the code several times.
+
+The nb of samples below 0.2 is
+
+```{r}
+# nb of samples < 0.2
+nb <- sum(samples < 0.2)
+# the proportion
+prop <- nb / length(samples)
+sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
+```
+
+## 3E2 {-}
+
+```{r}
+# nb of samples < 0.8
+nb <- sum(samples > 0.8)
+# the proportion
+prop <- nb / length(samples)
+sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
+```
+## E3 {-}
+
+```{r}
+# nb of samples between 0.2 ad 0.8
+nb <- sum(0.2 <= samples & samples <= 0.8)
+# the proportion
+prop <- nb / length(samples)
+sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
+```
+## 3E4 {-}
+
+```{r}
+quantile(x = samples, probs = 0.2)
+```
+
+## 3E5 {-}
+
+```{r}
+quantile(x = samples, probs = 1 - 0.2)
+```
+
+
+## 3E6 {-}
+
+This is the posterior high density interval.
+
+with `rethinking`
+
+```{r}
+# with rethinking
+rethinking::HPDI(samples, prob = 0.66)
+```
+ and with `ggdist`, we get the mean as a bonus and in a dataframe format.
+
+```{r}
+# with ggdist
+ggdist::mean_hdi(.data = samples, .width = 0.66)
+```
+
+## 3E7 {-}
+
+
+This is the usual quantile, symetric, interval.
+
+with `rethinking``
+
+```{r}
+# with rethinking
+rethinking::PI(samples, prob = 0.66)
+```
+
+with `ggdist`
+
+```{r}
+# with ggdist
+ggdist::mean_qi(.data = samples, .width = 0.66)
+```
+
+
+## 3M1 {-}
+
+Create the grid
+
+```{r}
+n_success <- 8
+n_trials <- 15
+grid_size <- 100
+df <- data.frame(
+    p_grid = seq(from = 0, to = 1, length.out = grid_size),
+    prior = 1) %>%
+    mutate(
+     likelihood = dbinom(x = n_success, size = n_trials, prob = p_grid),
+     posterior = (likelihood * prior) / sum(likelihood * prior)
+    )
+stopifnot(near(sum(df$posterior), 1))
+```
+
+visualize the grid's posterior
+
+```{r}
+ggplot(data = df, mapping = aes(x = p_grid, y = posterior)) +
+    geom_line(size = 1, color = "blue") +
+    theme_minimal() +
+    theme(legend.position = c(0.1, 0.85)) +
+    labs(title = "Exercise 3M1",
+         subtitle = sprintf("Grid size = %d", grid_size),
+         x = "probability of water", 
+         y = "posterior probability as per grid", 
+         color = NULL)
+```
+
+
+## 3M2 {-}
+
+Create the sampled data
+
+```{r}
+n_samples <- 1e4
+set.seed(123)
+the_samples <- df %>%
+    slice_sample(n = n_samples, weight_by = posterior, replace = TRUE) %>%
+    mutate(id = seq_len(n_samples), .before = p_grid)
+str(the_samples)
+
+# get the HPDI
+a_hpdi <- HPDI(the_samples$p_grid, prob = 0.9)
+a_hpdi <- unname(a_hpdi)
+
+```
+
+visualize the posterior from the sampling. See [area trick](https://stackoverflow.com/questions/32722849/how-to-shade-specific-region-under-ggplot2-density-curve) on how to do the area under the curve
+
+```{r}
+p <- ggplot(data = the_samples, aes(x = p_grid)) +
+    geom_density(color = "blue", size = 1) +
+    geom_vline(xintercept = a_hpdi, color = "red") +
+  scale_x_continuous(breaks = unname(a_hpdi)) +
+    theme_minimal() +
+    labs(title = "Exercise 3M2", 
+         x = "probability of water", 
+         y = "posterior probability")
+
+# source:
+#  https://stackoverflow.com/questions/32722849/how-to-shade-specific-region-under-ggplot2-density-curve
+# use data from ggplot to build the area
+dpb <- ggplot_build(p)
+xlim <- numeric(length=2)
+xlim[1] <- min(which(dpb$data[[1]]$x >= a_hpdi[1]))
+xlim[2] <- max(which(dpb$data[[1]]$x <= a_hpdi[2]))
+p <- p +
+    geom_area(
+        data = data.frame(x = dpb$data[[1]]$x[xlim[1]:xlim[2]],
+                          y = dpb$data[[1]]$y[xlim[1]:xlim[2]]),
+        aes(x=x, y=y),
+        fill = "green"
+    )
+p
+```
+
+
+## 3M3 {-}
+
+Constructing a posterior prediction by simulating $W$ with the sampled $p$.
+See the R code 3.26, p. 66.
+
+```{r}
+# using the sampled p we sim
+post_pred <- rbinom(n = nrow(the_samples), size = n_trials, prob = the_samples$p_grid)
+```
+and using it to calculate the prob of having 8 $W$ in 15 trials
+
+```{r}
+sum(post_pred == 8 ) / length(post_pred)
+```
+
+## 3M4 {-}
+
+Prob of 6 $W$ in 9 tosses with the post dist of 8 $W$ in 15 tosses. Same process as
+in 3M3.
+
+```{r}
+post_pred <- rbinom(n = nrow(the_samples), size = 9, prob = the_samples$p_grid)
+sum(post_pred == 6 ) / length(post_pred)
+```
+
+
+
+## 3H1 {-}
+
+Loading the data from the rethinking package
+
+```{r}
+data(homeworkch3)
+```
+
+
+Get the prior estimate from the data and calculate the posterior
+
+```{r}
+n_success <- sum(birth1) + sum(birth2)
+n_trials <- length(birth1) + length(birth2)
+grid_size <- 1e3
+df <- data.frame(
+    p_grid = seq(from = 0, to = 1, length.out = grid_size),
+    prior = 1) %>%
+    mutate(
+     likelihood = dbinom(x = n_success, size = n_trials, prob = p_grid),
+     posterior = (likelihood * prior) / sum(likelihood * prior)
+    )
+stopifnot(near(sum(df$posterior), 1))
+```
+
+using the position of the maximum posterior prob. we find the p that maximize 
+the posterior
+
+```{r}
+df$p_grid[which.max(df$posterior)]
+```
+
+## 3H2 {-}
+
+```{r}
+samples <- sample(x = df$p_grid, size = 10000, replace = TRUE, prob = df$posterior)
+# 50%, 89%, 97% HPDI
+HPDI(samples, prob = c(0.5, 0.89, 0.97))
+```
+
+## 3H3 {-}
+
+```{r}
+# do a posterior prediction
+post_pred <- rbinom(n = length(samples), size = n_trials, prob = samples)
+# avg nb of boys in the simulation
+mean(post_pred)
+
+# using the HPDI to find the interval
+a_hpdi <- HPDI(post_pred, prob = 0.55)
+```
+
+```{r}
+# draw a graph with the result
+post_pred <- data.frame(sim = post_pred)
+ggplot(data = post_pred, aes(x = sim)) +
+    geom_density(color = "blue", size = 1) +
+    geom_vline(xintercept = a_hpdi, color = "red", size = 1) +
+    geom_vline(xintercept = n_success, color = "darkgreen", size = 1) +
+    scale_x_continuous(breaks = c(unname(a_hpdi), n_success)) +
+    annotate("rect", xmin = a_hpdi[1], xmax = a_hpdi[2],
+             ymin = 0, ymax = Inf, alpha = 0.3, fill = "lightblue") +
+    theme_minimal() +
+    labs(title = "Exercise 3H3", 
+         x = "nb of boys", 
+         y = "posterior probability")
+
+```
+
+
+## 3H4 {-}
+
+Finding the posterior dist with only the first-born
+
+```{r}
+grid_size <- 1e3
+n_success <- sum(birth1)
+n_trials <- length(birth1)
+df <- data.frame(
+    p_grid = seq(from = 0, to = 1, length.out = grid_size),
+    prior = 1) %>%
+    mutate(
+     likelihood = dbinom(x = n_success, size = n_trials, prob = p_grid),
+     posterior = (likelihood * prior) / sum(likelihood * prior)
+    )
+stopifnot(near(sum(df$posterior), 1))
+```
+
+and create a sample to simulate the first-born
+
+
+```{r}
+samples <- sample(x = df$p_grid, size = 10000, replace = TRUE, prob = df$posterior)
+post_pred <- rbinom(n = length(samples), size = n_trials, prob = samples)
+# using the HPDI to find the interval
+a_hpdi <- HPDI(post_pred, prob = 0.55)
+
+```
+
+
+
+```{r}
+# draw a graph with the result
+post_pred <- data.frame(sim = post_pred)
+ggplot(data = post_pred, aes(x = sim)) +
+    geom_density(color = "blue", size = 1) +
+    geom_vline(xintercept = a_hpdi, color = "red", size = 1) +
+    geom_vline(xintercept = n_success, color = "darkgreen", size = 1) +
+    scale_x_continuous(breaks = c(unname(a_hpdi), n_success)) +
+    annotate("rect", xmin = a_hpdi[1], xmax = a_hpdi[2],
+             ymin = 0, ymax = Inf, alpha = 0.3, fill = "lightblue") +
+    theme_minimal() +
+    labs(title = "Exercise 3H4", 
+         x = "nb of boys", 
+         y = "posterior probability")
+    
+```
+
+
+## 3H5 {-}
+
+Finding the posterior dist with boys born after a girl
+
+```{r}
+grid_size <- 1e3
+births <- (birth1 == 0) & (birth2 == 1)
+n_success <- sum(births)
+n_trials <- length(births)
+df <- data.frame(
+    p_grid = seq(from = 0, to = 1, length.out = grid_size),
+    prior = 1) %>%
+    mutate(
+     likelihood = dbinom(x = n_success, size = n_trials, prob = p_grid),
+     posterior = (likelihood * prior) / sum(likelihood * prior)
+    )
+stopifnot(near(sum(df$posterior), 1))
+```
+
+
+simulate the firs-born
+
+```{r}
+samples <- sample(x = df$p_grid, size = 10000, replace = TRUE, prob = df$posterior)
+post_pred <- rbinom(n = length(samples), size = n_trials, prob = samples)
+# using the HPDI to find the interval
+a_hpdi <- HPDI(post_pred, prob = 0.55)
+```
+
+and visualize
+
+```{r}
+# draw a graph with the result
+post_pred <- data.frame(sim = post_pred)
+ggplot(data = post_pred, aes(x = sim)) +
+    geom_density(color = "blue", size = 1) +
+    geom_vline(xintercept = a_hpdi, color = "red", size = 1) +
+    geom_vline(xintercept = n_success, color = "darkgreen", size = 1) +
+    scale_x_continuous(breaks = c(unname(a_hpdi), n_success)) +
+        annotate("rect", xmin = a_hpdi[1], xmax = a_hpdi[2],
+             ymin = 0, ymax = Inf, alpha = 0.3, fill = "lightblue") +
+    theme_minimal() +
+    labs(title = "Exercise 3H5", 
+         x = "nb of boys", 
+         y = "posterior probability")
+```
+
+

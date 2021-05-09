@@ -1,0 +1,458 @@
+```{r include=FALSE}
+# must include ggplot2 explicitely in each chapter
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Overfitting, Regularizations and Information Criteria {#information}
+
+An important point to remember is mentioned in [elreath2016, p. 167, Rethinkin]
+
+> ... Whatever you think about null hypothesis significance testing in general, 
+using it to select among structurally diferent models is a mistake. *p-value*
+are not designed to help you navigate between underfitting and overfitting.
+
+
+## The problem with parameters
+
+$R^2$ is not the right way to do it.
+
+$$
+R^2 = \frac{var(outcome) - var(residuals)}{var(outcome)} =
+1 - \frac{var(residuals)}{var(outcome)}
+$$
+### More parameters always improve fit
+
+Get the data
+
+```{r}
+d <- tibble(
+    species = c("afarensis", "africanus", "habilis", "boisei",
+                "rudolfensis", "ergaster", "sapiens"),
+    brain = c(438, 452, 612, 521, 752, 871, 1350),
+    mass = c(37.0, 35.5, 34.5, 41.5, 55.5, 61.0, 53.5))
+```
+
+plot the raw data
+
+```{r}
+colr <- data.frame(colr = seq(from = min(d$mass) - 5, to = max(d$mass) + 5, 
+                              length.out = 100))
+ggplot(d, aes(x = mass, y = brain, label = species)) +
+    geom_segment(data = colr, aes(x = colr, xend = colr, y = -Inf, yend = Inf,
+                                  color = colr),
+                 inherit.aes = FALSE, size = 3) +
+    geom_point(color = "gold", size = 3) +
+    ggrepel::geom_text_repel(color = "yellow") +
+    scale_color_paletteer_c("scico::berlin") +
+    theme_minimal() +
+    theme(panel.grid = element_blank(),
+          legend.position = "none") +
+    labs(title = "Average brain volume vs body mass for 6 hominin species",
+         x = "body mass in kg", y = "brain volume in cc")
+```
+
+
+See [hadley](https://www.youtube.com/watch?v=rz3_FDVt9eg&t=2339s) for very nice
+discussion on how to process several modelsin one dataframe.
+
+
+## Information theory and model performance
+
+### Firing the weatherperson
+
+Given a probability distribution per 10 days of rain as follow
+
+|day 1|day 2|day 3|day 4|day 5|day 6|day 7|day 8|day 9|day 10|
+|----:|----:|----:|----:|----:|----:|----:|----:|----:|-----:|
+|1.0  |1.0  |1.0  |0.6  |0.6  |0.6  |0.6  |0.6  |0.6  |0.6   |
+
+the average, over the long run, prediction of the following sequence of weather
+
+|day 1|day 2|day 3|day 4|day 5|day 6|day 7|day 8|day 9|day 10|
+|----:|----:|----:|----:|----:|----:|----:|----:|----:|-----:|
+|rain |rain |rain |sun  |sun  |sun  |sun  |sun  |sun  |sun   |
+
+would be, i.e. the expected nb of correct predictions,
+
+```{r}
+3 * 1 + 7 * 0.4
+```
+which gives a frequency per day (probability) of
+
+```{r}
+(3 * 1 + 7 * 0.4) / 10
+```
+### Information and uncertainty
+
+$$
+H(p)=-E(\log{p_i})=-\sum_{i=1}^n{p_i \cdot \log{p_i}}
+$$
+
+the entropy for the above is
+
+```{r}
+p <- c(0.3, 0.7)
+-sum(p * log(p))
+```
+
+but in Abu Dhabi it is
+
+```{r}
+p <- c(0.01, 0.99)
+-sum(p * log(p))
+```
+
+### From entropy to accuracy
+
+$$
+D_{KL}(p,q) = H(p,q) - H(p) = -\sum{p_i \cdot (\log{p_i} - \log{q_i})} =
+-\sum{p_i \cdot \frac {\log{p_i}} {\log{q_i}}}
+$$
+
+### From divergence to deviance
+
+The whole point here is tht if we have 2 model, with 2 different probability
+distributions $q$ and $r$
+
+then their respective divergence is
+
+$$
+D_{KL}(p,q) = H(p,q) - H(p) = E(\log{q}) - E(\log{p})
+$$
+
+and
+
+
+$$
+D_{KL}(p,r) = H(p,r) - H(p) = E(\log{r}) - E(\log{p})
+$$
+
+and therefore their relative divergence between each other is
+
+$$
+D_{KL}(p,q) - D_{KL}(p,r) = [H(p,q) - H(p)] - [H(p,r) - H(p)] = \\
+H(p,q) - H(p,r) = E(\log{q}) - E(\log{r})
+
+$$
+
+and the relative value of the $D_{KL}(p,q)$ and $D_{KL}(p,r)$ is approximated
+with their **deviance**
+
+$$
+D(q) = -2 \sum_i{\log{q_i}}
+$$
+
+
+## Regularization
+
+
+## Information criteria
+
+
+The difference in deviance between *in-sample* and *out-of-sample*  is alawys
+$2 p$ where p is the number of parameters.
+
+The is the basis for the $AIC$, the **Akaike Information Criteria**
+
+$$
+AIC = D_{train} + 2p
+$$
+AIC is used when
+
+1. Priors are flat or overwhelmed by the likelihood
+2. The posterior distribution is approximately multivariate Gaussian
+3. The sample size $N$ is much greater than the number of parameters $k$
+
+
+### DIC (Deviance Infoormation criteria)
+
+
+It assumes a posterior distribution is approximately multivariate Gaussian like
+*AIC* which means it can be very wrong if the distribution is skewed.
+
+### WAIC (Widely Applicable Information Criteria)
+
+The **log-pointwise-predictive-density**
+
+$$
+lppd = \sum_{i=1}^N{\log{Pr(y_i)}}
+$$
+
+$$
+p_{WAIC} = \sum_{i=1}^N{V(y_i)}
+$$
+
+$$
+WAIC = -2 (lppd - p_{WAIC})
+$$
+
+
+## Using information criteria
+
+
+### Model comparison - RETHINKING
+
+Load the data
+
+```{r}
+data(milk)
+d <- milk %>%
+    drop_na(ends_with("_s")) # take only complete cases
+    
+d <- d %>% 
+    mutate(neocortex = d$neocortex.perc / 100) # convert to decimal form
+
+# dataframe should be 17 rows by 9 columns
+stopifnot(identical(dim(d), c(17L, 9L)))
+```
+
+then fit the 4 models with `map`
+
+```{r}
+# the start values to accelrate map
+a.start <- mean(d$kcal.per.g)
+sigma.start <- log(sd(d$kcal.per.g))
+
+# The NULL model, with no predictor, just the intercept
+m6.11 <- map(
+    flist = alist(
+        kcal.per.g ~ dnorm(a, exp(log.sigma))),
+    data = d,
+    start = list(a = a.start, log.sigma = sigma.start)
+    )
+
+# The model with only the neocortex
+m6.12 <- map(
+    flist = alist(
+        kcal.per.g ~ dnorm(mu, exp(log.sigma)),
+        mu <- a + bn * neocortex),
+    data = d,
+    start = list(a = a.start, bn = 0, log.sigma = sigma.start)
+    )
+
+# The model with only the log(mass)
+m6.13 <- map(
+    flist = alist(
+        kcal.per.g ~ dnorm(mu, exp(log.sigma)),
+        mu <- a + bm * log(mass)),
+    data = d,
+    start = list(a = a.start, bm = 0, log.sigma = sigma.start)
+    )
+
+# The model with neocortex and the log(mass)
+m6.14 <- map(
+    flist = alist(
+        kcal.per.g ~ dnorm(mu, exp(log.sigma)),
+        mu <- a + bn * neocortex + bm * log(mass)),
+    data = d,
+    start = list(a = a.start, bn = 0, bm = 0, log.sigma = sigma.start)
+    )
+
+```
+
+
+comparing the models
+
+**NOTE: ** Explanation of the output columns on page 198 of textbook.
+*It is important to read the explanation of the weight on page 199.*
+
+with DIC
+
+```{r}
+# milk.models.dic <- rethinking::compare(m6.11, m6.12, m6.13, m6.14,
+#                                        func = DIC)
+# milk.models.dic
+```
+
+
+with WAIC
+
+**NOTE: ** Explanation of the output columns on page 198 of textbook.
+*It is important to read the explanation of the weight on page 199.*
+
+```{r}
+milk.models.waic <- rethinking::compare(m6.11, m6.12, m6.13, m6.14, 
+                                        func = WAIC, sort = "WAIC")
+milk.models.waic
+```
+
+
+### Model comparison - BRMS
+
+
+
+
+
+## Summary
+
+
+## Practice
+
+### 6E1 {-}
+
+* Continous: there should be no "jump" in the index.
+* Measure of uncertainty is increasing: As the number of possible choices increases, the uncertainty increases and so should the measur
+* Measure should be additive: We should be able to add the uncertanty of an event to the uncertainty of another event so that the total uncertianty is higher
+
+### 6E2 {-}
+
+```{r}
+prob <- c(0.7, 0.3)
+sum(-prob * log(prob))
+```
+
+### 6E3 {-}
+
+```{r}
+prob <- c(0.2, 0.25, 0.25, 0.3)
+sum(-prob * log(prob))
+```
+
+
+### 6E4 {-}
+
+In this case, since the last probability = 0 we don't include it. See p. 179 for details on L'Hopital's rule for mathematical justification.
+
+```{r}
+prob <- c(1/3, 1/3, 1/3)
+sum(-prob * log(prob))
+```
+
+
+### 6M1 {-}
+
+see p.189
+
+$$
+AIC = D_{train} + 2p
+$$
+
+see p. 190
+
+$$
+DIC = \bar{D} + (\bar{D} - \hat{D}) + p_D
+$$
+
+
+see p. 191-192 for the definition
+
+$$
+WAIC = -2 \cdot (lppd - p_{WAIC})
+$$
+
+### 6M2 {-}
+
+See beginning of section 6.5, p. 196, in textbook.
+
+* Model selection: p. 195. Selecting the model with the lowest information criterion value (AIC, DIC, WAIC)
+* Model comparison: p.196. Using DIC, WAIC in combination with posterior predictive check
+* Model averaging: p.196. Using DIC, WAIC to build a predictive distribution
+
+### 6M3 {-}
+
+See section 6.5, p. 196, in textbook
+
+* If you don't remove the missing cases, the internal routines of the stat functions might treat them differently without you knowing about it
+* The informaiton criteria is sensitive to the number of obesrvations, therefore make sure no dropping of NA, NaN or Inf occurs unexpectedly my cleaning up the data before performing the analysis.
+
+### 6M4 {-}
+
+As the prior is more concentrated the overfitting risk is reduced but the underfitting risk is increased.  Thus the nb of parametrs decreases as prior become more concentrated.
+
+### 6M5 {-}
+
+Because they provide a more relevant range of hypothesis thus reduced the importance given to marginal values of the parameters.
+
+### 6M6 {-}
+
+Because they reduc the range of hypothesis to be tested so narrowly that relevant values and/or parameters are not given enough relevance to appear in the final model.
+
+
+### 6H1 {-}
+
+Loading the data
+
+```{r}
+data("Howell1")
+d <- Howell1
+d$age <- scale(x = d$age)  # standardize the age
+set.seed(1000)
+i <- sample(1:nrow(d), size = nrow(d) / 2)
+d_train <- d[i, ]  # d1 in textbook: the training set
+d_test <- d[-i, ]  # d2 in textbook: the testing set
+```
+
+get the basic stat summary
+
+```{r}
+d_summary <- psych::describe(x = d[, c("height", "weight", "age")])
+d_summary
+```
+
+Creating the models
+
+#### Model M1
+
+```{r}
+# NOTE: reaches max iteration sometimes, if that is the case, rerun it
+set.seed(123)  # it always converge with this seed, works better than start values.
+M1 <- rethinking::map(
+    flist = alist(
+        height ~ dnorm(mu, exp(sigma_log)),
+        mu <- a + bAge1 * age,
+        a ~ dnorm(100, 200),# based on the height mean
+        bAge1 ~ dnorm(10, 30),  # PI result when first iteration converged
+        sigma_log ~ dnorm(0, 5)
+    ),
+    data = d_train
+    # start = list(mu = mean(d$height))  # start values seem to cause more problem than they solve!
+)
+rethinking::precis(M1)
+```
+
+#### Model M2
+
+```{r}
+# IMPORTANT NOTE: Use I() when using ^ in R formula
+# IMPORATANT NOTE: Because of problem with convergence, I have saved the model in the current directory.
+                   # see below for filw location and command to reload
+# NOTE: reaches max iteration sometimes, if that is the case, rerun it
+# NOTE: difficulte to obtain convergence, but the values below seem to work in a stable manner, after several trials
+# M2 <- rethinking::map(
+#     flist = alist(
+#         height ~ dnorm(mu, exp(sigma_log)),
+#         mu <- a + bAge1 * age + bAge2 * I(age^2),
+#         a ~ dnorm(100, 200),# based on the height mean
+#         bAge1 ~ dnorm(10, 50),  # PI result when first iteration converged
+#         bAge2 ~ dnorm(-50, 50),  # PI result when first iteration converged
+#         sigma_log ~ dnorm(0, 5)
+#     ),
+#     data = d_train
+#     # start = list(mu = 152 + 25 * mean(d_train$age) - 15 * mean(d_train$age),
+#     #              sigma = 2.5)  # start values seem to cause more problem than they solve!
+# )
+# rethinking::precis(M2)
+
+# save the reults when convergence is ok
+# saveRDS(M2, file = "chap6_M2.rds")
+# M2 <- readRDS(file = "chap06_M2.rds")
+# rethinking::precis(M2)
+```
+
+The result obtained when it converges is as follows, need several iterations to obtain convergence
+
+            Mean StdDev   5.5%  94.5%
+a         152.40   1.02 150.76 154.03
+bAge1      25.79   0.84  24.46  27.13
+bAge2     -14.12   0.70 -15.24 -13.00
+sigma_log   2.52   0.04   2.45   2.58
+
+
+

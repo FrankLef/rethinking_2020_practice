@@ -1,0 +1,548 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Monsters and Mixtures {#Mixed}
+
+
+## Ordered categorical outcomes
+
+
+### Example: Moral intuition
+
+```{r}
+data(Trolley)
+d <- Trolley
+```
+
+and we can describe the data using the `summarytools` which does a great
+job at creating that sort or report.
+
+
+```{r}
+# source:
+# https://cran.r-project.org/web/packages/summarytools/vignettes/Recommendations-rmarkdown.html
+# use print to see in HTML
+print(summarytools::dfSummary(Trolley, style = "grid"), method = "render")
+```
+
+
+### Describing and ordered distribution with intercepts
+
+The histogram of response
+
+```{r}
+p1 <- ggplot(d, aes(x = response)) +
+  geom_histogram(aes(fill = ..count..)) +
+  scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
+  scale_fill_paletteer_c(palette = "grDevices::Sunset") +
+  ggthemes::theme_fivethirtyeight() +
+  theme(legend.position = "none") +
+  labs(title = "Histogram of Trolley responses")
+# p1
+```
+
+The cumulative proportions plot
+
+```{r}
+d.p2 <- d %>%
+  count(response) %>%
+  arrange(response) %>%
+  mutate(pct = n / sum(n),
+         cum_pct = cumsum(pct))
+p2 <- ggplot(d.p2, aes(x = response, y = cum_pct)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
+  scale_y_continuous(breaks = scales::breaks_width(width = 0.2)) +
+  ggthemes::theme_fivethirtyeight() +
+  labs(title = "Cumulative proportions", y = "cumulative probabilities")
+p2
+```
+
+And the plot of `logit`
+
+```{r}
+d.p3 <- d.resp %>%
+  filter(response < 7) %>%
+  mutate(logit = log(cum_pct / (1 - cum_pct)),
+         logit_ctr = scale(logit, center = TRUE, scale = FALSE))
+# d.p3
+p3 <- ggplot(d.p3, aes(x = response, y = logit)) +
+  geom_line() +
+  geom_point() +
+    scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
+  scale_y_continuous(breaks = scales::breaks_width(width = 1)) +
+  ggthemes::theme_fivethirtyeight() +
+  labs(title = "Log of Cumulative Odds",
+       y = "log of cumulative odds")
+# p3
+```
+
+and the 3 plots in figure 11.1 are
+
+```{r}
+gridExtra::grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+
+
+The model is
+
+$$
+R_i \sim Ordered(\textbf{p}) \\
+logit(p_k) = \alpha_k \\
+\alpha_k \sim \mathcal{N}(0, 10)
+$$
+and the fit with brms
+
+```{r}
+# define start values
+inits <- list(
+  `Intercept[1]` = -2,
+  `Intercept[2]` = -1,
+  `Intercept[3]` = 0,
+  `Intercept[4]` = 1,
+  `Intercept[5]` = 2,
+  `Intercept[6]` = 2.5
+)
+inits_list <- list(inits, inits)
+a_file <- here::here("fits", "b11_01.rds")  # rds file location
+stopifnot(file.exists(a_file))
+b11.1 <- readRDS(file = a_file)  # load the file
+# b11.1 <- brm(
+#   data = d,
+#   family = cumulative,
+#   response ~ 1,
+#   prior = c(
+#     prior(normal(0, 10), class = Intercept)),
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   # the start values
+#   inits = inits_list,
+#   seed = 11)
+# b11.1 <- add_criterion(b11.1, c("loo", "waic"))
+# saveRDS(object = b11.1, file = a_file)
+```
+
+
+which gives the summary
+
+```{r}
+print(b11.1)
+```
+
+and we convert the intercepts to the normal scale
+
+```{r}
+b11.1 %>%
+  fixef() %>%
+  brms::inv_logit_scaled()
+# which we can also do with stats:plogis()
+# see appendix A
+# b11.1 %>%
+#   fixef() %>%
+#   stats::plogis()
+```
+**Important:** The SD i.e. `Est.Error` are not valid using the `inv_logit_scaled`,
+that is using a direct inverse exp function.
+
+They must be computed using a posterior sample.
+
+
+```{r}
+posterior_samples(b11.1) %>%
+  select(starts_with("b_")) %>%
+  mutate(across(.cols = everything(), .fns = brms::inv_logit_scaled)) %>%
+  pivot_longer(cols = everything(), names_to = "key") %>%
+  group_by(key) %>%
+  summarise(mean = mean(value),
+            sd = sd(value),
+            ll = quantile(value, probs = 0.025),
+            ul = quantile(value, probs = 0.975)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 4))
+```
+
+
+### Adding predictor variables
+
+#### Logistic / Logit functions
+See the appendix A of this book for a detailed tratment of all these functions.
+They will be added the suffix *.new* to identify them.
+
+The `logistic()` and `inv_logit()` functions are actually the same as 
+`stats::plogis()`.
+
+Also, the function `logit()` already exists as `stats::qlogis()`.
+
+therefore `dordlogit()` as given
+
+```{r}
+dordlogit.new <- function(x, phi = 0L, log = FALSE) {
+  x <- sort(x)  # the ordering is important
+  p <- stats::plogis(q = c(x, Inf), location = phi)
+  p <- c( p[1], p[2:length(p)] - p[1:(length(p)-1)] )
+  if (log) p <- log(p)
+  p
+}
+```
+
+which gives about the same result as R code 11.9 in McElrath.s
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1]))
+```
+
+```{r}
+fixef(b11.1)[, 1]
+stats::plogis(q = fixef(b11.1)[, 1], lower.tail = TRUE)
+stats::plogis(q = fixef(b11.1)[, 1], lower.tail = FALSE)
+stats::plogis(q = fixef(b11.1)[, 1])
+stats::dlogis(x = fixef(b11.1)[, 1])
+```
+
+#### Subsracting from the log-cumulative odds
+
+If we substract from the *log-cumulative odds* then we shift the probability
+mass to higher outcome values.
+
+For example with model b11.1
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1]))
+```
+which gives an expected value
+
+```{r}
+sum(dordlogit.new(fixef(b11.1)[, 1]) * 1:7)
+```
+
+but if we substract 0.5
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1], phi = 0.5))
+```
+then we have a higher expected value
+
+```{r}
+sum(dordlogit.new(fixef(b11.1)[, 1], phi = 0.5) * 1:7)
+```
+
+
+
+#### Ordered categorical with several predictors
+
+Our model with several predictors is
+
+$$
+R_i \sim Ordered(\textbf{p}) \\
+logit(Pr(y_i \leq k))= \frac{Pr(y_i \leq k)}{1 - Pr(y_i \leq k)}  = \alpha_k - \phi_i \\
+\alpha_k \sim \mathcal{N}(0, 10) \\
+\phi_i = \beta_{action} \cdot action_i + \beta_{intention} \cdot intention_i + \beta_{contact} \cdot contact_i
+$$
+
+and the fit is
+
+```{r}
+inits <- list(
+  `Intercept[1]` = -1.9,
+  `Intercept[2]` = -1.2,
+  `Intercept[3]` = -0.7,
+  `Intercept[4]` = 0.2,
+  `Intercept[5]` = 0.9,
+  `Intercept[6]` = 1.8,
+  action = 0,
+  intention = 0,
+  contact = 0
+)
+a_file <- here::here("fits", "b11_02.rds")  # rds file location
+b11.2 <- readRDS(file = a_file)  # load the file
+# b11.2 <- brms::brm(data = d,
+#                    family = cumulative,
+#                    response ~ 1 + action + intention + contact,
+#                    prior = c(prior(normal(0, 10), class = Intercept),
+#                              prior(normal(0, 10), class = b)),
+#                    iter = 2000, warmup = 1000, cores = 4, chains = 2,
+#                    inits = list(inits, inits),
+#                    seed = 11)
+# b11.2 <- add_criterion(b11.2, c("loo", "waic"))
+# saveRDS(object = b11.2, file = a_file)
+```
+
+and the summary is
+
+```{r}
+summary(b11.2)
+```
+
+
+and the model with interactions id 
+
+
+$$
+R_i \sim Ordered(\textbf{p}) \\
+logit(Pr(y_i \leq k))= \frac{Pr(y_i \leq k)}{1 - Pr(y_i \leq k)}  = \alpha_k - \phi_i \\
+\alpha_k \sim \mathcal{N}(0, 10) \\
+\phi_i = \beta_{action} \cdot A_i + \beta_{intention} \cdot I_i + \beta_{contact} \cdot C_i + \beta_{C,I} C_i \cdot + \beta_{A,I} A_i \cdot I_i
+$$
+
+and the fit is
+
+
+```{r}
+inits <- list(
+  `Intercept[1]` = -1.9,
+  `Intercept[2]` = -1.2,
+  `Intercept[3]` = -0.7,
+  `Intercept[4]` = 0.2,
+  `Intercept[5]` = 0.9,
+  `Intercept[6]` = 1.8,
+  action = 0,
+  intention = 0,
+  contact = 0,
+  `action:intention` = 0,
+  `contact:intention` = 0
+)
+a_file <- here::here("fits", "b11_03.rds")  # rds file location
+b11.3 <- readRDS(file = a_file)  # load the file
+# b11.3 <- brms::brm(data = d,
+#                    family = cumulative,
+#                    response ~ 1 + action + intention + contact + action:intention + contact:intention,
+#                    prior = c(prior(normal(0, 10), class = Intercept),
+#                              prior(normal(0, 10), class = b)),
+#                    iter = 2000, warmup = 1000, cores = 4, chains = 2,
+#                    inits = list(inits, inits),
+#                    seed = 11)
+# b11.3 <- add_criterion(b11.3, c("loo", "waic"))
+# saveRDS(object = b11.3, file = a_file)
+```
+
+
+the summary 
+
+```{r}
+summary(b11.3)
+```
+
+
+and comparing the 3 models
+
+```{r}
+loo_compare(b11.1, b11.2, b11.3, criterion = "waic")
+```
+
+
+## Zero-inflated outcomes
+
+
+## Over-dispersed outcomes
+
+### Beta-binomial
+
+#### Beta-binomial distribution
+
+The beta distribution is
+
+$$
+\mathcal{Beta}(x|\alpha, \beta) =
+\frac{\Gamma(\alpha+\beta)}{\Gamma(\alpha)\Gamma(\beta)} x^{\alpha -1} (1-x)^{\beta -1} =
+\frac{1}{B(\alpha, \beta)} x^{\alpha -1} (1-x)^{\beta -1}, 0 \leq x \leq 1
+$$
+which is not exactly the format used by McElrath.  He uses the following
+shape parameters
+
+$$
+\mu = \bar{p} = \frac{\alpha}{\alpha + \beta} \\
+\kappa = \theta = \alpha + \beta
+$$
+
+The function to convert from the mean and kappa to the mathematical $\alpha$
+and $\beta$, as provided by Krushke, is
+
+```{r}
+betaABfromMeanKappa <- function(mean, kappa) {
+  stopifnot(mean > 0 & mean < 1)
+  stopifnot(kappa > 0)
+  a <- mean * kappa
+  b <- (1 - mean) * kappa
+  list(a = a, b = b)
+}
+```
+
+
+The beta-binomial distribution is not defined in `brms`.  We need to define the 
+family in ``brms` as well as a `stan_funs()` and `stanvar()`.
+
+```{r}
+beta_binomial2 <- custom_family(
+  "beta_binomial2", dpars = c("mu", "phi"),
+  links = c("logit", "log"), lb = c(NA, 0),
+  type = "int", vars = "vint1[n]"
+)
+
+stan_funs <- "
+  real beta_binomial2_lpmf(int y, real mu, real phi, int T) {
+    return beta_binomial_lpmf(y | T, mu * phi, (1 - mu) * phi);
+  }
+  int beta_binomial2_rng(real mu, real phi, int T) {
+    return beta_binomial_rng(T, mu * phi, (1 - mu) * phi);
+  }
+"
+
+stanvars <- stanvar(scode = stan_funs, block = "functions")
+```
+
+
+
+### Beta-binomial model
+
+
+There is an error in the model defined by McElrath, to concur with his code
+at 11.26, the model is
+
+$$
+A_i \sim \mathcal{BetaBinomial}(n_i, \bar{p}_i, \theta) \\
+logit(\bar{p}_i) = \alpha \\
+\alpha \sim \mathcal{N}(0, 2) \\
+\theta \sim \mathcal{Exponential}(1)
+$$
+
+the data used is
+
+```{r}
+data(UCBadmit)
+d <- UCBadmit
+```
+
+
+which we fit as follows
+
+```{r}
+a_file <- here::here("fits", "b11_05.rds")  # rds file location
+b11.5 <- readRDS(file = a_file)  # load the file
+b11.5 <- brm(
+  data = d,
+  family = beta_binomial2,
+  admit | vint(applications) ~ 1,
+  prior = c(prior(normal(0, 2), class = Intercept),
+            prior(exponential(1), class = phi)),
+  iter = 4000, warmup = 1000, cores = 4, chains = 2,
+  stanvars = stanvars,
+  seed = 11)
+saveRDS(object = b11.5, file = a_file)
+```
+
+and the posterior data which *represents the distribution rather than the data*
+
+```{r}
+bpost11.5 <- posterior_samples(b11.5)
+head(bpost11.5)
+```
+
+and the median ans percentile-based interval
+
+
+```{r}
+intrvl.qi <- bpost11.5 %>%
+  tidybayes::median_qi(inv_logit_scaled(b_Intercept)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 3))
+intrvl.qi
+```
+
+and the high-density interval is about the same.
+
+```{r}
+intrvl.hdi <- bpost11.5 %>%
+  tidybayes::median_hdi(inv_logit_scaled(b_Intercept)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 3))
+intrvl.hdi
+```
+
+### Negative-binomial or gamma-Poisson
+
+#### Gamma-Poisson distribution
+
+First we illustrate the gamma-poisson with different combinations of $\mu$ and
+$\theta$
+
+
+```{r}
+gpdf <- crossing(mu    = c(1, 5, 9), theta = c(1, 5, 9)) %>% 
+  expand(nesting(mu, theta), 
+         x = seq(from = 0, to = 27, length.out = 100)) %>%
+  mutate(density    = rethinking::dgamma2(x, mu, theta),
+         mu_char    = paste("mu", mu, sep = "=="),
+         theta_char = paste("theta", theta, sep = "=="))
+gpdf
+```
+
+and the plot
+
+```{r}
+p <- ggplot(data = gpdf) +
+  geom_ribbon(aes(x = x, ymin = 0, ymax = density),
+              fill = "maroon1") +
+  geom_vline(aes(xintercept = mu),
+             color = "maroon", linetype = 3) +
+  scale_y_continuous(NULL, labels = NULL) +
+  labs(title = "Gamma can take many shapes",
+       subtitle = "(dotted vertical lines mark off the means)",
+       x = "parameter space") +
+  coord_cartesian(xlim = c(0, 25)) +
+  ggthemes::theme_hc() +
+  theme(axis.ticks.y = element_blank(),
+        plot.background = element_rect(fill = "grey92")) +
+  facet_grid(theta_char~mu_char, labeller = label_parsed)
+p
+```
+
+
+#### Gamma-Poisson model
+
+
+The model is
+
+$$
+A_i \sim \mathcal{NegBinomial}(\lambda_i, \theta) \\
+logit(\lambda_i) = \alpha \\
+\alpha \sim \mathcal{N}(0, 10) \\
+\theta \sim \mathcal{Gamma}(0.01, 0.01)
+$$
+using tthe data
+
+
+```{r}
+data(UCBadmit)
+d <- UCBadmit
+```
+
+
+the fit is
+
+
+```{r}
+a_file <- here::here("fits", "b11_06.rds")  # rds file location
+b11.6 <- readRDS(file = a_file)  # load the file
+# b11.6 <-
+#   brm(data = d,
+#       family = negbinomial,
+#       admit ~ 1,
+#       prior = c(prior(normal(0, 10), class = Intercept),
+#                 prior(gamma(0.01, 0.01), class = shape)),  # this is the brms default
+#       iter = 4000, warmup = 1000, cores = 2, chains = 2,
+#       seed = 11)
+# saveRDS(object = b11.6, file = a_file)
+```
+
+
+
+## Summary
+
+
+## Practice

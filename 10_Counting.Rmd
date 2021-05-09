@@ -1,0 +1,531 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Counting and Classification {#Counting}
+
+
+
+## Binomial regression
+
+### Logistic regression: Prosocial chimpanzees
+
+Load the data
+
+```{r}
+data(chimpanzees)
+d <- chimpanzees
+?chimpanzees
+```
+
+Start with a simple, intercept-only logistic regression
+
+$$
+pulled\_left_i \sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) = \alpha \\
+\alpha \sim \mathcal{N}(0, 10)
+$$
+
+
+in `brm( forml = pulled_left | trials(1) ~ 1)` the `|` indicates we have extra
+information about the criterion. In this case, that information is that each
+`pulled_left` corresponds to a single trial, i.e. `trials(1)` which corresponds
+to the $n = 1$ in $Binomial(1, p_i)$
+
+```{r}
+a_file <- here::here("fits", "b10_01.rds")
+stopifnot(file.exists(a_file))
+b10.1 <- readRDS(file = a_file)
+# b10.1 <- brm(data = d,
+#               family = binomial,
+#               formula = pulled_left | trials(1) ~ 1,
+#               prior = c(
+#                 prior(normal(0, 10), class = Intercept)
+#                 ),
+#               seed = 10,
+#               file = a_file
+#               )
+summary(b10.1)
+fixef(b10.1)
+```
+and we convert the result using `brms::inv_logit_scaled()`
+
+```{r}
+inv_logit_scaled(fixef(b10.1))
+```
+
+and improving the model gradually
+
+$$
+pulled\_left_i \sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) = \alpha + \beta_P \cdot pro\_social_i \\
+\alpha \sim \mathcal{N}(0, 10) \\
+\beta_P \sim \mathcal{N}(0, 10) \\
+$$
+
+```{r}
+a_file <- here::here("fits", "b10_02.rds")
+stopifnot(file.exists(a_file))
+b10.2 <- readRDS(file = a_file)
+# b10.2 <- brm(data = d,
+#               family = binomial,
+#               formula = pulled_left | trials(1) ~ 1 + prosoc_left,
+#               prior = c(
+#                 prior(normal(0, 10), class = Intercept),
+#                 prior(normal(0, 10), class = b)
+#                 ),
+#               seed = 10,
+#               file = a_file
+#               )
+summary(b10.2)
+fixef(b10.2)
+```
+
+
+$$
+pulled\_left_i \sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) = \alpha + \beta_P \cdot pro\_social_i + \beta_{P,C} \cdot pro\_social_i \cdot condition_i \\
+\alpha \sim \mathcal{N}(0, 10) \\
+\beta_P \sim \mathcal{N}(0, 10) \\
+\beta_{P,C} \sim \mathcal{N}(0, 10)
+$$
+
+```{r}
+a_file <- here::here("fits", "b10_03.rds")
+stopifnot(file.exists(a_file))
+b10.3 <- readRDS(file = a_file)
+# b10.3 <- update(object = b10.2,
+#                 newdata = d,
+#                 formula = pulled_left | trials(1) ~ 1 + prosoc_left + condition:prosoc_left,
+#                 seed = 10,
+#                 file = a_file)
+summary(b10.3)
+fixef(b10.3)
+```
+
+and compute the WAIC
+
+```{r}
+b10.1 <- add_criterion(b10.1, criterion = "waic")
+b10.2 <- add_criterion(b10.2, criterion = "waic")
+b10.3 <- add_criterion(b10.3, criterion = "waic")
+```
+
+to compare the models
+
+```{r}
+w <- loo_compare(b10.1, b10.2, b10.3, criterion = "waic") %>%
+  as.data.frame() %>%
+  mutate(waic_diff = elpd_diff * -2,
+         waic_diff_se = se_diff * 2) %>%
+  round(digits = 1) %>%
+  tibble::rownames_to_column(var = "model")
+print(w, simplify = FALSE)
+```
+
+and the coefficient plot is
+
+```{r}
+ggplot(w, aes(x = reorder(model, waic), color = model)) +
+  geom_pointrange(aes(y = waic, ymin = waic - se_waic, ymax = waic+ se_waic)) +
+  coord_flip() +
+  ggthemes::theme_clean() +
+  theme(legend.position = "none") +
+  labs(title = "WAIC", y = "deviance", x = "model")
+```
+Now, since $logit(p_i) = \log{\frac{p_i}{1-p_i}}$ so that the odds of pulling the
+the prosocial lever are multiplied by the coefficient $\beta_P$ which is
+
+which means that the odds of pulling the left lever when it is the prosocial
+one increase by 84%.
+
+```{r}
+exp(fixef(b10.3)[2, 1])
+fixef(b10.3)
+```
+Now lets say $\alpha = 4$ then, ignoring everything else, the probability of
+a pull would be $p = \frac{e(\alpha)}{1+e(\alpha)}$
+
+```{r}
+p1 <- exp(4) / (1 + exp(4))
+```
+and adding an increase of 0.62, $\beta_P$ will give
+
+
+```{r}
+b <- fixef(b10.3)[2, 1]
+p2 <- exp(4 + b) / (1 + exp(4 + b))
+```
+
+which means an increase of less than 1%
+
+```{r}
+p2 - p1
+```
+or if we use the estimated $\alpha$
+
+```{r}
+a <- fixef(b10.3)[1, 1]
+b <- fixef(b10.3)[2, 1]
+p1 <- exp(a) / (1 + exp(a))
+p2 <- exp(a + b) / (1 + exp(a + b))
+p1
+p2
+p2 - p1
+```
+which gives an increase of 15% when the alpha is the estimated one.
+
+
+#### Averaged-posterior: Prosocial chimpanzees
+
+The combined, **fitted()**, posterior predictive sample averaged across models
+is as follows
+
+```{r}
+# pp
+ppa <- brms::pp_average(b10.1, b10.2, b10.3, weights = "waic", 
+                        method = "fitted") %>%
+  as_tibble() %>%
+  bind_cols(b10.3$data) %>%
+  distinct(Estimate, Q2.5, Q97.5, prosoc_left, condition) %>%
+  unite("x_axis", prosoc_left, condition, sep = "/") %>%
+  mutate(x_axis = factor(x_axis, levels = c("0/0", "1/0", "0/1", "1/1"))) %>%
+  rename(pulled_left = Estimate)
+ppa
+```
+and the original data grouped by actor is
+
+```{r}
+dactor <- d %>%
+  group_by(actor, prosoc_left, condition) %>%
+  summarise(pulled_left = mean(pulled_left)) %>%
+  unite("x_axis", prosoc_left, condition, sep = "/") %>%
+  mutate(x_axis = factor(x_axis, levels = c("0/0", "1/0", "0/1", "1/1")))
+```
+which gives this plot
+
+```{r}
+ggplot(ppa, aes(x = x_axis)) +
+  geom_smooth(aes(y = pulled_left, ymin = Q2.5, ymax = Q97.5, group = 0),
+              stat = "identity", fill = "mediumspringgreen", color = "steelblue") +
+  geom_line(data = dactor, aes(x = x_axis, y = pulled_left, group = actor),
+            color = "orange") +
+  scale_x_discrete(expand = c(0.05, 0.05)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  ggthemes::theme_few() +
+  labs(title = "Figure 10.2", x = "prosocial_left/condition",
+       y = "pulled left proportion")
+
+```
+
+and the mcmc pair plot is
+
+```{r}
+bayesplot::color_scheme_set(scheme = "purple")
+bayesplot::mcmc_pairs(x = brms::posterior_samples(b10.3),
+                      pars = c("b_Intercept", "b_prosoc_left", "b_prosoc_left:condition"),
+                      off_diag_args = list(size = 1/10, alpha = 1/6),
+                      diag_fun = "dens")
+```
+
+
+#### Varying Intercept: Prosocial chimpanzees
+
+Since it only consist of varying an intercept it could be seen as multivariable
+by using dummy variables for each actor, or as multilevel by using an intercept
+varying by actor.  In this current case, it is the same thing.
+
+
+$$
+pulled\_left_i \sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) = \alpha_{actor_i} + \beta_P \cdot pro\_social_i + \beta_{P,C} \cdot pro\_social_i \cdot condition_i \\
+\alpha \sim \mathcal{N}(0, 10) \\
+\beta_P \sim \mathcal{N}(0, 10) \\
+\beta_{P,C} \sim \mathcal{N}(0, 10)
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b10_04.rds")
+stopifnot(file.exists(a_file))
+b10.4 <- readRDS(file = a_file)
+# b10.4 <- update(object = b10.3,
+#                 newdata = d,
+#                 formula = pulled_left | trials(1) ~ 0 + factor(actor) + prosoc_left + condition:prosoc_left,
+#                 seed = 10,
+#                 file = a_file)
+summary(b10.4)
+fixef(b10.4)
+```
+
+
+
+### Aggregated binomial: Chimpanzees again
+
+
+```{r}
+data(chimpanzees)
+d.aggr <- chimpanzees %>%
+  # the select line is not useful
+  # select(-recipient, -block, -trial, -chose_prosoc) %>%
+  group_by(actor, condition, prosoc_left) %>%
+  summarise(x = sum(pulled_left)) %>%
+  ungroup()
+d.aggr
+```
+
+```{r}
+a_file <- here::here("fits", "b10_05.rds")
+stopifnot(file.exists(a_file))
+b10.5 <- readRDS(file = a_file)
+# b10.5 <- brms::brm(
+#   data = d.aggr,
+#   family = binomial,
+#   formula = x | trials(18) ~ 1 + prosoc_left + condition:prosoc_left,
+#   prior =  c(prior(normal(0, 10), class = Intercept),
+#              prior(normal(0, 10), class = b)),
+#   iter = 2500, warmup = 500, chains = 2, seed = 10,
+#   file = a_file
+# )
+summary(b10.5)
+fixef(b10.5)
+```
+
+
+### Aggregated binomial: Graduate school admissions
+
+
+```{r}
+data(UCBadmit)
+
+d <- UCBadmit %>%
+  mutate(male = as.integer(applicant.gender == "male"))
+```
+
+
+the model
+
+$$
+n_{admit,i} \sim \mathcal{Binomial}(n_i, p_i) \\
+logit(p_i) = \alpha + \beta_m \cdot m_i \\
+\alpha \sim \mathcal{N}(0, 10) \\
+\beta_m \sim \mathcal{N}(0, 10)
+$$
+and we fit the model
+
+```{r}
+a_file <- here::here("fits", "b10_06.rds")
+stopifnot(file.exists(a_file))
+b10.6 <- readRDS(file = a_file)
+# b10.6 <- brms::brm(
+#   data = d,
+#   family = binomial,
+#   formula = admit | trials(applications) ~ 1 + male,
+#   prior =  c(prior(normal(0, 10), class = Intercept),
+#              prior(normal(0, 10), class = b)),
+#   iter = 2500, warmup = 500, chains = 2, seed = 10,
+#   # this line will help with `loo_moment_match()` later
+#   save_all_pars = TRUE,
+#   file = a_file
+# )
+summary(b10.6)
+fixef(b10.6)
+```
+
+
+## Poisson regression
+
+$$
+y_i \sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} = \alpha + \beta x_i
+$$
+
+which is expressed as follows to reflect the exposure
+
+
+
+$$
+y_i \sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} =\log{\frac{\mu_i}{\tau_i}}= \log{\mu_i} - \log{\tau_i} = \alpha + \beta x_i\\
+\therefore \\
+\log{\mu_i} = \log{\tau_i} + \alpha + \beta x_i
+$$
+
+### Example: Oceanic tool complexity
+
+```{r}
+data(Kline)
+d <- Kline %>%
+  mutate(log_pop = log(population),
+         contact_high = as.integer(contact == "high"))
+d
+```
+
+
+the model is
+$$
+T_i \sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} = \alpha + \beta_P\log{P_i} + \beta_C C_i + \beta_{PC} \cdot C_i
+\cdot \log{P_i} \\
+\alpha \sim \mathcal{N}(0, 100) \\
+\beta_P \sim \mathcal{N}(0, 1) \\
+\beta_C \sim \mathcal{N}(0, 1) \\
+\beta_{PC} \sim \mathcal{N}(0, 1)
+$$
+
+and the fit
+
+```{r}
+a_file <- here::here("fits", "b10_10.rds")
+stopifnot(file.exists(a_file))
+b10.10 <- readRDS(file = a_file)
+# b10.10 <- brms::brm(
+#   data = d,
+#   family = poisson,
+#   formula = total_tools ~ 1 + log_pop + contact_high + contact_high:log_pop,
+#   prior =  c(prior(normal(0, 100), class = Intercept),
+#              prior(normal(0, 1), class = b)),
+#   iter = 3000, warmup = 1000, chains = 4, cores = 4, seed = 10,
+#   file = a_file
+# )
+summary(b10.10)
+fixef(b10.10)
+```
+
+use `vcov()` to extract the corelation matrix of parameters
+
+```{r}
+vcov(b10.10, cor = TRUE) %>%
+  round(digits = 2)
+```
+
+we do the coefficient plot wit `bayesplot`
+
+```{r}
+bpost10.10 <- brms::posterior_samples(b10.10) %>%
+  select(-lp__) %>%
+  rename(b_interaction = 'b_log_pop:contact_high')
+
+bayesplot::color_scheme_set(scheme = "green")
+bayesplot::mcmc_intervals(x = bpost10.10, prob = 0.5, prob_outer = 0.95)
+
+```
+
+and to show the summary on the normal scale, i.e. exponentiating the values,
+we create a **conterfactual** plot, fixing the log population of island at 8.
+
+`lambda_high` uses the full model which and `lambda_low` uses the model with 
+lop population only to evaluate the impact of `contact_high`
+
+```{r}
+bpost10.10 <- bpost10.10 %>%
+  mutate(lambda_high = exp(b_Intercept + b_contact_high + 
+           (b_log_pop + b_interaction) * 8),
+         lambda_low = exp(b_Intercept + b_log_pop * 8),
+         diff = lambda_high - lambda_low)
+ggplot(bpost10.10, aes(x = diff)) +
+  geom_line(stat = "density") +
+  ggthemes::theme_economist() +
+  labs(title = "Figure 10.8", x = "lambda_high - lambda_low")
+```
+
+### MCMC islands
+
+
+
+### Example: Exposure and the offset
+
+Simulate the first data set based on daily data.
+
+```{r}
+set.seed(10)
+y_day = rpois(n = 30, lambda = 1.5)
+```
+
+and the second set based on weekly data
+
+```{r}
+set.seed(10)
+y_week = rpois(n = 4, lambda = 0.5*7)
+```
+
+put it together
+
+
+```{r}
+d <- data.frame(
+  manuscripts = c(y_day, y_week),
+  days = c(rep(1, times = length(y_day)), rep(7, times = length(y_week))),
+  monastery = c(rep(0, times = length(y_day)), rep(1, times = length(y_week)))
+  ) %>%
+  # compute the offset
+  mutate(log_days = log(days))
+```
+
+so the model is
+
+$$
+manuscripts_i \sim \mathcal{Poisson}(\lambda_i) \\
+\log{\mu_i} = \log{\tau_i} + \alpha + \beta \cdot  monastery_i
+$$
+
+and the fit is
+
+```{r}
+a_file <- here::here("fits", "b10_15.rds")
+stopifnot(file.exists(a_file))
+b10.15 <- readRDS(file = a_file)
+# b10.15 <- brms::brm(
+#   data = d,
+#   family = poisson,
+#   # IMPORTANT: Use offset()
+#   formula = manuscripts ~ offset(log_days) + monastery,
+#   prior =  c(prior(normal(0, 100), class = Intercept),
+#              prior(normal(0, 1), class = b)),
+#   iter = 2500, warmup = 500, chains = 4, cores = 4, seed = 10,
+#   file = a_file
+# )
+```
+
+**Important**: Since we have different exposure, with the lowest being days,
+with log(1) = 0, then it is important to remember that the lambda in the
+summary is the lambda for 1 day, i.e. *rate of manuscript per day*.
+
+```{r}
+print(b10.15, digits = 2)
+fixef(b10.15)
+```
+
+and to get the actual lambdas distribution for each monastery
+
+```{r}
+dpost10.15 <- brms::posterior_samples(b10.15) %>%
+  select(-lp__) %>%
+  mutate(lambda_old = exp(b_Intercept),
+         lambda_new = exp(b_Intercept + b_monastery)) %>%
+  pivot_longer(cols = c("lambda_old", "lambda_new"), names_to = "key") %>%
+  mutate(key = factor(key, levels = c("lambda_old", "lambda_new"))) %>%
+  group_by(key) %>%
+  tidybayes::mean_hdi(value, .width = 0.89) %>%
+  mutate(across(.cols = where(is.double), .fns = round, digits = 2))
+dpost10.15
+```
+
+
+
+## Other count regressions
+
+
+
+## Summary
+
+
+## Practice
+

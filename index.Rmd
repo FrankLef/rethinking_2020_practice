@@ -1,0 +1,126 @@
+--- 
+title: "Statistical Rethinking - Solutions"
+author: "frank"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: [books.bib, packages.bib]
+biblio-style: apalike
+link-citations: yes
+description: "Packages and setup to use this book."
+---
+
+
+```{r setup, include=FALSE}
+library(rethinking)
+```
+
+
+# Introduction {-}
+
+## Session info {-}
+
+```{r}
+sessioninfo::session_info()
+```
+
+
+## Prerequisites {-}
+
+To install the `rstan` package the rstan site provides useful guidance at
+[rstan site](https://github.com/stan-dev/rstan/wiki/Installing-RStan-on-Windows).
+
+The sequence to follow is
+
+1. Ensure `Rtools` is installed
+2. Ensure `rstan` is installed
+3. Install rethinking only once
+
+### Install `Rtools` {-}
+
+Make sure `Rtools` is installed before proceeding further.
+
+Get the environment path
+
+```{r}
+sys_path <- Sys.getenv("PATH")
+sys_path <- unlist(stringr::str_split(string = sys_path, pattern = ";"))
+
+```
+
+then find position of RTools and test if it is installed
+
+```{r}
+tmp <- grepl(pattern = "(Rtools)|(RBuildTools)", sys_path, ignore.case = TRUE)
+stopifnot(any(tmp))
+```
+
+and verify that `g++` can really be called from `R`
+
+```{r}
+system("g++ -v")
+system("where make")
+```
+
+
+### Install `rstan` {-}
+
+Install rstan and its tools.
+
+```{r eval=FALSE}
+install rstan and its tools
+install.packages(c("rstan", "rstantools"))
+```
+
+
+and verify that tool chain works
+
+```{r}
+fx <- inline::cxxfunction(signature(x = "integer", y = "numeric" ) ,
+                           'return ScalarReal( INTEGER(x)[0] * REAL(y)[0] ) ;' )
+```
+
+
+and just a  final verification to ensure all is correct
+
+```{r}
+# this should return 10
+fx <- inline::cxxfunction(signature(x = "integer", y = "numeric" ) ,
+                           'return ScalarReal( INTEGER(x)[0] * REAL(y)[0] ) ;' )
+fx( 2L, 5 )
+if(fx( 2L, 5 ) == 10L) {
+    msg <- paste("RStan installed with success. Version", packageVersion("rstan"))
+    message(msg)
+} else {
+    stop("RStan installation failed.")
+}
+```
+
+
+### Install `rethinking` {-}
+
+
+```{r eval=FALSE}
+install.packages(c("coda", "mvtnorm", "devtools"))
+library(devtools)
+devtools::install_github("rmcelreath/rethinking")
+```
+
+
+> **Important** `rethinking` mus be reintalled to work under `R 4.0`. 
+  But it is not on 'CRAN' and must be reinstalled locally. Go to 
+  [solution](see https://github.com/rmcelreath/rethinking/issues/250) to solve it.
+  This will show the command on the next lines.
+
+Use the following to install `rethinking` locally when usi `R` with version >= 4.0.
+
+```{r eval=FALSE}
+remotes::install_github("rmcelreath/rethinking")
+```
+
+## References {-}
+
+These notes borrow heavily from @elreath2016 and  @kurtz2020a which does all the
+bayesian analysis with `brms` instead of `rethinking`.
+
+The newest version of `rethinking` is in @elreath2020 and covered by @kurtz2020b.
