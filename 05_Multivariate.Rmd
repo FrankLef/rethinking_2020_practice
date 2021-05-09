@@ -1,5 +1,5 @@
 ```{r include=FALSE}
-# must include ggplot2 explicitely in each chapter
+# must include ggplot2 explicitly in each chapter
 library(rethinking)
 library(brms)
 library(dplyr)

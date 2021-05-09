@@ -27,7 +27,7 @@ rho_val <- -0.7  # correlation between intercepts and slopes
 
 # these lines simply combines the constants just above
 mu <- c(a, b)  # vector of means
-cov_ab <- sigma_a * sigma_b * rho
+cov_ab <- sigma_a * sigma_b * rho_val
 ```
 
 
