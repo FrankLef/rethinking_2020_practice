@@ -25,6 +25,8 @@ paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "ggth
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "ggthemes"]
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "khroma"]
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "awtools"]
+paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "futurevisions"]
+paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "Manu"]
 
 tmp$pal <- paletteer::paletteer_d("ggthemes::Classic_Cyclic")
 scales::show_col(tmp$pal)
@@ -75,6 +77,8 @@ paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "palr
 paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "pals"]
 paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "scico"]
 paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "grDevices"]
+paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "futurevisions"]
+paletteer::palettes_c_names$palette[paletteer::palettes_c_names$package == "Manu"]
 
 # other gradual scales for green and red in this
 tmp$pal <- paletteer::paletteer_c("oompaBase::bluescale", n = 16)
