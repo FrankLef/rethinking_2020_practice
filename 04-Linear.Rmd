@@ -8,519 +8,17 @@ library(paletteer)
 
 # Linear Models {#linear}
 
-## Why normal distributions are normal
-
-Gaussian distribution
-
-$$
-\begin{equation}
-P \left(y \mid \mu, \sigma \right) =
-\frac{1}{\sqrt{2 \pi} \sigma} \exp{\left[-\frac{1}{2}
- \left(\frac{y-\mu}{\sigma} \right)^2
- \right]}
-\end{equation}
-$$
-gaussian distribution expressed with precision $\sigma = \frac{1}{\sqrt{\tau}}$
-
-
-$$
-\begin{equation}
-P \left(y \mid \mu, \tau \right) =
-\frac{\tau}{\sqrt{2 \pi}} \exp{\left[-\frac{\tau}{2}
- \left(y-\mu \right)^2
- \right]}
-\end{equation}
-$$
-
-## A language for describing model
-
-$$
-\begin{equation}
-outcome_i \sim \mathcal{Normal}(\mu_i, \sigma) \\
-\mu_i = \beta \times predictor_i \\
-\beta \sim \mathcal{Normal}(0, 10) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-\end{equation}
-$$
-
-## A Gaussian model of height
-
-### The data
-
-
-```{r}
-data("Howell1")
-d <- Howell1
-```
-
-select only the adults
-
-```{r}
-d2 <- d[d$age >= 18, ]
-```
-
-
-### The model
-
-
-$$
-h_i \sim \mathcal{N}(\mu, \sigma)\\
-\mu \sim \mathcal{N}(178, 20) \\
-\sigma \sim \mathcal{Uniform}(0, 50)
-$$
-
-
-### Grid approximation of posterior distribution, p. 83-84
-
-First create the grid. The name `the_grid` is used here instead of `post` as
-in the textbook to emphasize that these are posterior of the grid.  They are not
-the actual posteriors which will be calculated next using a sampling.
-
-```{r}
-n_grid <- 200  # the grid size
-the_mus <- seq(from = 140, to = 160, length.out = n_grid)  # grid of mu
-the_sigmas <- seq(from = 4, to = 9, length.out = n_grid)  # grid of sigma
-# full grid of mu and sigma
-the_grid <- tidyr::crossing(mu = the_mus, sigma = the_sigmas)
-```
-
-Then we calculate the likelihood. Since probabilities are percentage this
-causes a numerical issue as multiple multiplications of percentages will create
-very small numbers, so small in fact that they will be miscalculated.
-
-To resolve this problem, we use logarithms.
-
-That is the likelihood function from the model defined in 4.3.2
-
-$$
-P(\mu, \sigma \mid h) = 
-\prod_{i=1}^n \mathcal{N}(y_i \ mid \mu, \sigma) \cdot 
- \mathcal{N}(\mu \mid mean = 0, sd = 10) \cdot 
- \mathcal{U}(\sigma | min = 0, max = 10)
-$$
-
-is transformed to log.
-
-> **Important**: Read the end note # 67 on page 449. All the explanations, including
-> the usage of `max(post$prob)` is explained.
-
-$$
-\log{P(\mu, \sigma \mid h)} = 
-\sum_{i=1}^n \left[ \log{\mathcal{N}(y_i \mid \mu, \sigma)} +
- \log{\mathcal{N}(\mu \mid mean = 0, sd = 10)} +
- \log{\mathcal{U}(\sigma | min = 0, max = 10)} \right]
-$$
-and to compute the posterior distribution  we compute the likelihood which is the
-first element of the addition
-
-$$
-\sum_{i=1}^n \log{\mathcal{N}(y_i \mid \mu, \sigma)}
-$$
-as follows
-
-```{r}
-# The likelihood on the log scale
-the_grid$LL <- sapply(seq_len(nrow(the_grid)), function(i) sum(
-    dnorm(d2$height, 
-          mean = the_grid$mu[i],
-          sd = the_grid$sigma[i],
-          log = TRUE))
-    )
-```
-
-then the remaining 2 elements of the summation are the priors
-
-
-$$
-\sum_{i=1}^n \left[
- \log{\mathcal{N}(\mu \mid mean = 0, sd = 10)} +
- \log{\mathcal{U}(\sigma | min = 0, max = 10)} 
- \right]
-$$
-which we add to the likelihood to obtain the posterior distribution on the 
-log scale
-
-```{r}
-# add the the priors to the likelihood  on the log scales to obtain the
-# log of the posterior
-the_grid$post <- the_grid$LL + 
-    dnorm(x = the_grid$mu, mean = 178, sd = 20, log = TRUE) +
-    dunif(x = the_grid$sigma, min = 0, max = 50, log = TRUE)
-```
-
-and to convert the posterior back to the natural scale we exponentiate.  
-The usage of `max(the_grid$post)` is explained in endnote 67 on p. 449.
-
-$$
-\exp{\left[\log{P(\mu, \sigma \mid h)}\right]} = P(\mu, \sigma \mid h)
-$$
-
-```{r}
-# convert back to real scale
-# attention: see note on p. 449 on using max(the_grid$post)
-the_grid$post <- exp(the_grid$post - max(the_grid$post))
-```
-
-
-plot the results on a heatmap
-
-```{r}
-ggplot(data = the_grid, aes(x = mu, y = sigma, fill = post)) +
-    geom_raster() +
-    theme_minimal() +
-    theme(panel.grid = element_blank()) +
-    scale_x_continuous(limits = c(153, 156)) +
-    scale_y_continuous(limits = c(6.5, 9)) +
-    coord_fixed() +
-    scale_fill_paletteer_c("grDevices::Viridis") +
-  labs(title = "The grid's posterior prob.")
-```
-
-### Sampling from the grid's posterior
-
-```{r}
-n_samples <- 1e4
-df <- the_grid %>%
-  slice_sample(n = n_samples, weight_by = post, replace = TRUE)
-glimpse(df)
-```
-
-and visualizing the density of $\mu$ and $\sigma$
-
-```{r}
-# plot the density of mu
-p_mu <- ggplot(data = df, mapping = aes(x = mu)) +
-  geom_density(color = "blue", size = 1, fill = "lightblue") +
-  theme_minimal() +
-  labs(title = expression("distribution of" ~ mu), x = expression(mu))
-
-```
-
-
-```{r}
-# plot the density of sigma
-p_sigma <- ggplot(data = df, mapping = aes(x = sigma)) +
-  geom_density(color = "darkgreen", size = 1, fill = "lightgreen") +
-  theme_minimal() +
-  labs(title = expression("distribution of" ~ sigma), x = expression(sigma))
-```
-
-```{r}
-cowplot::plot_grid(p_mu, p_sigma)
-```
-
-or, even, mapping them together using `ggExtra`
-
-```{r}
-p <- ggplot(data = df, mapping = aes(x = mu, y = sigma)) +
-  geom_point(color = "mediumorchid", size = 1) +
-  geom_jitter(color = "mediumorchid", size = 1) +
-  theme_minimal() +
-  labs(title = expression("distribution of" ~ mu ~ sigma),
-       x = expression(mu), y = expression(sigma))
-p <- ggExtra::ggMarginal(p, 
-                    xparams = list(colour = "blue", fill = "lightblue", size = 1),
-                    yparams = list(colour="darkgreen", fill = "lightgreen", size = 1))
-p
-```
-
-
-```{r}
-# to see the outut from ggMarginal, an extra code chunk is required
-# Source: https://github.com/daattali/ggExtra
-# grid::grid.newpage()
-# grid::grid.draw(p)
-```
-
-
-### Fitting the model with `map` and `brm()`
-
-
-#### using `rethinking::map`
-
-We now fit the model using `map` from the `rethinking` package
-
-> See the overthinking box about `list()` vs `alist()` on p. 88 of chapter 4.
-
-The mode l is
-
-$$
-h_i \sim \mathcal{N}(\mu, \sigma)\\
-\mu \sim \mathcal{N}(178, 20) \\
-\sigma \sim \mathcal{Uniform}(0, 50)
-$$
-
-and the fit is
-
-```{r}
-# see p. 88 in Overthinking for the difference between alist() and list()
-# create the formula list representing the model
-flist <- alist(
-    height ~ dnorm(mu, sigma),
-    mu ~ dnorm(178, 20),
-    sigma ~ dunif(0, 50)
-    )
-# create the start values
-start <- list(
-    mu  = mean(d2$height),
-    sigma = sd(d2$height)
-)
-m4.1 <- map(flist, data = d2, start = )
-```
-
-which gives us the summary
-
-```{r}
-precis(m4.1)
-```
-
-and the variance covariance matrix is
-
-```{r}
-vcov(m4.1)
-```
-and the correlation matrix
-
-```{r}
-cov2cor(vcov(m4.1))
-```
-
-#### Using `brms::brm`
-
-This borrows heavily from @kurtz2019.
-
-As mentioned in chapter 8, it is best to use half-Cauchy distribution for 
-sigma as the tends to work better when using Half Cauchy for sigma when doing
-a Hamiltonian MCMC with `brm()`.
-
-Therefore the model is
-
-$$
-h_i \sim \mathcal{N}(\mu, \sigma)\\
-\mu \sim \mathcal{N}(178, 20) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-> See the overthinking box about half Cauchy distribution in chapter 8
-> on p. 260.
-
-
-This process takes less than a second. It has been save to the rsd file
-`b04_01.rds`
-
-```{r}
-a_file <- here::here("fits", "b04_01.rds")  # rds file location
-stopifnot(file.exists(a_file))
-# load fit from file saved before
-b4.1 <- readRDS(file = a_file)
-# fit model and save to file
-# b4.1 <-
-#     brms::brm(data = d2,
-#               formula = height ~ 1,
-#               family = gaussian(),
-#               prior = c(prior(normal(178, 20), class = Intercept),
-#                       prior(cauchy(0, 1), class = sigma)),
-#               iter = 2000,
-#               warmup = 2000 / 2,
-#               cores = 4, # 4 cores on my computer
-#               chains = 4,
-#               seed = 4,
-#               file = a_file)
-# get the trace and density plots
-plot(b4.1)
-```
-
-with the summary
-
-```{r}
-summary(b4.1)
-```
-to get the intercept we use
-
-```{r}
-summary(b4.1)$fixed
-```
-you can also extract the coefficients using `posterior_summary`. The row
-`lp__` is the *unnormalized log posterior density* in `brms`.s
-
-
-```{r}
-# lp__ is the unnormalized log posterior density
-brms::posterior_summary(b4.1)
-```
-
-### Sampling from a fit
-
-#### Using `map`
-
-Since `map` is a quadratic approximation, how do we simulate 2 variables,
-$\mu$ and $\sigma$?
-
-Simply `map` gives us the variance covariance. Therefore `map` can be used
-to simulation the bivariate normal distribution of $\mu$ and $\sigma$
-
-```{r}
-vcov(m4.1)
-```
-
-from which we can obtain the correlation matrix
-
-```{r}
-cov2cor(vcov(m4.1))
-```
-
-so to simulate using `rethinking` we simply use
-
-```{r}
-post_samples <- extract.samples(m4.1, n = 1e4)
-```
-
-which gives us a sample of size 10000 of the posterior distribution which
-can be summarized with the usual `precis()`
-
-```{r}
-precis(post_samples)
-```
-#### Using `brm`
-
-
-Using `brm` however we are not given the variance covariance, it is only
-available for the intercept (first-level parameter)
- 
-```{r}
-vcov(b4.1)
-```
- So you have to calculate the var-cov matrix by using a sample from the
- posterior distribution
-```{r}
-post_samples <- posterior_samples(b4.1)
-glimpse(post_samples, 5)
-# compute the cov
-cor(post_samples[, c("b_Intercept", "sigma")])
-```
- 
- > See comment from @Kurz at end of section 4.3.6 to explain that McEalrath
- > uses `mvnorm()` from `MASS` to simulate using the varcov whereas with
- > `brms::posterior_samples()` we do it directly.
- 
-## Adding a predictor
-
-### The linear model strategy
-
-$$
-h_i \sim \mathcal{N}(\mu_i, \sigma)\\
-\mu_i = \alpha + \beta x_i \\
-\alpha \sim \mathcal{N}(178, 20) \\
-\beta \sim \mathcal{N}(0,10) \\
-\sigma \sim \mathcal{Uniform}(0, 50)
-$$
-
-### Fitting the model
-
-#### Using `map`
-
-```{r}
-data("Howell1")
-d <- Howell1
-d2 <- d[d$age >= 18, ]
-# fit the model with quadratic approximation
-m4.3 <- map(
-  alist(
-   height ~ dnorm(mu, sigma),
-   mu <- a + b * weight,
-   a ~ dnorm(178, 100),
-   b ~ dnorm(0, 10),
-   sigma ~ dunif(0, 50) 
-  ),
-  data = d2
-)
-precis(m4.3)
-```
-
-
-#### Using `brm`
-
-Again, we use half-cauchy to facilitate the iterations with `brm`, so the model is
-
-
-$$
-h_i \sim \mathcal{N}(\mu_i, \sigma)\\
-\mu_i = \alpha + \beta x_i \\
-\alpha \sim \mathcal{N}(178, 20) \\
-\beta \sim \mathcal{N}(0,10) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-```{r}
-a_file <- here::here("fits", "b04_03.rds")  # rds file location
-stopifnot(file.exists(a_file))
-# load fit from file saved before
-b4.3 <- readRDS(file = a_file)
-# fit model and save to file
-# b4.3 <-
-#     brms::brm(data = d2,
-#               formula = height ~ 1 + weight,
-#               family = gaussian(),
-#               prior = c(
-#                 prior(normal(178, 20), class = Intercept),
-#                 prior(normal(0, 10), class = b),
-#                 prior(cauchy(0, 1), class = sigma)),
-#               iter = 2000,
-#               warmup = 2000 / 2,
-#               cores = 4, # 4 cores on my computer
-#               chains = 4,
-#               seed = 4,
-#               file = a_file)
-# get the trace and density plots
-plot(b4.3)
-```
-
-
-
-### Interpreting the model fit
-
-#### Using `map`
-
-**Important**, the parameters are correlated here, to avoid this one must
-do **centering** of variables.
-
-
-```{r}
-precis(m4.3, corr = TRUE)
-```
-
-
-#### Using `brm`
-
-Note: `lp__` stands for *unnormalized log posterior density*.
-
-```{r}
-posterior_summary(b4.3, probs = c(0.055, 0.975))
-```
-
-
-
-## Polynomial regression
-
-Not covered
-
-## Summary
-
-Using `brms` is commercial grade package that I will use.
-
-## Practice
-
-### 4E1 {-}
+## 4E1 {-}
 
 See p. 78, 3rd paragraph for info
 
 $y_i \sim Normal(\mu, \sigma)$
 
-### 4E2 {-}
+## 4E2 {-}
 
 2 parameters, $\mu$ and $\sigma$
 
-### 4E3 {-}
+## 4E3 {-}
 
 See Overthinking on p. 83.
 
@@ -551,15 +49,15 @@ P(\mu, \sigma \mid y) =
 \end{equation}
 $$
 
-### 4E4 {-}
+## 4E4 {-}
 
 $\mu_i = \alpha + \beta x_i$
 
-### 4E5 {-}
+## 4E5 {-}
 
 2 parameters, $\mu$ and $\sigma$
 
-### 4M1 {-}
+## 4M1 {-}
 
 See answer on p. 82-83 with R code 4.13
 
@@ -581,9 +79,9 @@ ggplot(data = prior_h, mapping = aes(x = height)) +
     labs(title = "4M1: distribution of heights using priors")
 ```
 
-### 4M2 {-}
+## 4M2 {-}
 
-#### with `map` {-}
+### with `map` {-}
 
 See section 4.3.5 on how to use `map`.
 
@@ -607,7 +105,7 @@ practice4M2 <- map(
 precis(practice4M2)
 ```
 
-#### with `brm` {-}
+### with `brm` {-}
 
 ```{r}
 a_file <- here::here("fits", "Practice04M2.rds")  # save to rds file
@@ -634,7 +132,7 @@ plot(Practice4M2)
 ```
 
 
-### 4M3 {-}
+## 4M3 {-}
 
 Make sure you remember to index the $y$ so that it is $y_i$
 
@@ -646,7 +144,7 @@ y_i \sim \mathcal{N}(mean = \mu, sd = \sigma)\\
 \sigma \sim \mathcal{Uniform}(mean = 0, sd = 50)
 $$
 
-### 4M4 {-}
+## 4M4 {-}
 
 Don't forget the index so that $height$ is $height_i$
 
@@ -658,7 +156,7 @@ mu = \alpha + \beta \cdot year_i \\
 \sigma \sim Uniform(0, 50)
 $$
 
-### 4M5 {-}
+## 4M5 {-}
 
 Since the students are young must be growing every year then the prior for the intercept
 $\alpha$ would be the *average height of the first year*. The prior of the slope
@@ -676,7 +174,7 @@ mu = \alpha + \beta \cdot year \\
 \sigma \sim Uniform(0, 50)
 $$
 
-### 4M6 {-}
+## 4M6 {-}
 
 Instead of using the average range as a prior for $\sigma$ we would use
 $\sigma = \sqrt{64} = 8$.
@@ -693,7 +191,7 @@ mu = \alpha + \beta \cdot year \\
 \sigma \sim Uniform(0, 64)
 $$
 
-### 4H1 {-}
+## 4H1 {-}
  
 We first create the dataframe of data from Howell1 which is used to
 evaluate the model, called `d2`
@@ -729,7 +227,7 @@ height \sim \mathcal{N}(\mu, \exp{(\log{(\sigma)})} \\
 \log{\sigma} \sim \mathcal{N}(\log{1}, \log{50})
 $$
 
-#### Using `map` {-}
+### Using `map` {-}
 
 We use the map to estimate the parameters.  The grid method is too cumbersome with
 more than 2 parameters.
@@ -772,7 +270,7 @@ each individual. See4.4.3.4. It s the method adopted in the official solution.
 The official solution mentions note that we can use the estimate directly as done
 above and it should give about the same result in this case.
 
-#### Using `brm` {-}
+### Using `brm` {-}
 
 We first fit the model
 
@@ -825,7 +323,7 @@ df_4H1$lower <- summ["b_Intercept", "Q94.5"] + summ["b_weight", "Q94.5"] * df_4H
 glimpse(df_4H1)
 ```
 
-#### Using `brms::posterior_predict` {-}
+### Using `brms::posterior_predict` {-}
 
 You can also use `posteror_predict()` which shows the actual predictions
 of the five weight (V1, V2, V3, V4, V5) and which is summarized here.
@@ -842,7 +340,7 @@ skimr::skim(pred)  # better
 
 
 
-### 4H2 {-}
+## 4H2 {-}
 
 Load the data
 
@@ -861,7 +359,7 @@ height \sim \mathcal{N}(\mu, \sigma) \\
 \beta \sim \mathcal{N}(0, 100) \\
 \sigma \sim \mathcal{HalfCauchy}(0, 1)
 $$
-#### 4H2 a) with `map` {-}
+### 4H2 a) with `map` {-}
 
 When using `map` the the model for `sigma` is modifed to $\log{\sigma} \sim \mathcal{N(1,10)}$
 as recommended in overthinking box on p. 91.
@@ -883,7 +381,7 @@ rethinking::precis(P4H2_map, prob = 0.89)
 
 for 10 more units of weights the child should be taller between 26.1 and 28.3 cm
 
-#### 4H2 b) with `map` {-}
+### 4H2 b) with `map` {-}
 
 ```{r}
 summ <- precis(P4H2_map)
@@ -905,7 +403,7 @@ ggplot(data = df_4H2, aes(weight, height)) +
        x = "weight in kg", y = "height in cm")
 ```
 
-#### 4H2 a) with `brm` {-}
+### 4H2 a) with `brm` {-}
 
 ```{r}
 a_file <- here::here("fits", "Practice04H2.rds")  # save to rds file
@@ -929,7 +427,7 @@ Practice4H2 <- readRDS(file = a_file)
 plot(Practice4H2)
 ```
 
-#### 4H2 b) with `brm` {-}
+### 4H2 b) with `brm` {-}
 
 > It would have been better to do it with `brms::posterior_predict` as it gets
 the distribution with interval for each observation like `rethinking::link()`.
@@ -972,12 +470,12 @@ ggplot(data = df_4H2, aes(weight, height)) +
 
 
 
-#### 4H2 c) {-}
+### 4H2 c) {-}
 
 The data points to have a nonlinear relation with weight.
 
 
-### 4H3 {-}
+## 4H3 {-}
 
 In this practice, contrary to 4H2 above, it becomes difficult to interpret the
 equations.
@@ -999,7 +497,7 @@ data("Howell1")
 df_4H3 <- Howell1
 ```
 
-### 4H3 a) using `map` {-}
+## 4H3 a) using `map` {-}
 
 When using `map` the the model for `sigma` is modifed to $\log{\sigma} \sim \mathcal{N(1,10)}$
 as recommended in overthinking box on p. 91.
@@ -1023,7 +521,7 @@ The $b$ represent that for every $\log{weight}$ the height increases by 47 cm.
 But it is unclear how to explain what $\log{weight}$ is.
 
 
-### 4H3 b) using `map` {-}
+## 4H3 b) using `map` {-}
 
 We use the `link` function. See section **4.4.3.4**, p. 105 to get the fit,
 that is the mean and its interval (HPDI) for every individual.
@@ -1085,7 +583,7 @@ ggplot(data = df_4H3, aes(weight, height)) +
 ```
 
 
-### 4H3 a) using `brm` {-}
+## 4H3 a) using `brm` {-}
 
 We fit the model.
 
@@ -1122,7 +620,8 @@ str(intrvl)
 samples <- brms::posterior_samples(Practice4H3)
 str(samples)
 ```
-### 4H3 b) using `brm` {-}
+
+## 4H3 b) using `brm` {-}
 
 Then we will visualize the model fit using `brms` as described by [@kurtz2020a,
 section 4.4]. The following functions are important and will be used extensively.
@@ -1150,7 +649,7 @@ However using this funciton reduces the codes and the chances of error.
 > We use `rethinking::HPDI` to compute the CI. However, in futur chapters, 
 we will use the `payestestR` 
 
-#### 4H3 b) simulate the expected $\mu$ `posterior_epred` {-}
+### 4H3 b) simulate the expected $\mu$ `posterior_epred` {-}
 
 We use a sequence of weights to compute the expected $\mu$. Same process
 as when using `rethinking::link()`. This will give a matrix where each column
@@ -1202,7 +701,7 @@ ggplot(data = df_4H3, aes(weight, height)) +
 ```
 
 
-#### 4H3 b) simulate the $y_i$ with `posterior_predict` {-}
+### 4H3 b) simulate the $y_i$ with `posterior_predict` {-}
 
 We get the interval for every observation, not only the 
 interval of the mean as just previously. We use the `predict()` function

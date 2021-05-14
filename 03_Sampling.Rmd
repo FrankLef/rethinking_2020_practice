@@ -425,17 +425,31 @@ ggdist::mean_hdi(.data = pred$pred, .width = 0.89)
 
 ```{r}
 rng <- range(pred$pred)
-# the acutal binomial distribution of the observations
+qtl <- c(0.5, 0.8, 0.95, 1)
+x_breaks <- ggdist::mean_qi(.data = pred$pred, .width = qtl) %>%
+  select(y, ymin, ymax) %>%
+  pivot_longer(cols = c("y", "ymin", "ymax")) %>%
+  distinct(value) %>%
+  arrange(value) %>%
+  pull() %>%
+  as.integer()
+
+# the actual binomial distribution of the observations
 set.seed(3)
 dist_binom <- data.frame(x = rbinom(n = length(samples), size = n_births, prob = p_boys))
 ggplot(pred, aes(x = pred)) +
-  stat_halfeye(point_interval = ggdist::mean_hdi, .width = 0.89, fill = "palegreen") +
-  geom_density(data = dist_binom, mapping = aes(x, y = ..scaled..), color = "violetred", linetype = "dashed") +
+  stat_halfeye(point_interval = ggdist::mean_qi, .width = c(0.5, 0.8),
+               aes(fill=stat(cut_cdf_qi(cdf,.width = qtl)))) +
+  geom_density(data = dist_binom, mapping = aes(x, y = ..scaled..), color = "violetred", linetype = "dashed", size = 1) +
   geom_vline(xintercept = c(mean(dist_binom$x), mean(pred$pred)), 
              color = c("violetred", "darkgreen"), linetype = c("dashed", "solid")) +
-  scale_x_continuous(limits = rng) +
-  theme_minimal() +
-  labs(title = "Practice 3H3", x = "nb of boys", y = "probability")
+  scale_x_continuous(breaks = x_breaks,limits = rng) +
+  scale_fill_paletteer_d(palette = "Manu::Takahe", direction = -1,
+                         na.translate = FALSE) +
+  theme_ggdist() +
+  theme(legend.position = c(0.1,0.75),
+        legend.title = element_text(color = "navy")) +
+  labs(title = "Practice 3H3", x = "nb of boys", y = "probability", fill = "quantiles")
 ```
 
 ## 3H4 {-}
