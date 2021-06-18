@@ -1,1093 +1,124 @@
 ```{r include=FALSE}
-# must include ggplot2 explicitly in each chapter
 library(rethinking)
 library(brms)
-library(dplyr)
-library(ggplot2)
-library(paletteer)
-library(bayesplot)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+library(paletteer, quietly = TRUE)
 ```
 
 
 # Multivariate Linear Models {#multivariate}
 
-## Spurious association
 
-Get the data and standardize the variables
+## 5E1 {-}
 
-```{r}
-# load data
-data("WaffleDivorce")
-d <- WaffleDivorce
-# standardize the variables
-d <- d %>%
-  mutate(MedianAgeMarriage_s = scale(MedianAgeMarriage, center = TRUE, scale = TRUE),
-         Marriage_s = scale(Marriage, center = TRUE, scale = TRUE))
-# glimpse(d)
-```
-
-The model is
-
-$$
-\begin{equation}
-divorce_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta \times medage_i \\
-\alpha \sim \mathcal{N}(10, 10) \\
-\beta \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{Uniform}(0, 10)
-\end{equation}
-$$
-
-and the fit
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_01.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.1 <- readRDS(file = a_file)  # load the file
-# b5.1 <- brm(
-#   data = d,
-#   formula = Divorce ~ 1 + MedianAgeMarriage_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(10, 10), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(uniform(0, 10), class = sigma)
-#   ),
-#   iter = 2000, warmup = 500, chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.1)
-```
-
-get the fitted $\mu_i$ by using a sequence of median age marriage of length 30
-from the `min(MedianAgeMarriage)` to `max(MedianAgeMarriage)`.
-
-```{r}
-nd <- seq(from = min(d$MedianAgeMarriage_s),
-                            to = max(d$MedianAgeMarriage_s),
-                            length.out = 30)
-bfit5.1 <- tibble(MedianAgeMarriage_s = nd) %>%
-  fitted(object = b5.1, newdata = .) %>%
-  as_tibble() %>%
-  mutate(MedianAgeMarriage_s = nd)
-
-```
-
-and plot them 
-
-```{r}
-ggplot(data = d,
-       mapping = aes(x = MedianAgeMarriage_s, y = Divorce)) +
-  geom_ribbon(data = bfit5.1, aes(x = MedianAgeMarriage_s, ymin = Q2.5, ymax = Q97.5),
-              inherit.aes = FALSE, fill = "olivedrab1", alpha = 0.5) +
-  geom_line(data = bfit5.1, aes(x = MedianAgeMarriage_s, y = Estimate),
-            color = "olivedrab4", inherit.aes = FALSE) +
-  geom_point(aes(color = as.factor(South))) +
-  theme_minimal() +
-  theme(legend.position = c(0.85, 0.85)) +
-  labs(title = "Divorce rate vs Median Marriage age",
-       color = "South = 1",
-       x = "standardized median age", y = "divorce rate")
-```
-
-
-### Multivariate notation
-
-The model with median age and marriage rate, both standardized. 
-
->The $+$ in the modele cane be interpreted as the divorce rate is a function
-of the marriage rate **OR** the median age of marriage
-
-$$
-\begin{equation}
-divorce_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_1 \cdot marr_i + \beta_2 \cdot medage_i \\
-\alpha \sim \mathcal{N}(10, 10) \\
-\beta_1 \sim \mathcal{N}(0, 1) \\
-\beta_2 \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{Uniform}(0, 10)
-\end{equation}
-$$
-
-### Fitting the model
-
-and we fit the model to the data
-
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_03.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.3 <- readRDS(file = a_file)  # load the file
-# b5.3 <- brm(
-#   data = d,
-#   formula = Divorce ~ 1 + Marriage_s + MedianAgeMarriage_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(10, 10), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(uniform(0, 10), class = sigma)
-#   ),
-#   iter = 2000, warmup = 500, chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.3)
-```
-
-and we plot the coefficients with `bayesplot` since it create a `ggplot` object
-easier to format later.
-
-```{r}
-bpost5.3 <- posterior_samples(b5.3) %>%
-  select(-lp__)
-
-# this gives the intervals
-bayesplot::mcmc_intervals(x = bpost5.3, prob = 0.89, point_est = "median") +
-  labs(title = "Coefficients of divorce rate vs marriage rate and median age") +
-  theme_classic()
-
-# this gives the distributions
-bayesplot::mcmc_areas(x = bpost5.3, prob = 0.89, point_est = "median") +
-  labs(title = "Coefficients of divorce rate vs marriage rate and median age") +
-  theme_classic()
-```
-
-### Plotting multivariate posteriors
-
-3 main plots are used
-
-* Predictor residual plots
-* Counterfactual plots
-* Posterior prediction plots
-
-
-#### Predictor residual plots p. 126 - 129
-
-##### Marriage rate residuals
-
-```{r}
-# load data
-data("WaffleDivorce")
-d <- WaffleDivorce
-# standardize the variables
-d <- d %>%
-  mutate(MedianAgeMarriage_s = scale(MedianAgeMarriage, center = TRUE, scale = TRUE),
-         Marriage_s = scale(Marriage, center = TRUE, scale = TRUE))
-# glimpse(d)
-```
-
-
-We compute marriage rate in *terms of median age of marriage* which is the model
-
-$$
-\begin{equation}
-marr_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta \cdot medage_i \\
-\alpha \sim \mathcal{N}(0, 10) \\
-\beta \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{Uniform}(0, 10)
-\end{equation}
-$$
-
-fit this model
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_04.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.4 <- readRDS(file = a_file)  # load the file
-# b5.4 <- brm(
-#   data = d,
-#   formula = Marriage_s ~ 1 + MedianAgeMarriage_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 10), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(uniform(0, 10), class = sigma)
-#   ),
-#   iter = 2000, warmup = 500, chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.4)
-```
-
-and again we get the fitted $\mu_i$ to plot them
-
-```{r}
-# get the fit on the original data and
-# add columns to original data to prepare for the plot
-bfit5.4 <- fitted(b5.4) %>%
-  as_tibble() %>%
-  bind_cols(d)
-```
-
-
-and plot the residuals
-
-```{r}
-ggplot(data = bfit5.4, aes(x = MedianAgeMarriage_s, y = Marriage_s)) +
-  geom_segment(aes(xend = MedianAgeMarriage_s, yend = Estimate),
-               color = "steelblue1") +
-  geom_line(aes(y = Estimate), color = "purple") +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "wheat", alpha = 0.5) +
-  geom_point(color = "steelblue") +
-  theme_classic() +
-    labs(x = "median age of marriage (centralized)",
-         y = "marriage rate (centralized)",
-       title = "Residual plot: Marriage rate vs Median age")
-```
-so now we use the residuals of the marriage rate to represent marriage **free of
-any influence by the median age of marriage**
-
-We use the `residuals()` function which is an alias of `predictive_error()`
-but **don't use `predictive_error()`** as it return the error for every
-posterior sample and every observation.  We just want the error (expected) for 
-every observations.
-
-```{r}
-bres5.4 <- residuals(b5.4) %>%
-  as_tibble() %>%
-  bind_cols(d)
-```
-
-and so we can now plot the divorce against the *marriage rate residuals*
-
-```{r}
-ggplot(data = bres5.4, aes(x = Estimate, y = Divorce)) +
-  stat_smooth(method = "lm", fullrange = TRUE, fill = "wheat") +
-  geom_point(color = "steelblue") +
-  theme_classic() +
-    labs(x = "residual of marriage rate",
-       y = "divorce",
-       title = "Predictor residual plot: Divorce vs Marriage rate")
-```
-
-which allows us to conclude that the *marriage rate seems to have little impact
-on the divorce rate*
-
-##### Marriage median age residuals
-
-
-```{r}
-# load data
-data("WaffleDivorce")
-d <- WaffleDivorce
-# standardize the variables
-d <- d %>%
-  mutate(MedianAgeMarriage_s = scale(MedianAgeMarriage, center = TRUE, scale = TRUE),
-         Marriage_s = scale(Marriage, center = TRUE, scale = TRUE))
-# glimpse(d)
-```
-
-
-We compute marriage rate in *terms of median age of marriage* which is the model
-
-$$
-\begin{equation}
-medage_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta \cdot marr_i \\
-\alpha \sim \mathcal{N}(0, 10) \\
-\beta \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{Uniform}(0, 10)
-\end{equation}
-$$
-
-fit this model
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_04b.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.4b <- readRDS(file = a_file)  # load the file
-# b5.4b <- brm(
-#   data = d,
-#   formula = MedianAgeMarriage_s ~ 1 + Marriage_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 10), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(uniform(0, 10), class = sigma)
-#   ),
-#   iter = 2000, warmup = 500, chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.4b)
-```
-
-and again we get the fitted $\mu_i$ to plot them
-
-```{r}
-# get the fit on the original data and
-# add columns to original data to prepare for the plot
-bfit5.4 <- fitted(b5.4b) %>%
-  as_tibble() %>%
-  bind_cols(d)
-```
-
-
-and plot the residuals
-
-```{r}
-ggplot(data = bfit5.4, aes(x = Marriage_s, y = MedianAgeMarriage_s)) +
-  geom_segment(aes(xend = Marriage_s, yend = Estimate),
-               color = "khaki2") +
-  geom_line(aes(y = Estimate), color = "purple") +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "khaki", alpha = 0.5) +
-  geom_point(color = "brown") +
-  theme_classic() +
-  labs(x = "marriage rate (centralized)",
-       y = "median age of marriage (centralized)",
-       title = "Residual plot: Median age vs Marriage rate")
-```
-so now we use the residuals of the median age to represent median **free of
-any influence by marriage rate**
-
-We use the `residuals()` function which is an alias of `predictive_error()`
-but **don't use `predictive_error()`** as it return the error for every
-posterior sample and every observation.  We just want the error (expected) for 
-every observations.
-
-```{r}
-bres5.4 <- residuals(b5.4b) %>%
-  as_tibble() %>%
-  bind_cols(d)
-# str(r)
-
-```
-
-and so we can now plot the divorce against the *marriage median age*
-
-```{r}
-ggplot(data = bres5.4, aes(x = Estimate, y = Divorce)) +
-  stat_smooth(method = "lm", fullrange = TRUE, fill = "khaki") +
-  geom_point(color = "brown") +
-  theme_classic() +
-  labs(x = "residual of median age of marriage",
-       y = "divorce",
-       title = "Predictor residual plot: Divorce vs Median age")
-```
-
-which allows us to conclude that the *marriage median age has a significant
-effect on the divorce rate*
-
-
-#### Counterfactual plots
-
-See practice 5H2
-
-#### Posterior prediction plots
-
-Load the data
-
-```{r}
-# load data
-data("WaffleDivorce")
-d <- WaffleDivorce
-# standardize the variables
-d <- d %>%
-  mutate(MedianAgeMarriage_s = scale(MedianAgeMarriage, center = TRUE, scale = TRUE),
-         Marriage_s = scale(Marriage, center = TRUE, scale = TRUE))
-```
-
-the fitted estimate with residuals
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_03.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.3 <- readRDS(file = a_file)  # load the file
-bfit5.3 <- fitted(b5.3) %>%
-  as_tibble() %>%
-  bind_cols(d)
-```
-
-create the plot
-```{r}
-ggplot(data = bfit5.3, aes(x = Divorce, y = Estimate)) +
-  geom_point(color = "firebrick4") +
-  geom_linerange(aes(ymin = Estimate - Est.Error, ymax = Estimate + Est.Error),
-                 color = "firebrick3") +
-  theme_classic() +
-  labs(title = "Residual plot: Divorce rate",
-       x = "observed divorce",
-       y = "predicted divorce")
-```
-
-
-## Masked relationship
-
-Load data and look at the pair plot. We use `GGally::pairs()` which gives
-better information and formatting options.
-
-But first, as mentioned on p. 136, we need to remove missing values which
-cause problems when plotting and in modeling.
-
-```{r}
-data(milk)
-d <- milk %>%
-  tidyr::drop_na() %>%
-  mutate(log_mass = log(mass))
-# it should give us a dataframe with 17 rows
-stopifnot(nrow(d) == 17)
-```
-
-```{r}
-GGally::ggpairs(d[, c("kcal.per.g", "mass", "neocortex.perc")])
-```
-
-
-### Model 5.5
-
-$$
-kcalg_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_1 \cdot neocort_i \\
-\alpha \sim \mathcal{N}(0, 100) \\
-\beta_1 \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-and the fit is
-
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_05.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.5 <- readRDS(file = a_file)  # load the file
-# b5.5 <- brm(
-#   data = d,
-#   formula = kcal.per.g ~ 1 + neocortex.perc,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 100), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(cauchy(0, 1), class = sigma)
-#   ),
-#   chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-print(b5.5, digits = 3)
-```
-
-and show the coefficient plot
-
-```{r}
-bpost5.5 <- posterior_samples(b5.5) %>%
-  select(-lp__)
-
-# this gives the intervals
-bayesplot::color_scheme_set("teal")
-bayesplot::mcmc_intervals(x = bpost5.5, prob = 0.89, point_est = "median") +
-  ggthemes::theme_hc()  +
-  labs(title = "Coefficients of kilocalories vs neocortex % of brain mass")
-```
-
-fit for different confidence intervals
-
-```{r}
-nd <- tibble::tibble(neocortex.perc = 54:80)
-bfit5.5 <- nd %>%
-  fitted(object = b5.5, newdata = ., probs = c(0.025, 0.975, 0.25, 0.75)) %>%
-  as_tibble() %>%
-  bind_cols(nd)
-```
-
-
-and plot the fit
-
-```{r}
-ggplot(bfit5.5, aes(x = neocortex.perc, y = Estimate)) +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "plum1") +
-  geom_ribbon(aes(ymin = Q25, ymax = Q75), fill = "plum") +
-  geom_line(color = "plum4", size = 1) +
-  geom_point(data = b5.5$data, aes(x = neocortex.perc, y = kcal.per.g),
-             color = "steelblue4", size = 2) +
-  ggthemes::theme_few() +
-  scale_x_continuous(breaks = scales::breaks_width(width = 5)) +
-  scale_y_continuous(breaks = scales::breaks_width(width = 0.1)) +
-  labs(title = "Model 5.5", subtitle = deparse1(b5.5$formula$formula))
-```
-
-
-
-### Model 5.6
-
-
-
-
-### Model 5.7
-
-
-$$
-kcalg_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_n \cdot neocort_i + \beta_m \cdot log(mass_i) \\
-\alpha \sim \mathcal{N}(0, 100) \\
-\beta_n \sim \mathcal{N}(0, 1) \\
-\beta_m \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-and the fit is
-
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b05_07.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.7 <- readRDS(file = a_file)  # load the file
-# b5.7 <- brm(
-#   data = d,
-#   formula = kcal.per.g ~ 1 + neocortex.perc + log_mass,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 100), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(cauchy(0, 1), class = sigma)
-#   ),
-#   chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-print(b5.7, digits = 3)
-```
-
-```{r}
-bpost5.7 <- posterior_samples(b5.7) %>%
-  select(-lp__)
-
-# this gives the intervals
-bayesplot::color_scheme_set("teal")
-bayesplot::mcmc_intervals(x = bpost5.7, prob = 0.89, point_est = "median") +
-  ggthemes::theme_hc()  +
-  labs(title = sprintf("Model 5.7\n%s", deparse1(b5.7$formula$formula)))
-```
-
-creating the plot with the `log_mass` held constant at its mean
-
-```{r}
-nd <- tibble::tibble(
-  neocortex.perc = 54:80,
-  log_mass = mean(d$log_mass))
-bfit5.7a <- nd %>%
-  fitted(object = b5.7, newdata = ., probs = c(0.025, 0.975, 0.25, 0.75)) %>%
-  as_tibble() %>%
-  bind_cols(nd)
-```
-
-
-and plot the fit
-
-```{r}
-p1 <- ggplot(bfit5.7a, aes(x = neocortex.perc, y = Estimate)) +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "lightsalmon") +
-  geom_ribbon(aes(ymin = Q25, ymax = Q75), fill = "lightsalmon3") +
-  geom_line(color = "lightsalmon4", size = 1) +
-  geom_point(data = b5.7$data, aes(x = neocortex.perc, y = kcal.per.g),
-             color = "steelblue4", size = 2) +
-  ggthemes::theme_few() +
-  scale_x_continuous(breaks = scales::breaks_width(width = 5)) +
-  scale_y_continuous(breaks = scales::breaks_width(width = 0.1)) +
-  labs(title = "Model 5.7 a", subtitle = deparse1(b5.7$formula$formula))
-```
-
-creating the plot with the `neocortex.perc` held constant at its mean
-
-```{r}
-nd <- tibble::tibble(
-  neocortex.perc = mean(d$neocortex.perc),
-  log_mass = seq(from = -2.5, to = 5, length.out = 30))
-bfit5.7b <- nd %>%
-  fitted(object = b5.7, newdata = ., probs = c(0.025, 0.975, 0.25, 0.75)) %>%
-  as_tibble() %>%
-  bind_cols(nd)
-```
-
-
-and plot the fit
-
-```{r}
-p2 <- ggplot(bfit5.7b, aes(x = log_mass, y = Estimate)) +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "lightsalmon") +
-  geom_ribbon(aes(ymin = Q25, ymax = Q75), fill = "lightsalmon3") +
-  geom_line(color = "lightsalmon4", size = 1) +
-  geom_point(data = b5.7$data, aes(x = log_mass, y = kcal.per.g),
-             color = "steelblue4", size = 2) +
-  ggthemes::theme_few() +
-  scale_x_continuous(breaks = scales::breaks_width(width = 5)) +
-  scale_y_continuous(breaks = scales::breaks_width(width = 0.1)) +
-  labs(title = "Model 5.7 b", subtitle = deparse1(b5.7$formula$formula))
-```
-
-
-and the 2 plots are
-
-```{r}
-gridExtra::grid.arrange(p1, p2, nrow = 1)
-
-```
-
-
-
-## When adding variables hurts
-
-
-## Categorical variables
-
-### Binary categories
-
-Load data
-
-```{r}
-data("Howell1")
-d <- Howell1
-```
-
-the model
-$$
-h_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_m \cdot m_i \\
-\alpha \sim \mathcal{N}(178, 100) \\
-\beta_m \sim \mathcal{N}(0, 10) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 2)
-$$
-
-
-```{r}
-a_file <- here::here("fits", "b05_15.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.15 <- readRDS(file = a_file)  # load the file
-# rm(b5.15)
-# b5.15 <- brm(
-#   data = d,
-#   formula = height ~ 1 + male,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(178, 100), class = Intercept),
-#     prior(normal(0, 10), class = b),
-#     prior(cauchy(0, 2), class = sigma)
-#   ),
-#   chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.15)
-```
-
-> Read the important comment on p. 154, section 5.4.1. $\alpha$ now represents
-the average of women and the parameter $\beta_m$ is the coefficient of the
-**average between men an women**
-
-> Also the overthinking box on how to reparametrize.  Very nice.
-
-### Many categories
-
-Load data and create the dummy variables
-
-```{r}
-data("milk")
-d <- milk %>% fastDummies::dummy_cols(select_columns = c("clade"),
-                                      remove_most_frequent_dummy = TRUE) %>%
-  rename("clade_NWM" = "clade_New World Monkey", "clade_OWM" = "clade_Old World Monkey",
-         "clade_S" = "clade_Strepsirrhine")
-str(d)
-  
-```
-
-the model
-$$
-k_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_{NWM} \cdot NWM_i + \beta_{OWM} \cdot OWM_i + \beta_{S} \cdot S_i \\
-\alpha \sim \mathcal{N}(0.6, 10) \\
-\beta_{NWM} \sim \mathcal{N}(0, 1) \\
-\beta_{OWM} \sim \mathcal{N}(0, 1) \\
-\beta_{S} \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 2)
-$$
-
-
-```{r}
-a_file <- here::here("fits", "b05_16.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b5.16 <- readRDS(file = a_file)  # load the file
-# b5.16 <- brm(
-#   data = d,
-#   formula = kcal.per.g ~ 1 + clade_NWM + clade_OWM + clade_S,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0.6, 10), class = Intercept),
-#     prior(normal(0, 1), class = b),
-#     prior(cauchy(0, 2), class = sigma)
-#   ),
-#   chains = 4, core = 4,
-#   seed = 5,  # same seed as in bookdown
-#   file = a_file
-# )
-summary(b5.16)
-```
-
-
-## Ordinary least squares and `lm`
-
-
-## Summary
-
-
-## Practice
-
-### 5E1 {-}
-
-1. **Not** multiple linear
-2. Multiple linear
-3. **Not** multiple linear
+1. **Not** multiple linear, just univariate regression.
+2. Multiple linear with 2 variables $x_i$ and $z_i$
+3. **Not** multiple linear, just univariate
 4. Multiple linear
 
-### 5E2 {-}
+## 5E2 {-}
 
-On p. 128 and 129, the text refer to *control* as meaning that you remove the
-effect of a predictor, in this case the plant diversity.  The text proposes to
-do this by using the residual predictor.
+In section 5.1.2 the notion of control is related to conditional independencies
+where the question becomes *is there any additional values in knowing a variable,
+once I already know the other variables?* (p.131).
+
+Also see Rethinking box in section 5.1.2 on the usage of the word *control*.
+
+The control can be executed by using *predictor residual plots* or *counterfactual plots*
+as described in section 5.1.5.
 
 The model is
 
 $$
-diversity_i \sim Normal(\mu_i, \sigma)\\
-\mu_i = \alpha + \beta_1 \cdot latitude_i + \beta_2 \cdot plantdiversity_i\\
-\alpha \sim Normal(0, 1)\\
-\beta_1 \sim Normal(0, 1)\\
-\beta_2 \sim Normal(0, 1)\\
-\sigma \sim Uniform(0, 1)
+\begin{align*}
+diversity_i &\sim Normal(\mu_i, \sigma)\\
+\mu_i &= \alpha + \beta_1 \cdot latitude_i + \beta_2 \cdot plantdiversity_i\\
+\alpha &\sim Normal(0, 1)\\
+\beta_1 &\sim Normal(0, 1)\\
+\beta_2 &\sim Normal(0, 1)\\
+\sigma &\sim Uniform(0, 1)
+\end{align*}
 $$
 
-### 5E3 {-}
+## 5E3 {-}
+
+See overthinking box in section 5.1.5.2 where spurious relationship is when
+a predictor influences both the outcome and another predictor as in the divorce 
+example in section 5.1.  See pratice 5M1.
+
+A masked relationship is when there are 2 predictors that are correlated with each other,
+However one is positively correlated with the outcome, the other one is negatively 
+correlated with the outcome. See beginning of section 5.2 for description. See practice 5M2.
 
 This practice is closely related to section 5.2 *Masked relationship*.
 
 Model is 
 
 $$
-phd_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i \sim \alpha + \beta_1 \cdot money_i + \beta_2 \cdot size_i \\
-\alpha \sim Normal(0, 1)\\
-\beta_1 \sim Normal(0, 1)\\
-\beta_2 \sim Normal(0, 1)\\
-\sigma \sim Uniform(0, 1)
+\begin{align*}
+phd_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot funding_i + \beta_2 \cdot size_i \\
+\alpha &\sim Normal(0, 1)\\
+\beta_1 &\sim Normal(0, 1)\\
+\beta_2 &\sim Normal(0, 1)\\
+\sigma &\sim Uniform(0, 1)
+\end{align*}
 $$
 
 The slopes should be positive.
 
-### 5E4 {-}
+## 5E4 {-}
 
-Let $k$ be the number of catgories, only need to have $k-1$ variables since
-the intercept represents the $k^{th}$ category.
+Let $k$ be the number of categories, only need to have $k-1$ variables since
+the intercept represents the $k^{th}$ category, hence model 1, 3, 4 are equivalent.
+See explanantion in first paragraph of section 5.3.2.
 
-Hence model 1, 2, 3, 4 are equivalent. Model 5 is inferentially equivalent as it uses
-a re-parametrization, see overthinking boxes on p. 154-155 and 
-
-### 5H1 {-}
-
-
-```{r}
-data(foxes)
-d <- foxes %>%
-  mutate(
-    area_s = scale(area, center = TRUE, scale = TRUE),
-    groupsize_s = scale(groupsize, center = TRUE, scale = TRUE)
-  )
-skimr::skim(d)
-```
-
-#### 5H1 a) By territory area size {-}
-
-$$
-\begin{equation}
-weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta \cdot area_i \\
-\alpha \sim \mathcal{N}(0, 5) \\
-\beta \sim \mathcal{N}(0, 2) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-\end{equation}
-$$
-
-and the fit
-
-```{r}
-a_file <- here::here("fits", "Practice05H1a.rds")  # rds file location
-stopifnot(file.exists(a_file))
-Practice5H1a <- readRDS(file = a_file)  # load the file
-# Practice5H1a <- brm(
-#   data = d,
-#   formula = weight ~ 1 + area_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 5), class = Intercept),
-#     prior(normal(0, 5), class = b),
-#     prior(cauchy(0, 2), class = sigma)
-#   ),
-#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
-#   seed = 123,
-#   file = a_file
-# )
-summary(Practice5H1a)
-```
-
-and create the full data for plotting
-
-```{r}
-# get the fitted data, i.e. for mu
-f <- fitted(Practice5H1a) %>%
-  as_tibble() %>%
-  rename(
-    fit = Estimate,
-    fit_err = Est.Error,
-    fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# str(f)
-# get the predicted data, i.e. for y
-p <- predict(Practice5H1a) %>%
-  as_tibble() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-# str(p)
-d5H1a <- d %>%
-  bind_cols(f) %>%
-  bind_cols(p)
-# glimpse(d5H1a)
-```
+Model 5 is also inferentially equivalent as it uses
+a re-parametrization which was explained in the first edition, edition of 2016. 
+(overthinking box of section 5.4.1 of the 2016 edition)
 
 
+## 5M1 {-}
 
-```{r}
-ggplot(data = d5H1a, mapping = aes(x = area_s, y = weight)) +
-  # geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-  #             fill = "olivedrab1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "olivedrab3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "olivedrab4") +
-  geom_point(aes(color = group)) +
-  scale_color_paletteer_c("oompaBase::jetColors") + 
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Practice 5H1a: Weight vs Area Size",
-       color = "group",
-       x = "standardized area size", y = "weight")
-```
+A spurious correlation where an outcome is correlated with 2 predictors but
+when both predictors are entered the correlation between the outcome and one of
+the predictors vanishes.
+
+For example the performance of a manufacturing plant increases when you buy machineries
+and invest in training.  But if the training is on how to sue the machineries
+that were just acquired then it should give a spurious relationship.
 
 
-#### 5H1 b) By group size {-}
+## 5M2 {-}
+
+The profitability of an enterprise will increase depending on how much raw material
+it can process but inversely depending on how much waste is generated.
 
 
-$$
-\begin{equation}
-weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta \cdot group_i \\
-\alpha \sim \mathcal{N}(0, 5) \\
-\beta \sim \mathcal{N}(0, 2) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-\end{equation}
-$$
+## 5M3 {-}
 
-and the fit
+More divorces could lead to more remarriage and therefore contribute to an increase
+in marriage rate.
 
-```{r}
-a_file <- here::here("fits", "Practice05H1b.rds")  # rds file location
-stopifnot(file.exists(a_file))
-Practice5H1b <- readRDS(file = a_file)  # load the file
-# Practice5H1b <- brm(
-#   data = d,
-#   formula = weight ~ 1 + groupsize_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 5), class = Intercept),
-#     prior(normal(0, 5), class = b),
-#     prior(cauchy(0, 2), class = sigma)
-#   ),
-#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
-#   seed = 123,
-#   file = a_file
-# )
-summary(Practice5H1b)
-```
+## 5M4 {-}
 
-and create the full data for plotting
+Not done
 
-```{r}
-# get the fitted data, i.e. for mu
-f <- fitted(Practice5H1b) %>%
-  as_tibble() %>%
-  rename(
-    fit = Estimate,
-    fit_err = Est.Error,
-    fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# get the predicted data, i.e. for y
-p <- predict(Practice5H1b) %>%
-  as_tibble() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-d5H1b <- d %>%
-  bind_cols(f) %>%
-  bind_cols(p)
-# glimpse(d5H1b)
-```
+## 5M5 {-}
 
+Not done
 
+## 5H1 {-}
 
-```{r}
-ggplot(data = d5H1b, mapping = aes(x = groupsize_s, y = weight)) +
-  # geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-  #             fill = "thistle1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "thistle3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "thistle4") +
-  geom_point(aes(color = group)) +
-  geom_jitter(aes(color = group)) +
-  scale_color_paletteer_c("oompaBase::jetColors") + 
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Practice 5H1b: Weight vs Group Size",
-       color = "group",
-       x = "standardized group size", y = "weight")
-```
+The conditional independency is *M is independent of D conditional on A* as it 
+is a *chain*.
 
+The data does support it as there was no relation be between  M and D once we remove
+the influence of A.  See Figure 5.7 in section 5.1.5.3
 
-Conclusion: neither variable sems to have a much effect on the weight.
-
-### 5H2 {-}
-
-
-$$
-\begin{equation}
-weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i = \alpha + \beta_A \cdot area_i + \beta_G \cdot group_i \\
-\alpha \sim \mathcal{N}(0, 5) \\
-\beta \sim \mathcal{N}(0, 2) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-\end{equation}
-$$
-
-and the fit
-
-```{r}
-a_file <- here::here("fits", "Practice05H2.rds")  # rds file location
-stopifnot(file.exists(a_file))
-Practice5H2 <- readRDS(file = a_file)  # load the file
-# Practice5H2 <- brm(
-#   data = d,
-#   formula = weight ~ 1 + area_s + groupsize_s,
-#   family = gaussian(),
-#   prior = c(
-#     prior(normal(0, 5), class = Intercept),
-#     prior(normal(0, 5), class = b),
-#     prior(cauchy(0, 2), class = sigma)
-#   ),
-#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
-#   seed = 123,
-#   file = a_file
-# )
-summary(Practice5H2)
-```
-
-#### 5H2 a) Counterfactual plot: mean(groupsize)  {-}
-
-Create the counterfactual data set
-
-```{r}
-cf <- tibble(
-  area_s = seq(from = min(d$area), to = max(d$area), length.out = 50),
-  groupsize_s = mean(d$groupsize)
-)
-f <- fitted(Practice5H2, newdata = cf) %>%
-  as_tibble() %>%
-  rename(
-    fit = Estimate,
-    fit_err = Est.Error,
-    fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# get the predicted data, i.e. for y
-p <- predict(Practice5H2, newdata =cf) %>%
-  as_tibble() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-d5H2a <- cf %>%
-  bind_cols(f) %>%
-  bind_cols(p)
-# glimpse(d5H2a)
-```
-
-
-```{r}
-ggplot(data = d5H2a, mapping = aes(x = area_s, y = pred)) +
-  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-              fill = "olivedrab1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "olivedrab3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "olivedrab4") +
-  scale_color_paletteer_c("oompaBase::jetColors") + 
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Practice 5H2a: Weight vs Area Size with mean Group Size",
-       x = "area size", y = "weight")
-```
-
-#### 5H2 b) Counterfactual plot: mean(areasize)  {-}
-
-Create the counterfactual data set
-
-```{r}
-cf <- tibble(
-  area_s = mean(d$area),
-  groupsize_s = seq(from = min(d$groupsize), to = max(d$groupsize), length.out = 50)
-)
-f <- fitted(Practice5H2, newdata = cf) %>%
-  as_tibble() %>%
-  rename(
-    fit = Estimate,
-    fit_err = Est.Error,
-    fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# get the predicted data, i.e. for y
-p <- predict(Practice5H2, newdata =cf) %>%
-  as_tibble() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-d5H2b <- cf %>%
-  bind_cols(f) %>%
-  bind_cols(p)
-# glimpse(d5H2a)
-```
-
-
-```{r}
-ggplot(data = d5H2b, mapping = aes(x = groupsize_s, y = pred)) +
-  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-              fill = "thistle1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "thistle3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "thistle4") +
-  scale_color_paletteer_c("oompaBase::jetColors") + 
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Practice 5H2b: Weight vs Group Size with mean Area Size",
-       x = "group size", y = "weight")
-```
-### 5H3 {-}
+## 5H2 {-}
 

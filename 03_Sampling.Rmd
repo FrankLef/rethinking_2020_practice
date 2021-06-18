@@ -438,8 +438,8 @@ x_breaks <- ggdist::mean_qi(.data = pred$pred, .width = qtl) %>%
 set.seed(3)
 dist_binom <- data.frame(x = rbinom(n = length(samples), size = n_births, prob = p_boys))
 ggplot(pred, aes(x = pred)) +
-  stat_halfeye(point_interval = ggdist::mean_qi, .width = c(0.5, 0.8),
-               aes(fill=stat(cut_cdf_qi(cdf,.width = qtl)))) +
+  stat_halfeye(aes(fill=stat(cut_cdf_qi(cdf, .width = qtl))),
+               point_interval = ggdist::mean_qi, .width = qtl) +
   geom_density(data = dist_binom, mapping = aes(x, y = ..scaled..), color = "violetred", linetype = "dashed", size = 1) +
   geom_vline(xintercept = c(mean(dist_binom$x), mean(pred$pred)), 
              color = c("violetred", "darkgreen"), linetype = c("dashed", "solid")) +

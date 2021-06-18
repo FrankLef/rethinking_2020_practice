@@ -1,0 +1,327 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+```
+
+
+# Structural Causal Models {#SCM}
+
+
+## 6E1 {-}
+
+
+## 6H1 {-}
+
+```{r}
+data(foxes)
+d <- foxes %>%
+  mutate(
+    area_s = scale(area, center = TRUE, scale = TRUE),
+    groupsize_s = scale(groupsize, center = TRUE, scale = TRUE)
+  )
+skimr::skim(d)
+```
+
+### 6H1 a) By territory area size {-}
+
+$$
+\begin{equation}
+weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i = \alpha + \beta \cdot area_i \\
+\alpha \sim \mathcal{N}(0, 5) \\
+\beta \sim \mathcal{N}(0, 2) \\
+\sigma \sim \mathcal{HalfCauchy}(0, 1)
+\end{equation}
+$$
+
+and the fit
+
+```{r}
+a_file <- here::here("fits", "Practice05H1a.rds")  # rds file location
+stopifnot(file.exists(a_file))
+Practice5H1a <- readRDS(file = a_file)  # load the file
+# Practice5H1a <- brm(
+#   data = d,
+#   formula = weight ~ 1 + area_s,
+#   family = gaussian(),
+#   prior = c(
+#     prior(normal(0, 5), class = Intercept),
+#     prior(normal(0, 5), class = b),
+#     prior(cauchy(0, 2), class = sigma)
+#   ),
+#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
+#   seed = 123,
+#   file = a_file
+# )
+summary(Practice5H1a)
+```
+
+and create the full data for plotting
+
+```{r}
+# get the fitted data, i.e. for mu
+f <- fitted(Practice5H1a) %>%
+  as_tibble() %>%
+  rename(
+    fit = Estimate,
+    fit_err = Est.Error,
+    fit_Q2.5 = Q2.5,
+    fit_Q97.5 = Q97.5,
+  )
+# str(f)
+# get the predicted data, i.e. for y
+p <- predict(Practice5H1a) %>%
+  as_tibble() %>%
+  rename(
+    pred = Estimate,
+    pred_err = Est.Error,
+    pred_Q2.5 = Q2.5,
+    pred_Q97.5 = Q97.5,
+  )
+# str(p)
+d5H1a <- d %>%
+  bind_cols(f) %>%
+  bind_cols(p)
+# glimpse(d5H1a)
+```
+
+
+
+```{r}
+ggplot(data = d5H1a, mapping = aes(x = area_s, y = weight)) +
+  # geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
+  #             fill = "olivedrab1", alpha = 0.5) +
+  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
+              fill = "olivedrab3", alpha = 0.5) +
+  geom_line(aes(y = fit), color = "olivedrab4") +
+  geom_point(aes(color = group)) +
+  scale_color_paletteer_c("oompaBase::jetColors") + 
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Practice 5H1a: Weight vs Area Size",
+       color = "group",
+       x = "standardized area size", y = "weight")
+```
+
+
+### 6H1 b) By group size {-}
+
+
+$$
+\begin{equation}
+weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i = \alpha + \beta \cdot group_i \\
+\alpha \sim \mathcal{N}(0, 5) \\
+\beta \sim \mathcal{N}(0, 2) \\
+\sigma \sim \mathcal{HalfCauchy}(0, 1)
+\end{equation}
+$$
+
+and the fit
+
+```{r}
+a_file <- here::here("fits", "Practice05H1b.rds")  # rds file location
+stopifnot(file.exists(a_file))
+Practice5H1b <- readRDS(file = a_file)  # load the file
+# Practice5H1b <- brm(
+#   data = d,
+#   formula = weight ~ 1 + groupsize_s,
+#   family = gaussian(),
+#   prior = c(
+#     prior(normal(0, 5), class = Intercept),
+#     prior(normal(0, 5), class = b),
+#     prior(cauchy(0, 2), class = sigma)
+#   ),
+#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
+#   seed = 123,
+#   file = a_file
+# )
+summary(Practice5H1b)
+```
+
+and create the full data for plotting
+
+```{r}
+# get the fitted data, i.e. for mu
+f <- fitted(Practice5H1b) %>%
+  as_tibble() %>%
+  rename(
+    fit = Estimate,
+    fit_err = Est.Error,
+    fit_Q2.5 = Q2.5,
+    fit_Q97.5 = Q97.5,
+  )
+# get the predicted data, i.e. for y
+p <- predict(Practice5H1b) %>%
+  as_tibble() %>%
+  rename(
+    pred = Estimate,
+    pred_err = Est.Error,
+    pred_Q2.5 = Q2.5,
+    pred_Q97.5 = Q97.5,
+  )
+d5H1b <- d %>%
+  bind_cols(f) %>%
+  bind_cols(p)
+# glimpse(d5H1b)
+```
+
+
+
+```{r}
+ggplot(data = d5H1b, mapping = aes(x = groupsize_s, y = weight)) +
+  # geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
+  #             fill = "thistle1", alpha = 0.5) +
+  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
+              fill = "thistle3", alpha = 0.5) +
+  geom_line(aes(y = fit), color = "thistle4") +
+  geom_point(aes(color = group)) +
+  geom_jitter(aes(color = group)) +
+  scale_color_paletteer_c("oompaBase::jetColors") + 
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Practice 5H1b: Weight vs Group Size",
+       color = "group",
+       x = "standardized group size", y = "weight")
+```
+
+
+Conclusion: neither variable sems to have a much effect on the weight.
+
+## 6H2 {-}
+
+
+$$
+\begin{equation}
+weight_i \sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i = \alpha + \beta_A \cdot area_i + \beta_G \cdot group_i \\
+\alpha \sim \mathcal{N}(0, 5) \\
+\beta \sim \mathcal{N}(0, 2) \\
+\sigma \sim \mathcal{HalfCauchy}(0, 1)
+\end{equation}
+$$
+
+and the fit
+
+```{r}
+a_file <- here::here("fits", "Practice05H2.rds")  # rds file location
+stopifnot(file.exists(a_file))
+Practice5H2 <- readRDS(file = a_file)  # load the file
+# Practice5H2 <- brm(
+#   data = d,
+#   formula = weight ~ 1 + area_s + groupsize_s,
+#   family = gaussian(),
+#   prior = c(
+#     prior(normal(0, 5), class = Intercept),
+#     prior(normal(0, 5), class = b),
+#     prior(cauchy(0, 2), class = sigma)
+#   ),
+#   iter = 2000, warmup = 2000 / 2, chains = 4, core = 4,
+#   seed = 123,
+#   file = a_file
+# )
+summary(Practice5H2)
+```
+
+### 6H2 a) Counterfactual plot: mean(groupsize)  {-}
+
+Create the counterfactual data set
+
+```{r}
+cf <- tibble(
+  area_s = seq(from = min(d$area), to = max(d$area), length.out = 50),
+  groupsize_s = mean(d$groupsize)
+)
+f <- fitted(Practice5H2, newdata = cf) %>%
+  as_tibble() %>%
+  rename(
+    fit = Estimate,
+    fit_err = Est.Error,
+    fit_Q2.5 = Q2.5,
+    fit_Q97.5 = Q97.5,
+  )
+# get the predicted data, i.e. for y
+p <- predict(Practice5H2, newdata =cf) %>%
+  as_tibble() %>%
+  rename(
+    pred = Estimate,
+    pred_err = Est.Error,
+    pred_Q2.5 = Q2.5,
+    pred_Q97.5 = Q97.5,
+  )
+d5H2a <- cf %>%
+  bind_cols(f) %>%
+  bind_cols(p)
+# glimpse(d5H2a)
+```
+
+
+```{r}
+ggplot(data = d5H2a, mapping = aes(x = area_s, y = pred)) +
+  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
+              fill = "olivedrab1", alpha = 0.5) +
+  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
+              fill = "olivedrab3", alpha = 0.5) +
+  geom_line(aes(y = fit), color = "olivedrab4") +
+  scale_color_paletteer_c("oompaBase::jetColors") + 
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Practice 5H2a: Weight vs Area Size with mean Group Size",
+       x = "area size", y = "weight")
+```
+
+### 6H2 b) Counterfactual plot: mean(areasize)  {-}
+
+Create the counterfactual data set
+
+```{r}
+cf <- tibble(
+  area_s = mean(d$area),
+  groupsize_s = seq(from = min(d$groupsize), to = max(d$groupsize), length.out = 50)
+)
+f <- fitted(Practice5H2, newdata = cf) %>%
+  as_tibble() %>%
+  rename(
+    fit = Estimate,
+    fit_err = Est.Error,
+    fit_Q2.5 = Q2.5,
+    fit_Q97.5 = Q97.5,
+  )
+# get the predicted data, i.e. for y
+p <- predict(Practice5H2, newdata =cf) %>%
+  as_tibble() %>%
+  rename(
+    pred = Estimate,
+    pred_err = Est.Error,
+    pred_Q2.5 = Q2.5,
+    pred_Q97.5 = Q97.5,
+  )
+d5H2b <- cf %>%
+  bind_cols(f) %>%
+  bind_cols(p)
+# glimpse(d5H2a)
+```
+
+
+```{r}
+ggplot(data = d5H2b, mapping = aes(x = groupsize_s, y = pred)) +
+  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
+              fill = "thistle1", alpha = 0.5) +
+  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
+              fill = "thistle3", alpha = 0.5) +
+  geom_line(aes(y = fit), color = "thistle4") +
+  scale_color_paletteer_c("oompaBase::jetColors") + 
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Practice 5H2b: Weight vs Group Size with mean Area Size",
+       x = "group size", y = "weight")
+```
+
+## 6H3 {-}
+

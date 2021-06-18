@@ -9,611 +9,540 @@ library(bayesplot)
 ```
 
 
-# Multilevel Models {#MLM}
+# Monsters and Mixtures {#Mixed}
 
 
+## Ordered categorical outcomes
 
-## Example: Multilevel tadpoles
+
+### Example: Moral intuition
 
 ```{r}
-data(reedfrogs)
-d <- reedfrogs %>%
-  mutate(tank = seq_len(nrow(.)),
-         tank = factor(tank))
-glimpse(d)
+data(Trolley)
+d <- Trolley
 ```
 
-### Example: Multilevel tadpoles - Simple
+and we can describe the data using the `summarytools` which does a great
+job at creating that sort or report.
 
-and the model, without multilevel effect, is
-
-$$
-surv_i \sim \mathcal{Binomial}(n_i, p_i) \\
-logit(p_i) = \alpha_{tank[i]} \\
-\alpha_{tank} \sim \mathcal{N}(0, 5)
-$$
-
-and we fit this
 
 ```{r}
-a_file <- here::here("fits", "b12_01.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b12.1 <- readRDS(file = a_file)  # load the file
-# b12.1 <- brm(
-#   data = d,
-#   family = binomial,
-#   surv | trials(density) ~ 0 + tank,
-#   prior = c(prior(normal(0, 5), class = b)),
-#   iter = 2000, warmup = 500, chains = 4, cores = 4,
-#   seed = 12)
-# b12.1 <- add_criterion(b12.1, c("loo", "waic"))
-# saveRDS(object = b12.1, file = a_file)
-```
-
-which gives this summary
-
-```{r}
-# summary(b12.1)
-```
-
-and visualize the intercepts which correxponds to the logit of the probabilities.
-
-We create the data set
-
-```{r}
-pdf <- fixef(b12.1) %>%
-  as.data.frame() %>%
-  select(Estimate) %>%
-  mutate(p = stats::plogis(Estimate)) %>%
-  pivot_longer(cols = c("Estimate", "p"), names_to = "key") %>%
-  mutate(key = if_else(key == "p", "exp_surv_prob", "exp_surv_log-odds"))
-pdf
-```
-
-and then the plots
-
-```{r}
-p <- ggplot(pdf, aes(x = value, fill = key)) +
-  geom_density(stat = "density", color = "transparent") +
-  scale_y_continuous(breaks = NULL) +
-  scale_fill_manual(values = c("violet", "lightcoral")) +
-  ggthemes::theme_fivethirtyeight() +
-  theme(legend.position = "none",
-        panel.grid.major = element_blank()) +
-  facet_wrap(~ key, scales = "free")
-p
+# source:
+# https://cran.r-project.org/web/packages/summarytools/vignettes/Recommendations-rmarkdown.html
+# use print to see in HTML
+print(summarytools::dfSummary(Trolley, style = "grid"), method = "render")
 ```
 
 
+### Describing and ordered distribution with intercepts
 
-### Example: Multilevel tadpoles - Multilevel
-
-and now the multilevel model
-
-$$
-surv_i \sim \mathcal{Binomial}(n_i, p_i) \\
-logit(p_i) = \alpha_{tank[i]} \\
-\alpha_{tank} \sim \mathcal{N}(0, 5) \\
-\alpha \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-and the fit is as follows.  Note the prior `prior(cauchy(0, 1), class = sd)`
-*which is parametrized in the standard deviation metric* (Kurtz). It is common
-for multilevel software to model the variance metric.  This will be further
-explained in chapter 13.
-
+The histogram of response
 
 ```{r}
-a_file <- here::here("fits", "b12_02.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b12.2 <- readRDS(file = a_file)  # load the file
-# b12.2 <- brm(
-#   data = d,
-#   family = binomial,
-#   surv | trials(density) ~ 1 + (1 | tank),
-#   prior = c(prior(normal(0, 1), class = Intercept),
-#             prior(cauchy(0, 1), class = sd)),
-#   iter = 4000, warmup = 1000, chains = 4, cores = 4,
-#   seed = 12)
-# b12.2 <- add_criterion(b12.2, c("loo", "waic"))
-# saveRDS(object = b12.2, file = a_file)
-```
-
-
-
-### Example: Multilevel tadpoles - Comparison
-
-and compare the models
-
-```{r}
-w <- loo_compare(b12.1, b12.2, criterion = "waic") %>%
-  as.data.frame() %>%
-  mutate(waic_diff = elpd_diff * -2,
-         waic_diff_se = se_diff * 2)
-w
-print(w[, c("elpd_diff", "se_diff","waic_diff", "waic_diff_se")], simplify = FALSE)
-print(w[, c("elpd_waic", "se_elpd_waic","waic", "se_waic")], simplify = FALSE)
-```
-
-```{r}
-model_weights(b12.1, b12.2, weights = "waic")
-```
-
-> The results above are different than those of McElrath and Kurtz.  
-They are close however, I ran the fit several times and cannot find the difference.
-The difference might be caused by the fact that McElrath uses a `tank` value that
-is an integer. Kurtz uses a factor for b12.1 but an integer for b12.3.
-I use a factor for both b12.1 and b12.3 which is more consistent with the fact
-that the `tank` value is an id, and should not be seen as an integer.
-
-
-
-### Example: Multilevel tadpoles - Posterior distribution
-
-
-This time we don't have a list of intercepts.  We have the estimates of p and
-will use the posterior sample for that. The `bpost12.2` consists of 12 000 rows
-which is 3 chains with 3000 rows each, that is 4000 iterations less 1000 for warmup.
-
-The code from Kurtz is succint and now necessarily easy to follow.  McElrath
-is even horter.  Below is a detailed explanation of what is being done.
-
-```{r}
-bpost12.2 <- posterior_samples(b12.2, add_chain = TRUE)
-# glimpse(bpost12.2)
-```
-
-
-we note that the range of logodds is between -2 and 3.5
-
-```{r}
-# we use the stats::qlogis() and brms::logit()
-# once more to show they are the same
-t <- d %>%
-  mutate(propsurv_logodd = qlogis(propsurv),
-         propsurv_logodd_brms = logit(propsurv))
-t
-range(t$propsurv_logodd[is.finite(t$propsurv_logodd)])
-
-```
-
-First, we take a sampling of size 100 of the 3000 iterations from the posterior
-sample with `slice_sample(n = 100)`.
-
-Second, to simulate the **distribution** of the logodds values described by the 
-`b_Intercept` and `tank_Intercepts` of **each iteration** we create a 
-sequence of 100 logodds values between -4 and 5 
-(based on the acutal range of -2, 3.5 shown just above)
-which is done by 
-`expand(nesting(iter, b_Intercept, sd_tank__Intercept), x = seq(from = -4, to = 5, length.out = 100))`
-and which will result in 10000 lines.
-
-Third, we compute the normal density for each of the 10000 lines using the
-`b_Intercept` and `tank_Intercepts` of each line.  The normal density is used
-because the model is $\alpha_{tank} \sim \mathcal{N}(0, 5)$ and
-$\alpha \sim \mathcal{N}(0, 1)$.  This is done with
-
-
-```{r}
-set.seed(12)
-bpost12.2_dist <- bpost12.2 %>%
-  slice_sample(n = 100) %>%
-  expand(nesting(iter, b_Intercept, sd_tank__Intercept),
-         x = seq(from = -4, to = 5, length.out = 100)) %>%
-  mutate(dens = dnorm(x, mean = b_Intercept, sd = sd_tank__Intercept))
-stopifnot(nrow(bpost12.2_dist)==10000)
-```
-
-which gives this plot
-
-```{r}
-p1 <- ggplot(bpost12.2_dist, aes(x = x, y = dens, group = iter)) +
-  geom_line(color = "orange") +
+p1 <- ggplot(d, aes(x = response)) +
+  geom_histogram(aes(fill = ..count..)) +
   scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
-  scale_y_continuous(breaks = scales::breaks_width(width = 0.05)) +
-  coord_cartesian(xlim = c(-3, 4)) +
+  scale_fill_paletteer_c(palette = "grDevices::Sunset") +
   ggthemes::theme_fivethirtyeight() +
   theme(legend.position = "none") +
-  labs(title = "Population survival distribution",
-       subtitle = "log-odds scale", x = "log odds", y = "probability")
-p1
-```
-and to simulate the probability of **survival rate** we simply use the posterir
-results as parameters for `rnorm()` as follows
-
-```{r}
-# we compue both plogis and inv_logit_scaled to show they are the same
-# plogis is better, from the stats package which is base R
-bpost12.2_surv <- bpost12.2 %>%
-  mutate(logodd_surv = rnorm(n = nrow(bpost12.2), 
-                                 mean = bpost12.2$b_Intercept,
-                                 sd = bpost12.2$sd_tank__Intercept),
-         surv = plogis(logodd_surv),
-         surv_brms = inv_logit_scaled(logodd_surv))
-stopifnot(nrow(bpost12.2_surv)==nrow(bpost12.2))
+  labs(title = "Histogram of Trolley responses")
+# p1
 ```
 
-which we plot as follows
+The cumulative proportions plot
 
 ```{r}
-p2 <- ggplot(bpost12.2_surv, aes(x = surv)) +
-  geom_density(aes(y = ..scaled..),stat = "density", fill = "orange", color = "transparent") +
-  theme_light() +
-  labs(title = "Probability of survival",
-       subtitle = "", x = "survival rate", y = "prob of the survival rate")
+d.p2 <- d %>%
+  count(response) %>%
+  arrange(response) %>%
+  mutate(pct = n / sum(n),
+         cum_pct = cumsum(pct))
+p2 <- ggplot(d.p2, aes(x = response, y = cum_pct)) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
+  scale_y_continuous(breaks = scales::breaks_width(width = 0.2)) +
+  ggthemes::theme_fivethirtyeight() +
+  labs(title = "Cumulative proportions", y = "cumulative probabilities")
 p2
 ```
 
-
-
-## Varying effects
-
-
-### The model
-
-
-
-$$
-surv_i \sim \mathcal{Binomial}(n_i, p_i) \\
-logit(p_i) = \alpha_{pond[i]} \\
-\alpha_{pond} \sim \mathcal{N}(\alpha, \sigma) \\
-\alpha \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-
-where we have
-
-* $\alpha$: Average log-odd of the survival rate for entire population of ponds
-* $\sigma$: Standard deviation of log-odds of survival among ponds
-* $\alpha_{pond}$: vector of individual pond intercept (mean)
-
-### Assign value to the parameters
-
+And the plot of `logit`
 
 ```{r}
-a <- 1.4
-sigma <- 1.5
-nponds <- 60
-set.seed(12)
-
-# must use as.interger because of stan, see overthinking box on p. 366
-dsim <-
-  tibble(pond = seq_len(nponds),
-         ni = rep(as.integer(c(5, 10, 25, 35)), each = nponds/4),
-         true_a = rnorm(n = nponds, mean = a, sd = sigma))
-glimpse(dsim)
-```
-
-and we plot the data to see the real distributions
-
-```{r}
-dsim %>%
-  mutate(ni = factor(ni)) %>%
-  ggplot(aes(x = true_a, y = ni)) +
-  tidybayes::stat_halfeye(.width = 0.5, fill = "orange") +
-  theme_light() +
-  labs(title = "Distribution of log odd of survival by pond")
-  
-```
-
-
-
-### Simulate survivors
-
-The model uses
-
-$$
-logit(p_i) = \alpha_{pond[i]} \\
-\alpha_{pond} \sim \mathcal{N}(\alpha, \sigma) \\
-\alpha \sim \mathcal{N}(0, 1) \\
-\sigma \sim \mathcal{HalfCauchy}(0, 1)
-$$
-therefore
-
-the simulation of $p_i$ must use the logistic function
-
-
-```{r}
-set.seed(12)
-dsim <- dsim %>%
-  mutate(si = rbinom(n = nrow(dsim), prob = plogis(true_a), size = ni))
-dsim
-```
-
-### Compute the no-pooling estimates
-
-```{r}
-dsim <- dsim %>%
-  mutate(p_nopool = si / ni)
-dsim
-```
-
-### Compute the partial pooling estimates
-
-
-```{r}
-a_file <- here::here("fits", "b12_03.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b12.3 <- readRDS(file = a_file)  # load the file
-# b12.3 <- brm(
-#   data = dsim,
-#   family = binomial,
-#   si | trials(ni) ~ 1 + (1 | pond),
-#   prior = c(prior(normal(0, 1), class = Intercept),
-#             prior(cauchy(0, 1), class = sd)),
-#   iter = 10000, warmup = 1000, chains = 1, cores = 4,
-#   seed = 12)
-# b12.3 <- add_criterion(b12.3, c("loo", "waic"))
-# saveRDS(object = b12.3, file = a_file)
-```
-which gives this summary
-
-```{r}
-summary(b12.3)
-```
-
-and we get the informaiton on the level 1, the fixed effect, as follows
-
-```{r}
-# fixef(b12.3)
-```
-
-The level 2, or random effect is
-
-```{r}
-# ranef(b12.3)
-```
-
-and the whole thing is obtained with the `fit` which calls the stan data
-
-```{r}
-# b12.3$fit
-```
-
-We then add the the partially-pooled estimates of the posterior distribution
-to the simulated data.
-
->**Important**: The `coef` gives the coefficients of the posterior distribution.
-It reflects all the levels of the multilevel model, that is both the fixed effects,
-obtained by `fixef()`, and the random effects, obtained by `ranef()`, on the posterior
-ditribution.  In our current model which only has an intercept, it is therefore, also, the
-average by pond.
-
-```{r}
-p_partpool <- coef(b12.3)$pond[, , ] %>%
-  as_tibble() %>%
-  transmute(p_partpool = plogis(Estimate))
-p_partpool
-
-dsim <- dsim %>%
-  bind_cols(p_partpool) %>%
-  mutate(p_true = plogis(true_a)) %>%
-  mutate(nopool_error = abs(p_nopool - p_true),
-         partpool_error = abs(p_partpool - p_true))
-
-
-glimpse(dsim)
-```
-
-and we plot the data
-
-```{r}
-# data to create the horizontal summary lines
-# we put linetype and color in theis df since they are related and
-# avoid overloading the ggplot code.
-# Kurtz tend to overload functions . . . 
-dfline <- dsim %>%
-  select(ni, nopool_error, partpool_error) %>%
-  pivot_longer(cols = c("nopool_error", "partpool_error"), 
-               names_to = "key", values_to = "value") %>%
-  group_by(ni, key) %>%
-  summarise(mean_error = mean(value)) %>%
-  ungroup() %>%
-  mutate(x = case_when(ni == 5 ~ 1,
-                       ni == 10 ~ 16,
-                       ni == 25 ~ 31,
-                       ni == 35 ~ 46,
-                       TRUE ~ NA_real_),
-         xend = case_when(ni == 5 ~ 15,
-                       ni == 10 ~ 30,
-                       ni == 25 ~ 45,
-                       ni ==  35 ~ 60,
-                       TRUE ~ NA_real_),
-         linetype = case_when(key == "nopool_error" ~ "solid",
-                              key == "partpool_error" ~ "dashed",
-                              TRUE ~ as.character(key)),
-         color = case_when(key == "nopool_error" ~ "orange2",
-                              key == "partpool_error" ~ "black",
-                              TRUE ~ as.character(key))
-         )
-dfline
-
-# the subtitle text
-stitle <- "The horizontal axis displays pond number. The vertical axis measures\nthe absolute error in the predicted proportion of survivors, compared to\nthe true value used in the simulation. The higher the point, the worse\nthe estimate. No-pooling shown in orange. Partial pooling shown in black.\nThe orange and dashed black lines show the average error for each kind\nof estimate, across each initial density of tadpoles (pond size). Smaller\nponds produce more error, but the partial pooling estimates are better\non average, especially in smaller ponds."
-
-p <- ggplot(dsim, aes(x = pond)) +
-  geom_vline(xintercept = c(15.5, 30.5, 45.4), color = "white", size = 2/3) +
-  geom_point(aes(y = nopool_error), color = "orange2") +
-  geom_point(aes(y = partpool_error), shape = 1) +
-  geom_segment(data = dfline, 
-               aes(x = x, xend = xend, 
-                   y = mean_error, yend = mean_error), linetype = dfline$linetype,
-                   color = dfline$color) +
-  annotate("text", x = c(15 - 7.5, 30 - 7.5, 45 - 7.5, 60 - 7.5), y = .45,
-           label = c("tiny (5)", "small (10)", "medium (25)", "large (35)")) +
-  scale_x_continuous(breaks = c(1, 10, 20, 30, 40, 50, 60)) +
-  labs(title = "Estimate error by model type",
-       subtitle = stitle,
-       y = "absolute error") +
-  # theme_light() +
+d.p3 <- d.resp %>%
+  filter(response < 7) %>%
+  mutate(logit = log(cum_pct / (1 - cum_pct)),
+         logit_ctr = scale(logit, center = TRUE, scale = FALSE))
+# d.p3
+p3 <- ggplot(d.p3, aes(x = response, y = logit)) +
+  geom_line() +
+  geom_point() +
+    scale_x_continuous(breaks = scales::breaks_width(width = 1)) +
+  scale_y_continuous(breaks = scales::breaks_width(width = 1)) +
   ggthemes::theme_fivethirtyeight() +
-  theme(panel.grid.major = element_blank(),
-        plot.subtitle = element_text(size = 10))
-p
-
+  labs(title = "Log of Cumulative Odds",
+       y = "log of cumulative odds")
+# p3
 ```
 
-
-## More than one type of cluster
-
-
-### Multilevel chimpanzees
-
-#### The model
-
-$$
-pull\_left_i \sim \mathcal{Binomial}(1, p_i) \\
-logit(p_i) = \alpha + \alpha_{actor[i]} + (\beta_P + \beta_{PC} C_i) P_i \\
-\alpha_{actor} \sim \mathcal{N}(0, \sigma_{actor}) \\
-\alpha \sim \mathcal{N}(0, 10) \\
-\beta_P \sim \mathcal{N}(0, 10) \\
-\beta_{PC} \sim \mathcal{N}(0, 10) \\
-\sigma_{actor} \sim \mathcal{HalfCauchy}(0, 1)
-$$
-#### The fit
-
-We load the data
+and the 3 plots in figure 11.1 are
 
 ```{r}
-data(chimpanzees)
-d <- chimpanzees
-glimpse(d)
+gridExtra::grid.arrange(p1, p2, p3, nrow = 1)
 ```
 
 
 
+The model is
+
+$$
+R_i \sim Ordered(\textbf{p}) \\
+logit(p_k) = \alpha_k \\
+\alpha_k \sim \mathcal{N}(0, 10)
+$$
+and the fit with brms
+
 ```{r}
-a_file <- here::here("fits", "b12_04.rds")  # rds file location
+# define start values
+inits <- list(
+  `Intercept[1]` = -2,
+  `Intercept[2]` = -1,
+  `Intercept[3]` = 0,
+  `Intercept[4]` = 1,
+  `Intercept[5]` = 2,
+  `Intercept[6]` = 2.5
+)
+inits_list <- list(inits, inits)
+a_file <- here::here("fits", "b11_01.rds")  # rds file location
 stopifnot(file.exists(a_file))
-b12.4 <- readRDS(file = a_file)  # load the file
-# b12.4 <- brm(
+b11.1 <- readRDS(file = a_file)  # load the file
+# b11.1 <- brm(
 #   data = d,
-#   family = binomial,
-#   pulled_left | trials(1) ~ 1 + prosoc_left + prosoc_left:condition + (1 | actor),
-#   prior = c(prior(normal(0, 10), class = Intercept),
-#             prior(normal(0, 10), class = b),
-#             prior(cauchy(0, 1), class = sd)),
-#   iter = 5000, warmup = 1000, chains = 4, cores = 4,
-#   control = list(adapt_delta = 0.95),
-#   seed = 12)
-# b12.4 <- add_criterion(b12.4, c("loo", "waic"))
-# saveRDS(object = b12.4, file = a_file)
+#   family = cumulative,
+#   response ~ 1,
+#   prior = c(
+#     prior(normal(0, 10), class = Intercept)),
+#   iter = 2000, warmup = 1000, chains = 4, cores = 4,
+#   # the start values
+#   inits = inits_list,
+#   seed = 11)
+# b11.1 <- add_criterion(b11.1, c("loo", "waic"))
+# saveRDS(object = b11.1, file = a_file)
 ```
 
-the posterior samples is
+
+which gives the summary
 
 ```{r}
-bpost12.4 <- posterior_samples(b12.4)
-str(bpost12.4)
+print(b11.1)
 ```
 
-and we look at the standard deviaiton of the random effect of actor
+and we convert the intercepts to the normal scale
 
 ```{r}
-ggplot(bpost12.4, aes(x = sd_actor__Intercept)) +
-  tidybayes::stat_halfeye(.width = 0.95, fill = "orange") +
-  # scale_y_continuous(breaks = NULL) +
-  ggthemes::theme_economist() +
-  labs(title = expression(sigma[actor]))
+b11.1 %>%
+  fixef() %>%
+  brms::inv_logit_scaled()
+# which we can also do with stats:plogis()
+# see appendix A
+# b11.1 %>%
+#   fixef() %>%
+#   stats::plogis()
+```
+**Important:** The SD i.e. `Est.Error` are not valid using the `inv_logit_scaled`,
+that is using a direct inverse exp function.
+
+They must be computed using a posterior sample.
+
+
+```{r}
+posterior_samples(b11.1) %>%
+  select(starts_with("b_")) %>%
+  mutate(across(.cols = everything(), .fns = brms::inv_logit_scaled)) %>%
+  pivot_longer(cols = everything(), names_to = "key") %>%
+  group_by(key) %>%
+  summarise(mean = mean(value),
+            sd = sd(value),
+            ll = quantile(value, probs = 0.025),
+            ul = quantile(value, probs = 0.975)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 4))
 ```
 
-### Two types of cluster
+
+### Adding predictor variables
+
+#### Logistic / Logit functions
+See the appendix A of this book for a detailed tratment of all these functions.
+They will be added the suffix *.new* to identify them.
+
+The `logistic()` and `inv_logit()` functions are actually the same as 
+`stats::plogis()`.
+
+Also, the function `logit()` already exists as `stats::qlogis()`.
+
+therefore `dordlogit()` as given
+
+```{r}
+dordlogit.new <- function(x, phi = 0L, log = FALSE) {
+  x <- sort(x)  # the ordering is important
+  p <- stats::plogis(q = c(x, Inf), location = phi)
+  p <- c( p[1], p[2:length(p)] - p[1:(length(p)-1)] )
+  if (log) p <- log(p)
+  p
+}
+```
+
+which gives about the same result as R code 11.9 in McElrath.s
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1]))
+```
+
+```{r}
+fixef(b11.1)[, 1]
+stats::plogis(q = fixef(b11.1)[, 1], lower.tail = TRUE)
+stats::plogis(q = fixef(b11.1)[, 1], lower.tail = FALSE)
+stats::plogis(q = fixef(b11.1)[, 1])
+stats::dlogis(x = fixef(b11.1)[, 1])
+```
+
+#### Subsracting from the log-cumulative odds
+
+If we substract from the *log-cumulative odds* then we shift the probability
+mass to higher outcome values.
+
+For example with model b11.1
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1]))
+```
+which gives an expected value
+
+```{r}
+sum(dordlogit.new(fixef(b11.1)[, 1]) * 1:7)
+```
+
+but if we substract 0.5
+
+```{r}
+(dordlogit.new(fixef(b11.1)[, 1], phi = 0.5))
+```
+then we have a higher expected value
+
+```{r}
+sum(dordlogit.new(fixef(b11.1)[, 1], phi = 0.5) * 1:7)
+```
 
 
-#### The model
+
+#### Ordered categorical with several predictors
+
+Our model with several predictors is
 
 $$
-pull\_left_i \sim \mathcal{Binomial}(1, p_i) \\
-logit(p_i) = \alpha + \alpha_{actor[i]} + \alpha_{block[i]} + (\beta_P + \beta_{PC} C_i) P_i \\
-\alpha_{actor} \sim \mathcal{N}(0, \sigma_{actor}) \\
-\alpha_{block} \sim \mathcal{N}(0, \sigma_{block}) \\
+R_i \sim Ordered(\textbf{p}) \\
+logit(Pr(y_i \leq k))= \frac{Pr(y_i \leq k)}{1 - Pr(y_i \leq k)}  = \alpha_k - \phi_i \\
+\alpha_k \sim \mathcal{N}(0, 10) \\
+\phi_i = \beta_{action} \cdot action_i + \beta_{intention} \cdot intention_i + \beta_{contact} \cdot contact_i
+$$
+
+and the fit is
+
+```{r}
+inits <- list(
+  `Intercept[1]` = -1.9,
+  `Intercept[2]` = -1.2,
+  `Intercept[3]` = -0.7,
+  `Intercept[4]` = 0.2,
+  `Intercept[5]` = 0.9,
+  `Intercept[6]` = 1.8,
+  action = 0,
+  intention = 0,
+  contact = 0
+)
+a_file <- here::here("fits", "b11_02.rds")  # rds file location
+b11.2 <- readRDS(file = a_file)  # load the file
+# b11.2 <- brms::brm(data = d,
+#                    family = cumulative,
+#                    response ~ 1 + action + intention + contact,
+#                    prior = c(prior(normal(0, 10), class = Intercept),
+#                              prior(normal(0, 10), class = b)),
+#                    iter = 2000, warmup = 1000, cores = 4, chains = 2,
+#                    inits = list(inits, inits),
+#                    seed = 11)
+# b11.2 <- add_criterion(b11.2, c("loo", "waic"))
+# saveRDS(object = b11.2, file = a_file)
+```
+
+and the summary is
+
+```{r}
+summary(b11.2)
+```
+
+
+and the model with interactions id 
+
+
+$$
+R_i \sim Ordered(\textbf{p}) \\
+logit(Pr(y_i \leq k))= \frac{Pr(y_i \leq k)}{1 - Pr(y_i \leq k)}  = \alpha_k - \phi_i \\
+\alpha_k \sim \mathcal{N}(0, 10) \\
+\phi_i = \beta_{action} \cdot A_i + \beta_{intention} \cdot I_i + \beta_{contact} \cdot C_i + \beta_{C,I} C_i \cdot + \beta_{A,I} A_i \cdot I_i
+$$
+
+and the fit is
+
+
+```{r}
+inits <- list(
+  `Intercept[1]` = -1.9,
+  `Intercept[2]` = -1.2,
+  `Intercept[3]` = -0.7,
+  `Intercept[4]` = 0.2,
+  `Intercept[5]` = 0.9,
+  `Intercept[6]` = 1.8,
+  action = 0,
+  intention = 0,
+  contact = 0,
+  `action:intention` = 0,
+  `contact:intention` = 0
+)
+a_file <- here::here("fits", "b11_03.rds")  # rds file location
+b11.3 <- readRDS(file = a_file)  # load the file
+# b11.3 <- brms::brm(data = d,
+#                    family = cumulative,
+#                    response ~ 1 + action + intention + contact + action:intention + contact:intention,
+#                    prior = c(prior(normal(0, 10), class = Intercept),
+#                              prior(normal(0, 10), class = b)),
+#                    iter = 2000, warmup = 1000, cores = 4, chains = 2,
+#                    inits = list(inits, inits),
+#                    seed = 11)
+# b11.3 <- add_criterion(b11.3, c("loo", "waic"))
+# saveRDS(object = b11.3, file = a_file)
+```
+
+
+the summary 
+
+```{r}
+summary(b11.3)
+```
+
+
+and comparing the 3 models
+
+```{r}
+loo_compare(b11.1, b11.2, b11.3, criterion = "waic")
+```
+
+
+## Zero-inflated outcomes
+
+
+## Over-dispersed outcomes
+
+### Beta-binomial
+
+#### Beta-binomial distribution
+
+The beta distribution is
+
+$$
+\mathcal{Beta}(x|\alpha, \beta) =
+\frac{\Gamma(\alpha+\beta)}{\Gamma(\alpha)\Gamma(\beta)} x^{\alpha -1} (1-x)^{\beta -1} =
+\frac{1}{B(\alpha, \beta)} x^{\alpha -1} (1-x)^{\beta -1}, 0 \leq x \leq 1
+$$
+which is not exactly the format used by McElrath.  He uses the following
+shape parameters
+
+$$
+\mu = \bar{p} = \frac{\alpha}{\alpha + \beta} \\
+\kappa = \theta = \alpha + \beta
+$$
+
+The function to convert from the mean and kappa to the mathematical $\alpha$
+and $\beta$, as provided by Krushke, is
+
+```{r}
+betaABfromMeanKappa <- function(mean, kappa) {
+  stopifnot(mean > 0 & mean < 1)
+  stopifnot(kappa > 0)
+  a <- mean * kappa
+  b <- (1 - mean) * kappa
+  list(a = a, b = b)
+}
+```
+
+
+The beta-binomial distribution is not defined in `brms`.  We need to define the 
+family in ``brms` as well as a `stan_funs()` and `stanvar()`.
+
+```{r}
+beta_binomial2 <- custom_family(
+  "beta_binomial2", dpars = c("mu", "phi"),
+  links = c("logit", "log"), lb = c(NA, 0),
+  type = "int", vars = "vint1[n]"
+)
+
+stan_funs <- "
+  real beta_binomial2_lpmf(int y, real mu, real phi, int T) {
+    return beta_binomial_lpmf(y | T, mu * phi, (1 - mu) * phi);
+  }
+  int beta_binomial2_rng(real mu, real phi, int T) {
+    return beta_binomial_rng(T, mu * phi, (1 - mu) * phi);
+  }
+"
+
+stanvars <- stanvar(scode = stan_funs, block = "functions")
+```
+
+
+
+### Beta-binomial model
+
+
+There is an error in the model defined by McElrath, to concur with his code
+at 11.26, the model is
+
+$$
+A_i \sim \mathcal{BetaBinomial}(n_i, \bar{p}_i, \theta) \\
+logit(\bar{p}_i) = \alpha \\
+\alpha \sim \mathcal{N}(0, 2) \\
+\theta \sim \mathcal{Exponential}(1)
+$$
+
+the data used is
+
+```{r}
+data(UCBadmit)
+d <- UCBadmit
+```
+
+
+which we fit as follows
+
+```{r}
+a_file <- here::here("fits", "b11_05.rds")  # rds file location
+b11.5 <- readRDS(file = a_file)  # load the file
+b11.5 <- brm(
+  data = d,
+  family = beta_binomial2,
+  admit | vint(applications) ~ 1,
+  prior = c(prior(normal(0, 2), class = Intercept),
+            prior(exponential(1), class = phi)),
+  iter = 4000, warmup = 1000, cores = 4, chains = 2,
+  stanvars = stanvars,
+  seed = 11)
+saveRDS(object = b11.5, file = a_file)
+```
+
+and the posterior data which *represents the distribution rather than the data*
+
+```{r}
+bpost11.5 <- posterior_samples(b11.5)
+head(bpost11.5)
+```
+
+and the median ans percentile-based interval
+
+
+```{r}
+intrvl.qi <- bpost11.5 %>%
+  tidybayes::median_qi(inv_logit_scaled(b_Intercept)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 3))
+intrvl.qi
+```
+
+and the high-density interval is about the same.
+
+```{r}
+intrvl.hdi <- bpost11.5 %>%
+  tidybayes::median_hdi(inv_logit_scaled(b_Intercept)) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 3))
+intrvl.hdi
+```
+
+### Negative-binomial or gamma-Poisson
+
+#### Gamma-Poisson distribution
+
+First we illustrate the gamma-poisson with different combinations of $\mu$ and
+$\theta$
+
+
+```{r}
+gpdf <- crossing(mu    = c(1, 5, 9), theta = c(1, 5, 9)) %>% 
+  expand(nesting(mu, theta), 
+         x = seq(from = 0, to = 27, length.out = 100)) %>%
+  mutate(density    = rethinking::dgamma2(x, mu, theta),
+         mu_char    = paste("mu", mu, sep = "=="),
+         theta_char = paste("theta", theta, sep = "=="))
+gpdf
+```
+
+and the plot
+
+```{r}
+p <- ggplot(data = gpdf) +
+  geom_ribbon(aes(x = x, ymin = 0, ymax = density),
+              fill = "maroon1") +
+  geom_vline(aes(xintercept = mu),
+             color = "maroon", linetype = 3) +
+  scale_y_continuous(NULL, labels = NULL) +
+  labs(title = "Gamma can take many shapes",
+       subtitle = "(dotted vertical lines mark off the means)",
+       x = "parameter space") +
+  coord_cartesian(xlim = c(0, 25)) +
+  ggthemes::theme_hc() +
+  theme(axis.ticks.y = element_blank(),
+        plot.background = element_rect(fill = "grey92")) +
+  facet_grid(theta_char~mu_char, labeller = label_parsed)
+p
+```
+
+
+#### Gamma-Poisson model
+
+
+The model is
+
+$$
+A_i \sim \mathcal{NegBinomial}(\lambda_i, \theta) \\
+logit(\lambda_i) = \alpha \\
 \alpha \sim \mathcal{N}(0, 10) \\
-\beta_P \sim \mathcal{N}(0, 10) \\
-\beta_{PC} \sim \mathcal{N}(0, 10) \\
-\sigma_{actor} \sim \mathcal{HalfCauchy}(0, 1) \\
-\sigma_{block} \sim \mathcal{HalfCauchy}(0, 1)
+\theta \sim \mathcal{Gamma}(0.01, 0.01)
 $$
+using tthe data
 
-#### The fit
 
 ```{r}
-a_file <- here::here("fits", "b12_05.rds")  # rds file location
-stopifnot(file.exists(a_file))
-b12.5 <- readRDS(file = a_file)  # load the file
-# b12.5 <- update(
-#   b12.4,
-#   newdata = d,
-#   formula = pulled_left | trials(1) ~ 1 + prosoc_left + prosoc_left:condition + (1 | actor)  + (1 | block),
-#   iter = 6000, warmup = 1000, chains = 4, cores = 4,
-#   control = list(adapt_delta = 0.9),
-#   seed = 12)
-# b12.5 <- add_criterion(b12.5, c("loo", "waic"))
-# saveRDS(object = b12.5, file = a_file)
+data(UCBadmit)
+d <- UCBadmit
 ```
 
 
+the fit is
 
-## Multilevel posterior predictions
-
-
-### Posterior prediction for same clusters
-
-Predicting chimp 2 we have
 
 ```{r}
-chimp <- 2
-nd <-
-  tibble(prosoc_left = c(0, 1, 0, 1),
-         condition   = c(0, 0, 1, 1),
-         actor       = chimp)
-nd
-
-chimp_2_fitted <-fitted(b12.4, newdata = nd) %>%
-  as_tibble() %>%
-  mutate(prosoc_left = c(0, 1, 0, 1),
-         condition   = c(0, 0, 1, 1),
-         prosoc_cond = paste(prosoc_left, condition, sep = "/"),
-         prosoc_cond = factor(prosoc_cond, levels = c("0/0", "1/0", "0/1", "1/1")))
-chimp_2_fitted
+a_file <- here::here("fits", "b11_06.rds")  # rds file location
+b11.6 <- readRDS(file = a_file)  # load the file
+# b11.6 <-
+#   brm(data = d,
+#       family = negbinomial,
+#       admit ~ 1,
+#       prior = c(prior(normal(0, 10), class = Intercept),
+#                 prior(gamma(0.01, 0.01), class = shape)),  # this is the brms default
+#       iter = 4000, warmup = 1000, cores = 2, chains = 2,
+#       seed = 11)
+# saveRDS(object = b11.6, file = a_file)
 ```
-
-and we plot the fitted data
-
-```{r}
-# if you want to use `geom_line()` or `geom_ribbon()` with a factor on the x axis,
-# you need to code something like `group = 1` in `aes()`
-p_fit <- ggplot(chimp_2_fitted, aes(x = prosoc_cond, y = Estimate, group = 1)) +
-  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "orange", alpha = 0.5) +
-  geom_line(color = "blue") +
-  coord_cartesian(ylim = c(0.75, 1)) +
-  ggthemes:::theme_igray() +
-  labs(title = "Chimp # 2", x = NULL, y = NULL)
-p_fit
-```
-
-
-
-and using the average of real data we have
-
-```{r}
-chimp_2_raw <- d %>%
-  filter(actor == chimp) %>%
-    mutate(
-      prosoc_cond = paste(prosoc_left, condition, sep = "/"),
-      prosoc_cond = factor(prosoc_cond, levels = c("0/0", "1/0", "0/1", "1/1"))) %>%
-  group_by(prosoc_left, condition, prosoc_cond) %>%
-  summarise(prob = mean(pulled_left)) %>%
-  ungroup()
-chimp_2_raw
-```
-
-
 
 
 
 ## Summary
-
 
 
 ## Practice
