@@ -54,7 +54,7 @@ sum(-p * log(p))
 
 ## 7M1 {-}
 
-### AIC
+### AIC {-}
 
 See beginning of section 7.4.2 for AIC
 
@@ -68,7 +68,7 @@ The assumptions on which AIC is based are
 3. The sample size $N$ is much greater than the number of parameters $k$, $N \gg k$
 
 
-### WAIC
+### WAIC {-}
 
 See section 7.4.2 for definition
 
@@ -88,13 +88,13 @@ approximation in a large sample.* Section 7.4.2, p. 220.
 Model selection and model comparison are defined in the introduction of
 section 7.5.
 
-### Model selection
+### Model selection {-}
 
 Selecting the model with the lowest information criterion value (WAIC, LOO) 
 and discard the other models. It should be avoided as you loose the information
 about the relative model accuracy contained in the different criteria.
 
-### Model comparison
+### Model comparison {-}
 
 Using multiple models t understand how different variables influence predictions
 and implied conditional independencies which explain causality.
@@ -200,7 +200,7 @@ ggplot(data = d, aes(x = tax_rate)) +
 
 ## 7H2 {-}
 
-### Use WAIC and PSIS to evaluate the outliers
+### Use WAIC and PSIS to evaluate the outliers {-}
 
 See section 7.5.2, figure 7.10.
 
@@ -223,7 +223,7 @@ ggplot(dp, aes(x = pareto_k, y = p_waic, color = out)) +
 ```
 
 
-### Robust regression with t-student distribution
+### Robust regression with t-student distribution {-}
 
 See section 7.5.2, R code 7.35
 
@@ -267,89 +267,105 @@ ggplot(dp, aes(x = pareto_k, y = p_waic, color = out)) +
 ## 7H3 {-}
 
 ```{r}
-
-```
-
-
-
-## OLD {-}
-
-Loading the data
-
-```{r}
-data("Howell1")
-d <- Howell1
-d$age <- scale(x = d$age)  # standardize the age
-set.seed(1000)
-i <- sample(1:nrow(d), size = nrow(d) / 2)
-d_train <- d[i, ]  # d1 in textbook: the training set
-d_test <- d[-i, ]  # d2 in textbook: the testing set
-```
-
-get the basic stat summary
-
-```{r}
-d_summary <- psych::describe(x = d[, c("height", "weight", "age")])
-d_summary
-```
-
-Creating the models
-
-### Model M1
-
-```{r}
-# NOTE: reaches max iteration sometimes, if that is the case, rerun it
-set.seed(123)  # it always converge with this seed, works better than start values.
-M1 <- rethinking::map(
-    flist = alist(
-        height ~ dnorm(mu, exp(sigma_log)),
-        mu <- a + bAge1 * age,
-        a ~ dnorm(100, 200),# based on the height mean
-        bAge1 ~ dnorm(10, 30),  # PI result when first iteration converged
-        sigma_log ~ dnorm(0, 5)
-    ),
-    data = d_train
-    # start = list(mu = mean(d$height))  # start values seem to cause more problem than they solve!
+d <- data.frame(
+  A = c(0.2, 0.8, 0.05),
+  B = c(0.2, 0.1, 0.15),
+  C = c(0.2, 0.05, 0.7),
+  D = c(0.2, 0.025, 0.05),
+  E = c(0.2, 0.025, 0.05)
 )
-rethinking::precis(M1)
+row.names(d) <- paste("island", 1:3)
+stopifnot(sum(d[1, ]) == 1, sum(d[2, ]) == 1, sum(d[3, ]) == 1)
+d
 ```
 
-### Model M2
+### islands' entropies {-}
 
 ```{r}
-# IMPORTANT NOTE: Use I() when using ^ in R formula
-# IMPORATANT NOTE: Because of problem with convergence, I have saved the model in the current directory.
-                   # see below for filw location and command to reload
-# NOTE: reaches max iteration sometimes, if that is the case, rerun it
-# NOTE: difficulte to obtain convergence, but the values below seem to work in a stable manner, after several trials
-# M2 <- rethinking::map(
-#     flist = alist(
-#         height ~ dnorm(mu, exp(sigma_log)),
-#         mu <- a + bAge1 * age + bAge2 * I(age^2),
-#         a ~ dnorm(100, 200),# based on the height mean
-#         bAge1 ~ dnorm(10, 50),  # PI result when first iteration converged
-#         bAge2 ~ dnorm(-50, 50),  # PI result when first iteration converged
-#         sigma_log ~ dnorm(0, 5)
-#     ),
-#     data = d_train
-#     # start = list(mu = 152 + 25 * mean(d_train$age) - 15 * mean(d_train$age),
-#     #              sigma = 2.5)  # start values seem to cause more problem than they solve!
-# )
-# rethinking::precis(M2)
+apply(d, MARGIN = 1, FUN = function(p) -sum(p * log(p)))
+```
+Island 1 has a distribution with maximum entropy, i.e. less information, because
+the bird population is uniform and therefore the same everywhere on the island
+which is the similar knowing nothing about the island.
 
-# save the reults when convergence is ok
-# saveRDS(M2, file = "chap6_M2.rds")
-# M2 <- readRDS(file = "chap06_M2.rds")
-# rethinking::precis(M2)
+Island 2 has the least entropy, that is the most informaiton to reduce uncertainty.
+The information seems to be more specific about ehrer the birds are located.
+
+
+### Kullback-Leiber divergence {-}
+
+
+```{r}
+apply(d, MARGIN = 1, FUN = function(p) {
+  apply(d, MARGIN = 1, FUN = function(q) {
+    sum(p * (log(p) - log(q)))
+  })
+})
+```
+overall, the $D_{KL}$ is lowest with island 1 and therefore points out
+to island as the best prior to use.  This is caused by the fact that island 1
+having a uniform prior, i.e. assuming nothing about the distribution of the
+other islands, it will be looking at more possibilities for it's prediction.
+
+See discussion in section 7.2.3 in page 208, near the end.
+
+
+## 7H4 {-}
+
+See section 6.3.1 for the data used.
+
+
+```{r}
+d <- rethinking::sim_happiness(seed = 1977, N_years = 1000)
+# select age > 17 and rescale to [0, 1] and create indexed factor
+# creating factor makes it easer with brms
+d2 <- d %>%
+  filter(age > 17) %>%
+  mutate(A = scales::rescale(age, to = c(0, 1)),
+         mid = factor(married + 1, labels = c("single", "married")))
+glimpse(d2)
 ```
 
-The result obtained when it converges is as follows, need several iterations to obtain convergence
+```{r}
+a_file <- here::here("fits", "b07H4a.rds")
+b07H4a <- readRDS(a_file)
+# b07H4a <-
+#   brm(data = d2,
+#       family = gaussian,
+#       happiness ~ 0 + mid + A,
+#       prior = c(prior(normal(0, 1), class = b, coef = midmarried),
+#                 prior(normal(0, 1), class = b, coef = midsingle),
+#                 prior(normal(0, 2), class = b, coef = A),
+#                 prior(exponential(1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
+#       seed = 6)
+# b07H4a <- brms::add_criterion(b07H4a, criterion = c("waic", "loo"))
+# saveRDS(b07H4a, file = a_file)
+brms::posterior_summary(b07H4a)
+```
 
-            Mean StdDev   5.5%  94.5%
-a         152.40   1.02 150.76 154.03
-bAge1      25.79   0.84  24.46  27.13
-bAge2     -14.12   0.70 -15.24 -13.00
-sigma_log   2.52   0.04   2.45   2.58
+The fit finds that the effect of age on happiness is negative
 
 
+now lets do it without the marriage factor
 
+```{r}
+a_file <- here::here("fits", "b07H4b.rds")
+b07H4b <- readRDS(a_file)
+# b07H4b <-
+#   brm(data = d2,
+#       family = gaussian,
+#       happiness ~ 1 + A,
+#       prior = c(prior(normal(0, 1), class = Intercept),
+#                 prior(normal(0, 2), class = b),
+#                 prior(exponential(1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
+#       seed = 6)
+# b07H4b <- brms::add_criterion(b07H4b, criterion = c("waic", "loo"))
+# saveRDS(b07H4b, file = a_file)
+brms::posterior_summary(b07H4b)
+```
+
+## 7H5 {-}
+
+TODO
