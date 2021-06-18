@@ -238,7 +238,7 @@ b07H02 <- readRDS(a_file)
 #                 prior(normal(0, 0.5), class = b),
 #                 prior(exponential(1), class = sigma)),
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
-#       seed = 5)
+#       seed = 7)
 # b07H02 <- brms::add_criterion(b07H02, criterion = c("waic", "loo"))
 # saveRDS(b07H02, file = a_file)
 summary(b07H02)
@@ -338,7 +338,7 @@ b07H4a <- readRDS(a_file)
 #                 prior(normal(0, 2), class = b, coef = A),
 #                 prior(exponential(1), class = sigma)),
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
-#       seed = 6)
+#       seed = 7)
 # b07H4a <- brms::add_criterion(b07H4a, criterion = c("waic", "loo"))
 # saveRDS(b07H4a, file = a_file)
 brms::posterior_summary(b07H4a)
@@ -360,7 +360,7 @@ b07H4b <- readRDS(a_file)
 #                 prior(normal(0, 2), class = b),
 #                 prior(exponential(1), class = sigma)),
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
-#       seed = 6)
+#       seed = 7)
 # b07H4b <- brms::add_criterion(b07H4b, criterion = c("waic", "loo"))
 # saveRDS(b07H4b, file = a_file)
 brms::posterior_summary(b07H4b)
@@ -368,4 +368,53 @@ brms::posterior_summary(b07H4b)
 
 ## 7H5 {-}
 
-TODO
+
+```{r}
+data(foxes)
+d <- foxes %>%
+  mutate(
+    `F` = scale(as.vector(avgfood)),
+    S = scale(as.vector(groupsize)),
+    A = scale(as.vector(area)),
+    W = scale(as.vector(weight))
+  )
+skimr::skim(d)
+```
+
+### 7H5 1) {-}
+
+$$
+\begin{align*}
+W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_F \cdot F_i + \beta_S \cdot S_i + \beta_A \cdot A_i \\
+\alpha &\sim \mathcal{N}(0, 0.5) \\
+\beta_F &\sim \mathcal{N}(0, 0.25) \\
+\beta_S &\sim \mathcal{N}(0, 0.25) \\
+\beta_A &\sim \mathcal{N}(0, 0.25) \\
+\sigma &\sim \mathcal{HalfCauchy}(0, 1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b07H05a.rds")
+b07H05a <- readRDS(file = a_file)
+# b07H05a <- brm(
+#   data = d,
+#   formula = W ~ 1 + `F` + S + A,
+#   family = gaussian,
+#   prior = c(
+#     prior(normal(0, 0.5), class = Intercept),
+#     prior(normal(0, 0.25), class = b, coef = `F`),
+#     prior(normal(0, 0.25), class = b, coef = S),
+#     prior(normal(0, 0.25), class = b, coef = A),
+#     prior(cauchy(0, 1), class = sigma)
+#   ),
+#   iter = 2000, warmup = 1000, chains = 4, core = detectCores(),
+#   seed = 7
+# )
+# b07H05a <- brms::add_criterion(b07H05a, criterion = c("waic", "loo"))
+# save(b07H05a, file = a_file)
+summary(b07H05a)
+```
+
