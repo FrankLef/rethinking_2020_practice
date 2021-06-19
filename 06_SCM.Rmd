@@ -4,6 +4,8 @@ library(brms)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
+library(dagitty, quietly = TRUE)
+library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
@@ -19,8 +21,14 @@ library(paletteer, quietly = TRUE)
 
 ## 6H1 {-}
 
+```{r}
+message("TODO: 6H1")
+```
+
 
 ## 6H2 {-}
+
+See practice 7H5 in chapter 7 for corresponding exercises.
 
 ```{r}
 data(foxes)

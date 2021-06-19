@@ -5,6 +5,8 @@ library(tidybayes, quietly = TRUE)
 library(rethinking)
 library(brms)
 library(loo)
+library(dagitty, quietly = TRUE)
+library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
@@ -368,6 +370,8 @@ brms::posterior_summary(b07H4b)
 
 ## 7H5 {-}
 
+See practice 6H2 to 6H5 in chapter 6 for corresponding exercises.
+
 
 ```{r}
 data(foxes)
@@ -380,6 +384,22 @@ d <- foxes %>%
   )
 skimr::skim(d)
 ```
+
+and the DAG is
+
+```{r}
+dag <- dagify(avgfood ~ area,
+              groupsize ~ avgfood,
+              weight ~ avgfood + groupsize)
+ggplot(dag, aes(x = x, y = y, xend = xend, yend = yend)) +
+  # geom_dag_point(color = "aquamarine2") +
+  geom_dag_text(color = "mediumseagreen") +
+  geom_dag_edges() +
+  theme_dag() +
+  labs(title = "Practice 7H5 - foxes data")
+```
+
+
 
 ### 7H5 1) {-}
 
@@ -414,7 +434,137 @@ b07H05a <- readRDS(file = a_file)
 #   seed = 7
 # )
 # b07H05a <- brms::add_criterion(b07H05a, criterion = c("waic", "loo"))
-# save(b07H05a, file = a_file)
+# saveRDS(b07H05a, file = a_file)
 summary(b07H05a)
 ```
 
+### 7H5 2) {-}
+
+$$
+\begin{align*}
+W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_F \cdot F_i + \beta_S \cdot S_i \\
+\alpha &\sim \mathcal{N}(0, 0.5) \\
+\beta_F &\sim \mathcal{N}(0, 0.25) \\
+\beta_S &\sim \mathcal{N}(0, 0.25) \\
+\sigma &\sim \mathcal{HalfCauchy}(0, 1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b07H05b.rds")
+b07H05b <- readRDS(file = a_file)
+# b07H05b <- update(b07H05a,
+#                   newdata = d,
+#                   formula = W ~ 1 + `F` + S, seed = 7)
+# b07H05b <- brms::add_criterion(b07H05b, criterion = c("waic", "loo"))
+# saveRDS(b07H05b, file = a_file)
+summary(b07H05b)
+```
+
+### 7H5 3) {-}
+
+$$
+\begin{align*}
+W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_S \cdot S_i + \beta_A \cdot A_i \\
+\alpha &\sim \mathcal{N}(0, 0.5) \\
+\beta_S &\sim \mathcal{N}(0, 0.25) \\
+\beta_A &\sim \mathcal{N}(0, 0.25) \\
+\sigma &\sim \mathcal{HalfCauchy}(0, 1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b07H05c.rds")
+b07H05c <- readRDS(file = a_file)
+# b07H05c <- update(b07H05a,
+#                   newdata = d,
+#                   formula = W ~ 1 + S + A, seed = 7)
+# b07H05c <- brms::add_criterion(b07H05c, criterion = c("waic", "loo"))
+# saveRDS(b07H05c, file = a_file)
+summary(b07H05c)
+```
+
+### 7H5 4) {-}
+
+$$
+\begin{align*}
+W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_F \cdot F_i \\
+\alpha &\sim \mathcal{N}(0, 0.5) \\
+\beta_F &\sim \mathcal{N}(0, 0.25) \\
+\sigma &\sim \mathcal{HalfCauchy}(0, 1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b07H05d.rds")
+b07H05d <- readRDS(file = a_file)
+# b07H05d <- update(b07H05a,
+#                   newdata = d,
+#                   formula = W ~ 1 + `F`, seed = 7)
+# b07H05d <- brms::add_criterion(b07H05d, criterion = c("waic", "loo"))
+# saveRDS(b07H05d, file = a_file)
+summary(b07H05d)
+```
+
+
+### 7H5 5) {-}
+
+$$
+\begin{align*}
+W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_A \cdot A_i \\
+\alpha &\sim \mathcal{N}(0, 0.5) \\
+\beta_A &\sim \mathcal{N}(0, 0.25) \\
+\sigma &\sim \mathcal{HalfCauchy}(0, 1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b07H05e.rds")
+b07H05e <- readRDS(file = a_file)
+# b07H05e <- update(b07H05a,
+#                   newdata = d,
+#                   formula = W ~ 1 + A, seed = 7)
+# b07H05e <- brms::add_criterion(b07H05e, criterion = c("waic", "loo"))
+# saveRDS(b07H05e, file = a_file)
+summary(b07H05e)
+```
+
+
+
+### 7H5 Model comparison {-}
+
+See section 7.5.1 for details.
+
+
+```{r}
+w <- loo::loo_compare(b07H05a, b07H05b, b07H05c, b07H05d, b07H05e, 
+                      criterion = "waic") %>% 
+  data.frame() %>%
+  tibble::rownames_to_column("model_name") %>%
+  mutate(model_name = forcats::fct_reorder(model_name, waic, .desc = TRUE))
+w
+```
+
+```{r}
+ggplot(w, aes(x = waic, y = model_name, xmin = waic - se_waic, xmax = waic + se_waic)) +
+  geom_pointrange(shape = 19, color = "aquamarine4") +
+  ggrepel::geom_text_repel(aes(label = round(waic, 0))) +
+  ggthemes::theme_few() +
+  theme(title = element_text(color = "midnightblue"),
+        panel.border = element_blank()) +
+  labs(title = "7H5 WAIC plot", x = "waic", y = NULL)
+```
+
+Models b07H05d and b07H05e which are univariate have similar, higher, waic scores
+and therefore are less informative than the multivariate models.
+
+Howeer the standard errors are large and most waic are actually likely to be
+less distinct then one might conclude.
