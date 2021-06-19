@@ -392,10 +392,12 @@ dag <- dagify(avgfood ~ area,
               groupsize ~ avgfood,
               weight ~ avgfood + groupsize)
 ggplot(dag, aes(x = x, y = y, xend = xend, yend = yend)) +
-  # geom_dag_point(color = "aquamarine2") +
-  geom_dag_text(color = "mediumseagreen") +
+  geom_dag_point(color = "aquamarine2") +
+  # geom_dag_text(color = "mediumseagreen") +
+  geom_dag_text_repel(aes(label = name), color = "royalblue") +
   geom_dag_edges() +
   theme_dag() +
+  theme(title = element_text(color = "midnightblue")) +
   labs(title = "Practice 7H5 - foxes data")
 ```
 
