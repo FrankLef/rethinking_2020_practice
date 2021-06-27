@@ -16,4 +16,76 @@ library(paletteer, quietly = TRUE)
 # Conditional Manatees {#interactions}
 
 
-## 8E1
+## 8E1 {-}
+
+### (1) {-}
+
+Heat
+
+### (2) {-}
+
+Socio-economic situation
+
+### (3) {-}
+
+Electricity (e.g. from battery)
+
+## 8E2 {-}
+
+### (1) {-}
+
+Interaction. Heat and moisture interact to obtain cooking effect.
+The word "condition" is key here.
+
+
+### (2) {-}
+
+Additive, no interaction (although this is arguable).
+The word "or" defines the situation
+
+
+### (3) {-}
+
+Additive, you can get opinions from both without
+them interacting with each other. The word "unless" is a key word.
+
+### (4) {-}
+
+Additive, no interaction.  The word "or" indicates either one can be
+used.
+
+
+## 8E3 {-}
+
+### (1) {-}
+
+$$
+cooking_i = \alpha + \beta_1 \cdot heat_i +\beta_2 \cdot moist_i + 
+\beta_{3} \cdot moist_i \cdot heat_i
+$$
+
+### (2) {-}
+
+
+$$
+speed_i = \alpha + \beta_1 \cdot cylinders_i +\beta_2 \cdot injection_i
+$$
+
+
+### (3) {-}
+
+
+$$
+belief_i = \alpha + \beta_1 \cdot parents_i +\beta_2 \cdot friends_i
+$$
+
+
+
+### (4) {-}
+
+
+$$
+intelligence_i = \alpha + \beta_1 \cdot social_i +\beta_2 \cdot appendage_i
+$$
+
+## 8M1 {-}
