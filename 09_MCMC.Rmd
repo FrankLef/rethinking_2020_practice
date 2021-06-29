@@ -1,127 +1,19 @@
 ```{r include=FALSE}
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
 library(rethinking)
 library(brms)
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(paletteer)
-library(bayesplot)
+library(loo)
+library(dagitty, quietly = TRUE)
+library(ggdag, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(bayesplot, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+library(paletteer, quietly = TRUE)
 ```
 
 
 # Markov Chain Monte Carlo {#MCMC}
 
-## Good King Markov
-
-We define the algorithm to simulate the King's journey.
-
-```{r}
-positions <- integer(1e5)
-positions[1] <- 10
-for (i in 1:length(positions - 1)) {
-  # step 1: flip a coin
-  coin <- sample(x = c(-1, 1), size = 1)
-  # step 2: nominate the proposal island
-  #         we use modulo arithmetic to simulate a clock
-  #         constant 1 substracted and added to obtain 10 instead of 0
-  proposal <- (positions[i] + coin - 1) %% 10 + 1
-  # step 3: count shells and stones
-  #         count of shells = proposal, count of stone = curent
-  # step 4: prob of moving
-  prob_move <- proposal / positions[i]
-  positions[i + 1] <- ifelse(runif(1) < prob_move, proposal, positions[i])
-}
-```
-
-
-and we plot the trajectory for the first 100 weeks
-
-```{r}
-itinerary <- data.frame(
-  week = seq_along(positions),
-  island = factor(positions)
-)
-ggplot(data = itinerary[1:100, ], aes(x = week, y = island)) +
-  geom_point(aes(color = island)) +
-  # scale_y_discrete(breaks = scales::breaks_width(width = 1)) +
-  scale_color_paletteer_d(palette = "ggsci::category10_d3") +
-  ggthemes::theme_igray() +
-  theme(legend.position = "none") +
-  labs(title = "Figure 8.2",
-       x = "week", y = "island")
-
-```
-
-
-and the frequency of visits to each island
-
-```{r}
-ggplot(data = itinerary, aes(x = island)) +
-  geom_bar(aes(fill = island), stat = "count") +
-  # scale_y_discrete(breaks = scales::breaks_width(width = 1)) +
-  scale_color_paletteer_d(palette = "ggsci::category10_d3") +
-  ggthemes::theme_igray() +
-  theme(legend.position = "none") +
-  labs(title = "Figure 8.2",
-       x = "island")
-```
-
-
-
-## Markov chain Monte Carlo
-
-
-### Gibbs sampling
-
-
-### Hamiltonian Monte Carlo
-
-
-
-## Easy HMC: `map2stan`
-
-
-```{r}
-data(rugged)
-d <- rugged
-```
-
-
-### Preparation
-
-
-```{r}
-dd <- d %>%
-  mutate(log_gdp = log(rgdppc_2000)) %>%
-  drop_na(rgdppc_2000) %>%
-  select(log_gdp, rugged, cont_africa)
-```
-
-
-### Estimation
-
-```{r}
-a_file <- here::here(getwd(), "fits", "b08_01.rds")  # rds file location
-b8.1 <- readRDS(file = a_file)  # load the file
-b8.1 <- brms::brm(data = dd,
-                  family = gaussian,
-                  formula = log_gdp ~ 1 + rugged + cont_africa + rugged:cont_africa,
-                  prior = c(prior(normal(0, 100), class = Intercept),
-                            prior(normal(0, 10), class = b),
-                            prior(cauchy(0, 2), class = sigma)),
-                  seed = 8,
-                  file = a_file)
-print(b8.1)
-```
-
-
-
-## Care and feeding of your Markov chain
-
-
-
-## Summary
-
-
-## Practice
-
+## 8E1 {-}

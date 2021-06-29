@@ -60,15 +60,21 @@ used.
 ### (1) {-}
 
 $$
-cooking_i = \alpha + \beta_1 \cdot heat_i +\beta_2 \cdot moist_i + 
+\begin{align*}
+cooking_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot heat_i +\beta_2 \cdot moist_i + 
 \beta_{3} \cdot moist_i \cdot heat_i
+\end{align*}
 $$
 
 ### (2) {-}
 
 
 $$
-speed_i = \alpha + \beta_1 \cdot cylinders_i +\beta_2 \cdot injection_i
+\begin{align*}
+speed_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot cylinders_i +\beta_2 \cdot injection_i
+\end{align*}
 $$
 
 
@@ -76,7 +82,10 @@ $$
 
 
 $$
-belief_i = \alpha + \beta_1 \cdot parents_i +\beta_2 \cdot friends_i
+\begin{align*}
+belief_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot parents_i +\beta_2 \cdot friends_i
+\end{align*}
 $$
 
 
@@ -85,7 +94,126 @@ $$
 
 
 $$
-intelligence_i = \alpha + \beta_1 \cdot social_i +\beta_2 \cdot appendage_i
+\begin{align*}
+intelligence_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot social_i +\beta_2 \cdot appendage_i
+\end{align*}
 $$
 
 ## 8M1 {-}
+
+Temperature interacts with water and/or shade to either cancel the water effect or
+increase the effect of shade or both.
+
+## 8M2 {-}
+
+Let the binary variable $T$ be the temperature effect where $H=1$ means it is 
+hot and $H=0$ when it is cold.
+
+and the initial model
+
+$$
+\mu_i \sim \alpha + \beta_W \cdot water\_c_i + \beta_S \cdot shade\_c_i
+$$
+
+now becomes
+
+
+$$
+\mu_i \sim \alpha + (1 - H_i) \cdot \beta_W \cdot water\_c_i + H_i \cdot \beta_S \cdot shade\_c_i
+$$
+
+
+## 8M3 {-}
+
+The relationship is that ravens depend on wolves for their food but the wolves
+don't depend on the raven.  The question states that ravens depends on wolves.
+It is not clear that they depend entirely as a parasite does for example.
+
+The data would be one where ravens success increases as function of wolves
+success.  It is not an interaction which would cause the presence of ravens and
+wolves to impact their mutual success in a way similar as if a third variable
+affected both and increase as well as decrease their mutual success.
+
+
+## 8H1 {-}
+
+```{r}
+data(tulips, package = "rethinking")
+d <- tulips %>%
+  mutate(blooms_r = scales::rescale(blooms),
+         water_c = as.vector(scale(water, scale = FALSE)),
+         shade_c = as.vector(scale(shade, scale = FALSE)))
+stopifnot(is.factor(d$bed))  # must be a factor to use with brms as category
+rm(tulips)
+skimr::skim(d)
+```
+
+### Model and fit {-}
+
+$$
+\begin{align*}
+blooms\_r_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha_{bed[i]} + \beta_W \cdot water\_c_i+ \beta_S \cdot shade\_c_i \\
+\alpha_{bed[i]} &\sim \mathcal{N}(0.5, 1) \\
+\beta_W &\sim \mathcal{N}(0, 1) \\
+\beta_S &\sim \mathcal{N}(0, 1) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b08H01.rds")
+b08H01 <- readRDS(file = a_file)
+# b08H01 <- brm(
+#   data = d,
+#   family = gaussian,
+#   formula = blooms_r ~ 0 + bed + water_c + shade_c,
+#   prior = c(prior(normal(0.5, 0.25), class = b),
+#             prior(normal(0, 0.25), class = b, coef = water_c),
+#             prior(normal(0, 0.25), class = b, coef = shade_c),
+#             prior(exponential(1), class = sigma)),
+#   iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
+# b08H01 <- brms::add_criterion(b08H01, criterion = c("waic", "loo"))
+# saveRDS(b08H01, file = a_file)
+summary(b08H01)
+```
+
+
+## 8H2 {-}
+
+
+```{r}
+a_file <- here::here("fits", "b08H02.rds")
+# b08H02 <- readRDS(file = a_file)
+b08H02 <- brm(
+  data = d,
+  family = gaussian,
+  formula = blooms_r ~ 1 + water_c + shade_c,
+  prior = c(prior(normal(0.5, 0.25), class = Intercept),
+            prior(normal(0, 0.25), class = b),
+            prior(exponential(1), class = sigma)),
+  iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
+b08H02 <- brms::add_criterion(b08H02, criterion = c("waic", "loo"))
+saveRDS(b08H02, file = a_file)
+summary(b08H02)
+```
+
+
+```{r}
+w <- loo::loo_compare(b08H01, b08H02, criterion = "waic")
+print(w, simplify = FALSE)
+```
+
+The water and shade effect is the same.  Now however the intercept or 0.36 is
+the same as the mean of the 3 bed intercepts we had in 8H1 above.  In other words
+the model in 8H1 breaks down the intercept into the three beds showing their ingluence
+on the growth.
+
+8H3 {-}
+
+
+
+
+
