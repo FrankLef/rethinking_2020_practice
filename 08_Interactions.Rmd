@@ -450,28 +450,47 @@ print(b08H04a, digits = 3)
 
 
 ```{r}
-stop("TODO")
+# stop("TODO")
 set.seed(8)
 b08H04a_prior <- prior_samples(b08H04a)
+glimpse(b08H04a_prior)
 pd <-
   b08H04a_prior %>%
   slice_sample(n = 50) %>%
   tibble::rownames_to_column() %>%
-  expand(nesting(rowname, Intercept, b), rugged_sc = c(-2, 2)) %>%
-  mutate(log_gdp_s = Intercept + b * rugged_sc,
-         rugged_s  = rugged_sc + mean(dd$rugged_s))
-# glimpse(pd)
+  expand(nesting(rowname, Intercept, b_mean.growing.season), mean.growing.season = c(0, 12)) %>%
+  mutate(lang.per.cap.log = Intercept + b_mean.growing.season * mean.growing.season)
+         # rugged_s  = rugged_sc + mean(dd$rugged_s))
+glimpse(pd)
 
-p2 <- ggplot(pd, aes(x = rugged_s, y = log_gdp_s, group = rowname)) +
+p1 <- ggplot(pd, aes(x = mean.growing.season, y = lang.per.cap.log, group = rowname)) +
   geom_line(color = "lavender") +
-  geom_hline(yintercept = range(dd$log_gdp_s), 
+  geom_hline(yintercept = range(d$lang.per.cap.log),
              size = 1, linetype = 2, color = "royalblue") +
-  coord_cartesian(xlim = c(0, 1), ylim = c(0.5, 1.5)) +
+  coord_cartesian(xlim = c(0, 12), ylim = c(-5, 15)) +
   labs(
-    subtitle = "Intercept ~ dnorm(0, 0.1)\nb ~ dnorm(0, 0.3)",
-    x = "ruggedness (rescaled)",
-    y = "log GDP (prop of mean)") +
+    subtitle = "Intercept ~ dnorm(5, 2.5)\nb ~ dnorm(0.5, 0.25)",
+    x = "mean.growing.season",
+    y = "lang.per.cap.log") +
+  ggthemes::theme_hc()
+# p1
+pd <-
+  b08H04a_prior %>%
+  slice_sample(n = 50) %>%
+  tibble::rownames_to_column() %>%
+  expand(nesting(rowname, Intercept, b_area.log), area.log = c(9, 16)) %>%
+  mutate(lang.per.cap.log = Intercept + b_area.log * area.log)
+p2 <- ggplot(pd, aes(x = area.log, y = lang.per.cap.log, group = rowname)) +
+  geom_line(color = "lavender") +
+  geom_hline(yintercept = range(d$lang.per.cap.log),
+             size = 1, linetype = 2, color = "royalblue") +
+  coord_cartesian(xlim = c(9, 16), ylim = c(-5, 15)) +
+  labs(
+    subtitle = "Intercept ~ dnorm(5, 2.5)\nb ~ dnorm(0.75, 0.5)",
+    x = "area.log",
+    y = "lang.per.cap.log") +
   ggthemes::theme_hc()
 # p2
+p1 + p2
 ```
 
