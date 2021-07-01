@@ -375,15 +375,18 @@ $lang.per.cap.log \in [-10,0]$.  To avoid the negative outcome which cause
 a positive slope (required by our hypothesis), we rescale $lang.per.cap.log$
 to be in $[0,10]$
 
+We also rescale $mean.growing.season$ and $sd.growing.season$ to $[0,10]$
+
 
 
 ```{r}
 data(nettle)
 d <- nettle %>%
-  mutate(area.log = log(area),
+  mutate(area.log = scales::rescale(log(area), to = c(0, 10)),
+         mean.growing.season = scales::rescale(mean.growing.season, to = c(0, 10)),
+         sd.growing.season = scales::rescale(sd.growing.season, to = c(0, 10)),
          lang.per.cap = num.lang / k.pop,
-         lang.per.cap.log = log(lang.per.cap),
-         lang.per.cap.log = scales::rescale(lang.per.cap.log, to = c(0, 10)))
+         lang.per.cap.log = scales::rescale(log(lang.per.cap), to = c(0, 10)))
 rm(nettle)
 skimr::skim(d)
 ```
@@ -397,18 +400,20 @@ See section 8.1.1 on how to estimate the priors.
 Since $lang.per.cap.log \in [0,10]$ with mean about 5 then we use
 $\alpha \sim \mathcal{N}(5,2.5)$.
 
-Since $lang.per.cap.log \in [0,10]$ $mean.growing.season \in [0,12]$ 
-which gives a maximum slope of $\frac{10-0}{12-0} \approx 1$ which should be a 
+Since $lang.per.cap.log \in [0,10]$ $mean.growing.season \in [0,10]$ 
+which gives a maximum slope of $\frac{10-0}{10-0} \approx 1$ which should be a 
 positive slope since we have the hypothesis that language diversity increases 
 with the $mean.growing.season$. Therefore $\beta_{GM} &\sim \mathcal{N}(0.5,0.25)$
 
-Similarly, since $lang.per.cap.log \in [0,10]$ and $area.log \in [9,16]$ 
-which gives a maximum slope of $\frac{10-0}{16-9} \approx 1.5$ which should be 
+Similarly, since $lang.per.cap.log \in [0,10]$ and $area.log \in [0,10]$ 
+which gives a maximum slope of $\frac{10-0}{10-0} = 1$ which should be 
 positive slope since we have the hypothesis that language diversity increases with the $area.log$.
-Therefore $\beta_{A} &\sim \mathcal{N}(0.75,0.5)$
+Therefore $\beta_{A} &\sim \mathcal{N}(0.5,0.25)$
 
 
-#### The model {-}
+#### The models {-}
+
+We will create 4 models who are variations of the following full model
 
 $$
 \begin{align*}
@@ -416,49 +421,119 @@ lang.per.cap.log_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \mu_i &= \alpha + \beta_{GM} \cdot mean.growing.season_i + \beta_A \cdot area.log_i \\
 \alpha &\sim \mathcal{N}(5,2.5) \\
 \beta_{GM} &\sim \mathcal{N}(0.5,0.25) \\
-\beta_{A} &\sim \mathcal{N}(0.75,0.5) \\
+\beta_{A} &\sim \mathcal{N}(0.5,0.25) \\
 \sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
 
+
 #### The fit {-}
 
+The *null* model
+
 ```{r}
-a_file <- here::here(getwd(), "fits", "b08H04a.rds")  # rds file location
-b08H04a <- readRDS(file = a_file)
-# b08H04a <- brm(
+a_file <- here::here(getwd(), "fits", "b08H04a0.rds")
+b08H04a0 <- readRDS(file = a_file)
+# b08H04a0 <- brm(
 #   data = d,
-#   formula = lang.per.cap.log ~ 1 + mean.growing.season + area.log,
+#   formula = lang.per.cap.log ~ 1,
 #   family = gaussian,
 #   prior = c(
 #     prior(normal(5, 2.5), class = Intercept),
-#     prior(normal(0.5, 0.25), class = b, coef = "mean.growing.season"),
-#     prior(normal(0.75, 0.5), class = b, coef = "area.log"),
 #     prior(exponential(1), class = sigma)
 #   ),
 #   sample_prior = TRUE,
 #   iter = 2000, warmup = 1000, chains = 4, cores = detectCores(),
 #   seed = 8
 # )
-# b08H04a <- brms::add_criterion(b08H04a, criterion = c("waic", "loo"))
-# saveRDS(b08H04a, file = a_file)
-print(b08H04a, digits = 3)
+# b08H04a0 <- brms::add_criterion(b08H04a0, criterion = c("waic", "loo"))
+# saveRDS(b08H04a0, file = a_file)
+print(b08H04a0, digits = 3)
 ```
+
+
+with the *mean.growing.season* effect
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04a1.rds")
+b08H04a1 <- readRDS(file = a_file)
+# b08H04a1 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + mean.growing.season,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "mean.growing.season"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04a1 <- brms::add_criterion(b08H04a1, criterion = c("waic", "loo"))
+# saveRDS(b08H04a1, file = a_file)
+print(b08H04a1, digits = 3)
+```
+
+with the *area.log* effect
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04a2.rds")
+b08H04a2 <- readRDS(file = a_file)
+# b08H04a2 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + area.log,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "area.log"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04a2 <- brms::add_criterion(b08H04a2, criterion = c("waic", "loo"))
+# saveRDS(b08H04a2, file = a_file)
+print(b08H04a2, digits = 3)
+```
+
+with both *mean.growing.season* and *area.log*
+
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04a3.rds")
+b08H04a3 <- readRDS(file = a_file)
+# b08H04a3 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + mean.growing.season + area.log,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "mean.growing.season"),
+#     prior(normal(0.5, 0.25), class = b, coef = "area.log"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04a3 <- brms::add_criterion(b08H04a3, criterion = c("waic", "loo"))
+# saveRDS(b08H04a3, file = a_file)
+print(b08H04a3, digits = 3)
+```
+
 
 #### Validate the priors {-}
 
 
 
 ```{r}
-# stop("TODO")
 set.seed(8)
-b08H04a_prior <- prior_samples(b08H04a)
-glimpse(b08H04a_prior)
+b08H04a1_prior <- prior_samples(b08H04a1)
+# glimpse(b08H04a1_prior)
 pd <-
-  b08H04a_prior %>%
+  b08H04a1_prior %>%
   slice_sample(n = 50) %>%
   tibble::rownames_to_column() %>%
-  expand(nesting(rowname, Intercept, b_mean.growing.season), mean.growing.season = c(0, 12)) %>%
+  expand(nesting(rowname, Intercept, b_mean.growing.season), mean.growing.season = c(0, 10)) %>%
   mutate(lang.per.cap.log = Intercept + b_mean.growing.season * mean.growing.season)
          # rugged_s  = rugged_sc + mean(dd$rugged_s))
 glimpse(pd)
@@ -467,24 +542,25 @@ p1 <- ggplot(pd, aes(x = mean.growing.season, y = lang.per.cap.log, group = rown
   geom_line(color = "lavender") +
   geom_hline(yintercept = range(d$lang.per.cap.log),
              size = 1, linetype = 2, color = "royalblue") +
-  coord_cartesian(xlim = c(0, 12), ylim = c(-5, 15)) +
+  coord_cartesian(xlim = c(0, 10), ylim = c(-5, 15)) +
   labs(
     subtitle = "Intercept ~ dnorm(5, 2.5)\nb ~ dnorm(0.5, 0.25)",
     x = "mean.growing.season",
     y = "lang.per.cap.log") +
   ggthemes::theme_hc()
 # p1
+b08H04a2_prior <- prior_samples(b08H04a2)
 pd <-
-  b08H04a_prior %>%
+  b08H04a2_prior %>%
   slice_sample(n = 50) %>%
   tibble::rownames_to_column() %>%
-  expand(nesting(rowname, Intercept, b_area.log), area.log = c(9, 16)) %>%
+  expand(nesting(rowname, Intercept, b_area.log), area.log = c(0, 10)) %>%
   mutate(lang.per.cap.log = Intercept + b_area.log * area.log)
 p2 <- ggplot(pd, aes(x = area.log, y = lang.per.cap.log, group = rowname)) +
   geom_line(color = "lavender") +
   geom_hline(yintercept = range(d$lang.per.cap.log),
              size = 1, linetype = 2, color = "royalblue") +
-  coord_cartesian(xlim = c(9, 16), ylim = c(-5, 15)) +
+  coord_cartesian(xlim = c(0, 10), ylim = c(-5, 15)) +
   labs(
     subtitle = "Intercept ~ dnorm(5, 2.5)\nb ~ dnorm(0.75, 0.5)",
     x = "area.log",
@@ -493,4 +569,260 @@ p2 <- ggplot(pd, aes(x = area.log, y = lang.per.cap.log, group = rowname)) +
 # p2
 p1 + p2
 ```
+
+#### Compare the models {-}
+
+```{r}
+w <- loo::loo_compare(b08H04a0, b08H04a1, b08H04a2, b08H04a3, criterion = "waic")
+print(w, simplify = FALSE)
+```
+
+with the models' weights
+
+```{r}
+brms::model_weights(b08H04a0, b08H04a1, b08H04a2, b08H04a3, weights = "waic") %>% 
+  round(digits = 3)
+```
+which seems to indicate that the model with `mean.growing.season` is the most
+informative.  A mix of the univariate model with `mean.growing.season` and the
+multivariate model can be considered based on the weights.
+
+Given that the `elpd_diff` for b08H04a3 is -0.6 which exceeds the `se_diff` of
+b08H04a1 then we select b08H04a1 as our model of choice.
+
+
+#### Plotting the model
+
+
+
+```{r}
+b08H04a_seq <- data.frame(
+  mean.growing.season = seq(from = 0, to = 10, length.out = 30))
+# glimpse(b08H04a_seq)
+b08H04a_fitted <- fitted(b08H04a1, newdata = b08H04a_seq, probs = c(0.015, 0.985)) %>%
+  data.frame() %>%
+  bind_cols(b08H04a_seq)
+# glimpse(b08H04a_fitted)
+```
+
+
+```{r}
+ggplot(d, aes(x = mean.growing.season, 
+              y = lang.per.cap.log)) +
+  geom_point(aes(size = area.log, color = mean.growing.season)) +
+  geom_smooth(data = b08H04a_fitted, aes(x = mean.growing.season, y = Estimate, 
+                                         ymin = Q1.5, ymax = Q98.5),
+              fill = "slategray1",
+              color = "slateblue1",
+              stat = "identity",
+              alpha = 1/4, size = 1) +
+  scale_color_paletteer_c(palette = "grDevices::Heat") +
+  theme_minimal() +
+  theme(legend.position = "right") +
+  labs(title = "8H4 (a)", 
+       subtitle = paste("b08H04a1:", deparse1(b08H04a1$formula$formula)),
+       x = "mean.growing.season (rescaled on [0,10])",
+       y = "lang.per.cap (log)",
+       size = "log.area", color = "sd")
+```
+
+
+### (b) {-}
+
+Using the same process as in (a) just above
+
+#### The fit {-}
+
+The *null* model, same as in (a) above
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04a0.rds")
+b08H04a0 <- readRDS(file = a_file)
+print(b08H04a0, digits = 3)
+```
+
+
+with the *sd.growing.season* effect
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04b1.rds")
+b08H04b1 <- readRDS(file = a_file)
+# b08H04b1 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + sd.growing.season,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "sd.growing.season"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04b1 <- brms::add_criterion(b08H04b1, criterion = c("waic", "loo"))
+# saveRDS(b08H04b1, file = a_file)
+print(b08H04b1, digits = 3)
+```
+
+with the *area.log* effect, same as before in (a)
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04a2.rds")
+b08H04a2 <- readRDS(file = a_file)
+print(b08H04a2, digits = 3)
+```
+
+with both *sd.growing.season* and *area.log*
+
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04b3.rds")
+b08H04b3 <- readRDS(file = a_file)
+# b08H04b3 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + sd.growing.season + area.log,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "sd.growing.season"),
+#     prior(normal(0.5, 0.25), class = b, coef = "area.log"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04b3 <- brms::add_criterion(b08H04b3, criterion = c("waic", "loo"))
+# saveRDS(b08H04b3, file = a_file)
+print(b08H04b3, digits = 3)
+```
+
+
+#### Compare the models {-}
+
+```{r}
+w <- loo::loo_compare(b08H04a0, b08H04b1, b08H04a2, b08H04b3, criterion = "waic")
+print(w, simplify = FALSE)
+```
+
+with the models' weights
+
+```{r}
+brms::model_weights(b08H04a0, b08H04b1, b08H04a2, b08H04b3, weights = "waic") %>% 
+  round(digits = 3)
+```
+In this case, the elpd_diff are very small and the model weights similar.  None of
+the effects, even together seem to make a big difference.
+
+Therefore the anayliss support the hypothesis that $sd.gorwing.season$ has a
+negative effect on language diversity.  However this effect seems rather small
+with a higher degree of certeinty than the $mean.growing.season$ effect.
+
+
+#### Plotting the model
+
+We se the model b08H4b1 to visualize, there is so little elpd_diff with the
+other models that its use is no worse than using the other models.
+
+```{r}
+b08H04b_seq <- data.frame(
+  sd.growing.season = seq(from = 0, to = 10, length.out = 30))
+# glimpse(b08H04b_seq)
+b08H04b_fitted <- fitted(b08H04b1, newdata = b08H04b_seq, probs = c(0.015, 0.985)) %>%
+  data.frame() %>%
+  bind_cols(b08H04b_seq)
+# glimpse(b08H04b_fitted)
+```
+
+
+```{r}
+ggplot(d, aes(x = sd.growing.season, 
+              y = lang.per.cap.log)) +
+  geom_point(aes(size = area.log, color = mean.growing.season)) +
+  geom_smooth(data = b08H04b_fitted, aes(x = sd.growing.season, y = Estimate, 
+                                         ymin = Q1.5, ymax = Q98.5),
+              fill = "wheat1",
+              color = "tan1",
+              stat = "identity",
+              alpha = 1/4, size = 1) +
+  scale_color_paletteer_c(palette = "grDevices::Heat 2") +
+  theme_minimal() +
+  theme(legend.position = "right") +
+  labs(title = "8H4 (b)", 
+       subtitle = paste("b08H04b1:", deparse1(b08H04b1$formula$formula)),
+       x = "sd.growing.season (rescaled on [0,10])",
+       y = "lang.per.cap (log)",
+       size = "log.area", color = "mean")
+```
+
+
+### (c) {-}
+
+Now using an interaction between $mean.growing.season$ and $sd.growing.season$
+we have the following model
+
+
+$$
+\begin{align*}
+lang.per.cap.log_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_{M} \cdot mean.growing.season_i + 
+ \beta_{S} \cdot sd.growing.season_i + 
+ \beta_{MS} \cdot mean.growing.season_i \cdot sd.growing.season_i \\
+\alpha &\sim \mathcal{N}(5,2.5) \\
+\beta_{GM} &\sim \mathcal{N}(0.5,0.25) \\
+\beta_{GS} &\sim \mathcal{N}(0.5,0.25) \\
+\beta_{MS} &\sim \mathcal{N}(0.5,0.25) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H04c1.rds")
+b08H04c1 <- readRDS(file = a_file)
+# b08H04c1 <- update(
+#   object = b08H04a0,
+#   newdata = d,
+#   formula = lang.per.cap.log ~ 1 + mean.growing.season + sd.growing.season + 
+#     mean.growing.season:sd.growing.season,
+#   prior = c(
+#     prior(normal(5, 2.5), class = Intercept),
+#     prior(normal(0.5, 0.25), class = b, coef = "mean.growing.season"),
+#     prior(normal(0.5, 0.25), class = b, coef = "sd.growing.season"),
+#     prior(normal(0.5, 0.25), class = b, coef = "mean.growing.season:sd.growing.season"),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   sample_prior = TRUE,
+#   seed = 8
+# )
+# b08H04c1 <- brms::add_criterion(b08H04c1, criterion = c("waic", "loo"))
+# saveRDS(b08H04c1, file = a_file)
+print(b08H04c1, digits = 3)
+```
+
+#### Compare the models {-}
+
+```{r}
+w <- loo::loo_compare(b08H04a0, b08H04a1, b08H04a2, b08H04a3, 
+                      b08H04b1, b08H04b3,
+                      b08H04c1, criterion = "waic")
+print(w, simplify = FALSE)
+```
+
+with the models' weights
+
+```{r}
+brms::model_weights(b08H04a0, b08H04a1, b08H04a2, b08H04a3, 
+                      b08H04b1, b08H04b3,
+                      b08H04c1, weights = "waic") %>% 
+  round(digits = 3)
+```
+In this case, the comparison is in favor of the model with interactions
+between $mean.growing.season$ and $sd.growing.season$.  The model is actually
+better than all models considered so far. The difference is significant as
+all other models have a `elpd_diff` greater than `se_diff`.
+
+Therefore the hypotheses defined in (c) seems to be the best one.
+
+
+## 8H5 {-}
+
 

@@ -88,7 +88,7 @@ scales::show_col(tmp$pal)
 tmp$pal <- paletteer::paletteer_c("oompaBase::jetColors", n = 30)
 scales::show_col(tmp$pal)
 
-# very nice rainbow-like wider range of colors . . .except for the blacks are bth extremes
+# very nice rainbow-like wider range of colors . . .except for the blacks are both extremes
 tmp$pal <- paletteer::paletteer_c("palr::chl_pal", n = 16)
 scales::show_col(tmp$pal)
 
