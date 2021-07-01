@@ -720,7 +720,7 @@ with a higher degree of certeinty than the $mean.growing.season$ effect.
 
 #### Plotting the model
 
-We se the model b08H4b1 to visualize, there is so little elpd_diff with the
+We use the model b08H4b1 to visualize, there is so little elpd_diff with the
 other models that its use is no worse than using the other models.
 
 ```{r}
@@ -823,6 +823,71 @@ all other models have a `elpd_diff` greater than `se_diff`.
 Therefore the hypotheses defined in (c) seems to be the best one.
 
 
+#### Plotting
+
+```{r}
+b08H04c_seq <- crossing(
+  mean.growing.season = seq(from = 0, to =10, length.out = 20), 
+  sd.growing.season = seq(from = 0, to = 10, length.out = 6))
+
+b08H04c_fitted <- fitted(b08H04c1, newdata = b08H04c_seq, probs = c(0.015, 0.985)) %>%
+  data.frame() %>%
+  bind_cols(b08H04c_seq) %>%
+  mutate(
+    id = sprintf("sd = %02d", sd.growing.season)
+  ) %>%
+  arrange(id)
+glimpse(b08H04c_fitted)
+```
+
+```{r}
+ggplot(b08H04c_fitted, aes(x = mean.growing.season, y = Estimate, ymin = Q1.5, ymax = Q98.5)) +
+  geom_smooth(stat = "identity", fill = "aquamarine",
+              alpha = 1/4, size = 1/2) +
+  # geom_point(data = d, color = "steelblue") +
+  # scale_x_continuous(breaks = c(-1, 0, 1)) +
+  # scale_y_continuous(breaks = c(0, .5, 1)) +
+  # coord_cartesian(xlim = c(-1, 1), ylim = c(0, 1)) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "lightsalmon")) +
+  labs(title = "8H4 (c)", 
+       subtitle = paste("b08H04c1:", deparse1(b08H04c1$formula$formula)),
+       x = "sd.growing.season (rescaled on [0,10])", y = "ang.per.cap (log)") +
+  facet_wrap(. ~ id, nrow = 2)
+```
+
+
+
 ## 8H5 {-}
 
+```{r}
+data(Wines2012)
+d <- Wines2012 %>%
+  mutate(score.s = as.vector(scale(score)))
+rm(Wines2012)
+skimr::skim(d)
+```
+
+We have to use index variables with 2 variables.  See @kurtz2020b in his
+section 5.3.2 with model b5.11.
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H05a.rds")
+b08H05a <- readRDS(file = a_file)
+# b08H05a <- 
+#   brm(data = d, 
+#       family = gaussian,
+#       bf(score.s ~ 0 + j + w, 
+#          j ~ 0 + judge, 
+#          w ~ 0 + wine,
+#          nl = TRUE),
+#       prior = c(prior(normal(0, 0.5), nlpar = j),
+#                 prior(normal(0, 0.5), nlpar = w),
+#                 prior(exponential(1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
+# b08H05a <- brms::add_criterion(b08H05a, criterion = c("waic", "loo"))
+# saveRDS(b08H05a, file = a_file)
+print(b08H05a, digits = 3)
+```
 
