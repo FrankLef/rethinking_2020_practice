@@ -8,7 +8,7 @@ library(loo)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
-library(bayesplot, quietly = TRUE)
+library(ggmcmc, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
 ```
@@ -63,3 +63,468 @@ $\mathcal{\widehat{R}} \leqslant{1}$.  See Rethinking box in section 9.5.2,
 p. 289.
 
 ## 9E6 {-}
+
+### Model and fit {-}
+
+We use the `rugged` data set as used in section 9.4.
+
+
+```{r}
+data(rugged)
+d <- rugged %>%
+  filter(complete.cases(rgdppc_2000)) %>%
+  mutate(log_gdp = log(rgdppc_2000),
+         is_africa = if_else(cont_africa == 1, "Africa", "Not Africa"),
+         is_africa = as.factor(is_africa)) %>%
+  drop_na(rgdppc_2000) %>%
+  mutate(log_gdp_s = log_gdp / mean(log_gdp),
+         rugged_s = scales::rescale(rugged),
+         # rugged_s = rugged / max(rugged),
+         rugged_sc = as.vector(scale(rugged_s, center = TRUE, scale = FALSE)),
+         cid = as.factor(if_else(cont_africa == 1, "1", "2")))
+rm(rugged)
+# skimr::skim(d)
+```
+with the following model which is the equivalent of `m9.1` in @elreath2020.
+
+
+
+$$
+\begin{align*}
+log\_gdp\_s_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu &= \alpha_{cid[i]} + \beta_{cid[i]} \cdot rugged\_sc \\
+\alpha_{cid[i]} &\sim \mathcal{N}(1, 0.1) \\
+\beta_{cid[i]} &\sim \mathcal{N}(1, 0.3) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+and the fit
+
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b09E06.rds")
+b09E06 <- readRDS(file = a_file)
+# b09E06 <- brms::brm(data = d,
+#                   family = gaussian,
+#                   formula = bf(log_gdp_s ~ 0 + a + b*(rugged_sc),
+#                                a ~ 0 + cid,
+#                                b ~ 0 + cid,
+#                                nl = TRUE),
+#                   prior = c(prior(normal(1, 0.1), class = b, coef = cid1, nlpar = a),
+#                             prior(normal(1, 0.1), class = b, coef = cid2, nlpar = a),
+#                             prior(normal(0, 0.3), class = b, coef = cid1, nlpar = b),
+#                             prior(normal(0, 0.3), class = b, coef = cid2, nlpar = b),
+#                             prior(exponential(1), class = sigma)),
+#                   chains = 4, cores = detectCores(), seed = 9)
+# saveRDS(b09E06, file = a_file)
+summary(b09E06)
+```
+
+The trace plot will be created.  But also the **running means** and
+**crosscorrelations** plots which are, for me at least, as much informative as
+the trace and trank plots and easier to understand.
+
+
+### Trace plot {-}
+
+Get the data for plotting with `ggmcmc`
+
+```{r}
+b09E06_ggs <- ggmcmc::ggs(b09E06)
+str(b09E06_ggs)
+```
+
+and the trace plot
+
+```{r}
+ggmcmc::ggs_traceplot(b09E06_ggs) +
+  scale_color_paletteer_d("ggthemes::Tableau_10") +
+  theme_minimal() +
+  # ggthemes::theme_clean() +
+  labs(title = "Trace plot",
+       subtitle = "Model b09E06", color = "chain")
+```
+
+If the chain takes a long time or behave in an erratic manner, i.e. has many
+divergent points (see running mens plot below), or much autocorrelations
+(see autocorelations plot below), then these indicate a malfunction.
+
+### Running means {-}
+
+
+
+```{r}
+ggmcmc::ggs_running(b09E06_ggs) +
+  scale_color_paletteer_d("ggthemes::Tableau_10") +
+  theme_minimal() +
+  labs(title = "Running means",
+       subtitle = "Model b09E06", color = "chain")
+```
+
+### Autocorrelations {-}
+
+
+```{r}
+ggmcmc::ggs_autocorrelation(b09E06_ggs) +
+  scale_fill_paletteer_d("ggthemes::Tableau_10") +
+  scale_color_paletteer_d("ggthemes::Tableau_10", guide = FALSE) +
+  theme_minimal() + 
+  labs(title = "Autocorrelations",
+       subtitle = "Model b09E06", color = NULL, fill = "chain")
+```
+
+## 9E7 {-}
+
+The trank plot is done with `bayesplot`
+
+```{r}
+tidybayes::get_variables(b09E06)
+```
+
+
+
+```{r}
+b09E06_post <- posterior_samples(b09E06, add_chain = TRUE)
+b09E06_post %>% 
+  bayesplot::mcmc_rank_overlay(pars = vars(b_a_cid1:sigma)) +
+  scale_color_paletteer_d("ggthemes::Tableau_10") +
+  coord_cartesian(ylim = c(25, NA)) +
+  theme(legend.position = c(.95, .20)) +
+  labs(title = "Trank plot",
+       subtitle = "Model b09E06", color = "chain")
+```
+
+## 9M1 {-}
+
+Same data as in 9E6 above.  But now the model is
+
+
+$$
+\begin{align*}
+log\_gdp\_s_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu &= \alpha_{cid[i]} + \beta_{cid[i]} \cdot rugged\_sc \\
+\alpha_{cid[i]} &\sim \mathcal{N}(1, 0.1) \\
+\beta_{cid[i]} &\sim \mathcal{N}(1, 0.3) \\
+\sigma &\sim \mathcal{Uniform}(0,1)
+\end{align*}
+$$
+
+and the fit is
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b09M01.rds")
+b09M01 <- readRDS(file = a_file)
+# b09M01 <- brms::brm(data = d,
+#                   family = gaussian,
+#                   formula = bf(log_gdp_s ~ 0 + a + b*(rugged_sc),
+#                                a ~ 0 + cid,
+#                                b ~ 0 + cid,
+#                                nl = TRUE),
+#                   prior = c(prior(normal(1, 0.1), class = b, coef = cid1, nlpar = a),
+#                             prior(normal(1, 0.1), class = b, coef = cid2, nlpar = a),
+#                             prior(normal(0, 0.3), class = b, coef = cid1, nlpar = b),
+#                             prior(normal(0, 0.3), class = b, coef = cid2, nlpar = b),
+#                             prior(uniform(0,1), class = sigma)),
+#                   chains = 4, cores = detectCores(), seed = 9)
+# saveRDS(b09M01, file = a_file)
+summary(b09M01)
+```
+### Running means {-}
+
+```{r}
+b09M01_ggs <- ggmcmc::ggs(b09M01)
+```
+
+
+```{r}
+ggmcmc::ggs_running(b09M01_ggs) +
+  scale_color_paletteer_d("ggthemes::Classic_10") +
+  theme_minimal() +
+  labs(title = "Running means",
+       subtitle = "Model b09M01", color = "chain")
+```
+
+### Autocorrelations {-}
+
+
+```{r}
+ggmcmc::ggs_autocorrelation(b09M01_ggs) +
+  scale_fill_paletteer_d("ggthemes::Classic_10") +
+  scale_color_paletteer_d("ggthemes::Classic_10", guide = FALSE) +
+  theme_minimal() + 
+  labs(title = "Autocorrelations",
+       subtitle = "Model b09M01", color = NULL, fill = "chain")
+```
+
+
+
+```{r}
+b09M01_post <- posterior_samples(b09M01, add_chain = TRUE)
+b09M01_post %>% 
+  bayesplot::mcmc_rank_overlay(pars = vars(b_a_cid1:sigma)) +
+  scale_color_paletteer_d("ggthemes::Classic_10") +
+  coord_cartesian(ylim = c(25, NA)) +
+  theme(legend.position = c(.95, .20)) +
+  labs(title = "Trank plot",
+       subtitle = "Model b09M01", color = "chain")
+```
+
+It does not have detectible influence.  Because sigma is about 0.11 and therefore
+a prior within $[0,1]$ works.  Uniform prior will probably less efficient time but
+should reach the same conclusion.
+
+## 9M2 {-}
+
+The model is now
+
+
+
+$$
+\begin{align*}
+log\_gdp\_s_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu &= \alpha_{cid[i]} + \beta_{cid[i]} \cdot rugged\_sc \\
+\alpha_{cid[i]} &\sim \mathcal{N}(1, 0.1) \\
+\beta_{cid[i]} &\sim \mathcal{Exp}(0.3) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b09M02.rds")
+b09M02 <- readRDS(file = a_file)
+# b09M02 <- brms::brm(data = d,
+#                   family = gaussian,
+#                   formula = bf(log_gdp_s ~ 0 + a + b*(rugged_sc),
+#                                a ~ 0 + cid,
+#                                b ~ 0 + cid,
+#                                nl = TRUE),
+#                   prior = c(prior(normal(1, 0.1), class = b, coef = cid1, nlpar = a),
+#                             prior(normal(1, 0.1), class = b, coef = cid2, nlpar = a),
+#                             prior(exponential(0.3), class = b, coef = cid1, nlpar = b),
+#                             prior(exponential(0.3), class = b, coef = cid2, nlpar = b),
+#                             prior(exponential(1), class = sigma)),
+#                   chains = 4, cores = detectCores(), seed = 9)
+# saveRDS(b09M02, file = a_file)
+summary(b09M02)
+```
+
+
+We now have a lot of divergent points.  See the autocorrelations plot for $b_{cid[i]}$
+which shows much autocorrelations.
+
+
+
+```{r}
+b09M02_post <- posterior_samples(b09M02, add_chain = TRUE)
+b09M02_post %>% 
+  bayesplot::mcmc_rank_overlay(pars = vars(b_a_cid1:sigma)) +
+  scale_color_paletteer_d("ggthemes::Jewel_Bright") +
+  coord_cartesian(ylim = c(25, NA)) +
+  theme(legend.position = c(.95, .20)) +
+  labs(title = "Trank plot",
+       subtitle = "Model b09M02", color = "chain")
+```
+
+
+```{r}
+b09M02_ggs <- ggmcmc::ggs(b09M02)
+```
+
+
+
+```{r}
+ggmcmc::ggs_running(b09M02_ggs) +
+  scale_color_paletteer_d("ggthemes::Jewel_Bright") +
+  theme_minimal() +
+  labs(title = "Running means",
+       subtitle = "Model b09M02", color = "chain")
+```
+
+### Autocorrelations {-}
+
+
+```{r}
+ggmcmc::ggs_autocorrelation(b09M02_ggs) +
+  scale_fill_paletteer_d("ggthemes::Jewel_Bright") +
+  scale_color_paletteer_d("ggthemes::Jewel_Bright", guide = FALSE) +
+  theme_minimal() + 
+  labs(title = "Autocorrelations",
+       subtitle = "Model b09M02", color = NULL, fill = "chain")
+```
+
+## 9M3 {-}
+
+We use the data from rugged. See 9E6 above.
+
+This model has very little warmup with only 1 chain.  As a result a lot of 
+divergent points
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b09M03a.rds")
+b09M03a <- readRDS(file = a_file)
+# b09M03a <- brms::brm(data = d,
+#                   family = gaussian,
+#                   formula = bf(log_gdp_s ~ 0 + a + b*(rugged_sc),
+#                                a ~ 0 + cid,
+#                                b ~ 0 + cid,
+#                                nl = TRUE),
+#                   prior = c(prior(normal(1, 0.1), class = b, coef = cid1, nlpar = a),
+#                             prior(normal(1, 0.1), class = b, coef = cid2, nlpar = a),
+#                             prior(normal(0, 0.3), class = b, coef = cid1, nlpar = b),
+#                             prior(normal(0, 0.3), class = b, coef = cid2, nlpar = b),
+#                             prior(exponential(1), class = sigma)),
+#                   chains = 1, iter = 2000, warmup = 10, cores = detectCores(), seed = 9)
+# saveRDS(b09M03a, file = a_file)
+summary(b09M03a)
+```
+
+
+
+```{r}
+nuts_params(b09M03a) %>% 
+  distinct(Parameter)
+```
+
+
+```{r}
+nuts_params(b09M03a) %>%
+  filter(Parameter == "divergent__") %>%
+  count(Value)
+```
+
+Now we use a warmup of 100 instead of 10.  The ESS are much higher (better)
+as a result.
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b09M03b.rds")
+b09M03b <- readRDS(file = a_file)
+# b09M03b <- brms::brm(data = d,
+#                   family = gaussian,
+#                   formula = bf(log_gdp_s ~ 0 + a + b*(rugged_sc),
+#                                a ~ 0 + cid,
+#                                b ~ 0 + cid,
+#                                nl = TRUE),
+#                   prior = c(prior(normal(1, 0.1), class = b, coef = cid1, nlpar = a),
+#                             prior(normal(1, 0.1), class = b, coef = cid2, nlpar = a),
+#                             prior(normal(0, 0.3), class = b, coef = cid1, nlpar = b),
+#                             prior(normal(0, 0.3), class = b, coef = cid2, nlpar = b),
+#                             prior(exponential(1), class = sigma)),
+#                   chains = 1, iter = 2000, warmup = 100, cores = detectCores(), seed = 9)
+# saveRDS(b09M03b, file = a_file)
+summary(b09M03b)
+```
+
+## 9H1 {-}
+
+This is similar to section 9.5.3.  Model m9.2 and m9.3.
+
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{N}(\alpha, \sigma) \\
+\alpha &\sim \mathcal{N}(1, 1) \\
+\sigma &\sim \mathcal{Cauchy}(0, 1)
+\end{align*}
+$$
+```{r}
+a_file <- here::here(getwd(), "fits", "b09H01.rds")
+b09H01 <- readRDS(file = a_file)
+# b09H01 <-
+#   brm(data = list(y = c(1)),
+#       family = gaussian,
+#       y ~ 1,
+#       prior = c(prior(normal(0, 1), class = Intercept),
+#                 prior(cauchy(0, 1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 1, seed = 9)
+# saveRDS(b09H01, file = a_file)
+summary(b09H01)
+```
+
+### Trace plot {-}
+
+The difference between the plot is that the plot for sigma is only for
+positive values
+
+```{r}
+b09H01_ggs <- ggmcmc::ggs(b09H01)
+```
+
+
+```{r}
+ggmcmc::ggs_traceplot(b09H01_ggs) +
+  scale_color_paletteer_d("ggthemes::fivethirtyeight") +
+  theme_minimal() +
+  # ggthemes::theme_clean() +
+  labs(title = "Trace plot",
+       subtitle = "Model b09H01", color = "chain")
+```
+
+
+
+### Trank plot {-}
+
+```{r}
+tidybayes::get_variables(b09H01)
+```
+
+
+```{r}
+b09H01_post <- posterior_samples(b09H01, add_chain = TRUE)
+b09H01_post %>% 
+  bayesplot::mcmc_rank_overlay(pars = vars(b_Intercept:sigma)) +
+  scale_color_paletteer_d("ggthemes::fivethirtyeight") +
+  coord_cartesian(ylim = c(30, NA)) +
+  theme(legend.position = c(.95, .20)) +
+  labs(title = "Trank plot",
+       subtitle = "Model b09H01", color = "chain")
+```
+
+
+### Running means {-}
+
+
+```{r}
+ggmcmc::ggs_running(b09H01_ggs) +
+  scale_color_paletteer_d("ggthemes::fivethirtyeight") +
+  theme_minimal() +
+  labs(title = "Running means",
+       subtitle = "Model b09H01", color = "chain")
+```
+
+
+### Autocorrelations {-}
+
+
+```{r}
+ggmcmc::ggs_autocorrelation(b09H01_ggs) +
+  scale_fill_paletteer_d("ggthemes::fivethirtyeight") +
+  scale_color_paletteer_d("ggthemes::fivethirtyeight", guide = FALSE) +
+  theme_minimal() + 
+  labs(title = "Autocorrelations",
+       subtitle = "Model b09H01", color = NULL, fill = "chain")
+```
+
+## 9H2 {-}
+
+To do
+
+## 9H3 {-}
+
+To do
+
+## 9H4 {-}
+
+To do
+
+## 9H5 {-}
+
+To do
+
+## 9H6 {-}
+
+To do
+
+## 9H7 {-}
+
+To do
