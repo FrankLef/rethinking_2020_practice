@@ -16,4 +16,50 @@ library(paletteer, quietly = TRUE)
 
 # Markov Chain Monte Carlo {#MCMC}
 
-## 8E1 {-}
+## 9E1 {-}
+
+(1)  The parameters need NOT be discrete. See introduction to section 9.2, p. 267.
+(2) The distribution need NOT be gaussian. See introduction to section 9.2, p. 267.
+(3) The proposed distribution must be symmetric.  See the following quote
+    from the beginning of section 9.2.1, p. 267.
+    
+> The Metroplis algorithm works whenever the probability of proposing a jump
+to B from A is equal to the probability of proposing A from B, when the proposed
+distribution is symmetric.
+
+## 9E2 {-}
+
+It is more efficient, that is obtain estimates of the posterior distribution
+with many fewer samples. See section 9.2.1, p, 267.  It achieves that
+by using particular combinations of prior distributions knwon as conjugate pairs.
+See section 9.2.1, p, 268.
+
+Limitations are
+
+* Some conjugate priors are pathological in shape and you might not want to use them.
+See section 9.2.2, p. 268,
+* When the model is complex and contain many parameters, bot Metropolis and Gibbs
+algorithms become *shockingly inefficient*.  See section 9.2.2, p. 268.
+
+## 9E3 {-}
+
+The parameters must be continuous.  Because HMC is actually a simulation of a
+physic particle traveling in the space of  on the log-posterior surface
+
+See 9.3.1, p.271 and p. 272 and section 9.3.2 p. 273.
+
+
+## 9E4 {-}
+
+* `n_eff`: Effective nb of samples. An estimate of the number of independent
+samples from the posterior distribution. See beginning of section 9.5.1, p. 287.
+* Actual nb of samples: Raw number of samples. See beginning of section 9.5.1,
+p. 287.
+
+## 9E5 {-}
+
+The Gelman-Rubin convergence diagnostic, $\mathcal{\widehat{R}}$, should be
+$\mathcal{\widehat{R}} \leqslant{1}$.  See Rethinking box in section 9.5.2, 
+p. 289.
+
+## 9E6 {-}
