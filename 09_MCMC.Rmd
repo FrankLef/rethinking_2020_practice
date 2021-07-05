@@ -9,6 +9,7 @@ library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(ggmcmc, quietly = TRUE)
+library(bayesplot, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
 ```
