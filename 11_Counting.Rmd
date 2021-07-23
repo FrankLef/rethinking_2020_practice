@@ -19,4 +19,175 @@ library(paletteer, quietly = TRUE)
 
 ## 11E1 {-}
 
+```{r}
+prob <- 0.35
+# using the definition of logit
+lodds = log(prob / (1 - prob))
+lodds
+# in coding we use a predefined function such as `gtools::logit()`
+stopifnot(lodds == gtools::logit(prob))
+```
+## 11E2 {-}
+
+```{r}
+lodds <- 3.2
+prob = exp(lodds) / (1 + exp(lodds))
+prob
+# in coding we use a predefined function such as `gtools::inv.logit()`
+stopifnot(prob == gtools::inv.logit(lodds))
+```
+## 11E3 {-}
+
+See Overthinking box in section 11.1.2.
+
+
+Since the logistic regression is using the link function
+
+$$
+logit(p) = \log{\frac{p}{1-p}}= \alpha + \beta x
+$$
+
+then the odds are
+
+$$
+odds(p) = \frac{p}{1-p} = \exp{(\alpha + \beta x)}
+$$
+
+and the *proportional* effect of $\beta$ is found when we increase $x$ by one unit. That is
+the effect, called $z$, is found by solving for $z$
+
+$$
+\begin{align*}
+\exp{(\alpha + \beta x)} \cdot z &= \exp{(\alpha + \beta (x + 1))} \\
+z &= \frac{\exp{(\alpha + \beta x + 1)}}{\exp{(\alpha + \beta x)}} \\ &=
+ \frac{\exp{(\beta (x + 1))}}{\exp{(\beta x)}} \\
+ &= \exp(\beta)
+\end{align*}
+$$
+Therefore the proportional change $z$ is $e^\beta$ which in this case is
+
+```{r}
+exp(1.7)
+```
+
+## 11E4 {-}
+
+See section 11.2.3 for details.
+
+The $\lambda$ parameter in Poisson can also
+be seen as a rate.  The exposure is the denominator of that rate.  If different
+observations have different exposure then an offset is required in the Poisson model.
+
+So if we have the model
+
+$$
+\begin{align*}
+y_i \sim Poisson(\lambda_i) \\
+\log{\lambda_i} = \alpha + \beta x_i \\
+\end{align*}
+$$
+
+Then the rate $\lambda_i$ is in fact $\lambda_i = \frac{\mu_i}{\tau_i}$ where
+$\tau_i$ is the exposure and
+
+
+$$
+\begin{align*}
+y_i &\sim Poisson(\lambda_i) \\
+\log{\lambda_i} &= \log{\frac{\mu_i}{\tau_i}}  = \alpha + \beta x_i \\
+\end{align*}
+$$
+
+For example if the count is over days and weeks then the exposures will be 1 and 7.
+
+
+## 11M1 {-}
+
+See beginning of section 11.1.3 for discussion.
+
+The difference in the likelihood function is caused by the different organization
+of data. In the binomial model there is only 2 outcomes for each observation
+and therefore the joint probability is just a chain of bernoulli probability.
+
+For example, in simple binomial probabilty, the probability of obtaining a $x_1=1$
+and $x_2=0$ is $p(1-p)$. That is $P(x_i=1, x_2 =0) = p(1-p)= P(x_i=1, x_2 =0)$.
+
+But if we organize the data differently and each observation is the total number
+of success then $P(x_1 = 1 \mid n =2)= \binom{1}{2}p(1-p)$ because we have to take
+into account there are $\binom{1}{2}$ possible orderings.
+
+
+## 11M2 {-}
+
+See 11E3 above for similar question and same method to answer.
+
+The Poisson model is
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} &= \alpha + \beta x_i \\
+&\therefore \\
+\lambda_i &= \exp{(\alpha + \beta x_i)}
+\end{align*}
+$$
+
+therefore the effect is found by solving the proportional change $z$ in
+
+$$
+\begin{align*}
+\exp{(\alpha + \beta x_i)} \cdot z &= \exp{(\alpha + \beta (x_i + 1))} \\
+z &= e^\beta
+\end{align*}
+$$
+
+Therefore the effect of a coeficient of 1.7 will be a proportionally change the
+rate $\lambda_i$ by
+
+```{r}
+exp(1.7)
+```
+
+## 11M3 {-}
+
+See section 10.2.2 in chapter 10.
+
+The $logit$ link puts the parameter $p \in [0,1]$ on the scale $(-\infty, \infty)$ so that the
+Gaussian model can be used on the transformed variable.
+
+## 11M4 {-}
+
+See section 10.2.2 in chapter 10.
+
+The $log$ link puts the parameter $\lambda \in [0,\infty)$ on the scale $(-\infty, \infty)$ so that the
+Gaussian model can be used on the transformed variable.
+
+## 11M5 {-}
+
+If $\lambda \in [0,1]$ then the logit link used is justified as discussed in
+11M3 above.
+
+Poisson can be used to approximate the binomial distribution when $p$ is small.
+But it is also a distribution in its own right and there could be cases where
+we have $\lambda \in [0,1]$ and the goal is **not** to approximate the binomial
+distribution (i.e. $p$ is not small).
+
+As an example, when $\lambda$ is expressed  as a percentage of dark-colored
+cars passing every day at an intersection.
+
+## 11M6 {-}
+
+See section 10.1.2 in chapter 10 for the binomial distribution.  It has maximum 
+entropy when
+
+1. there is only 2 unordered events,
+2. it has a constant expected value
+
+See section 10.2.1 for Poisson distribution.
+
+It is a special case of the binomial distribution when the probability of 
+success $p$ is very small and the number of trials is very large. 
+It has the same constraints as the binomial distribution in that case.
+
+## 11M7 {-}
 
