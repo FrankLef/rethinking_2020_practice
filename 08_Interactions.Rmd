@@ -135,6 +135,13 @@ success.  It is not an interaction which would cause the presence of ravens and
 wolves to impact their mutual success in a way similar as if a third variable
 affected both and increase as well as decrease their mutual success.
 
+## 8M4 {-}
+
+
+```{r echo=FALSE}
+message("TODO")
+```
+
 
 ## 8H1 {-}
 
@@ -997,4 +1004,7 @@ as mentioned in the previous problem.
 
 ## 8H7 {-}
 
-Not done.
+
+```{r echo=FALSE}
+message("TODO")
+```
