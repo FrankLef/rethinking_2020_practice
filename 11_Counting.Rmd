@@ -191,3 +191,78 @@ It has the same constraints as the binomial distribution in that case.
 
 ## 11M7 {-}
 
+```{r echo=FALSE}
+message("TODO")
+```
+
+
+## 11M8 {-}
+
+See section 11.2.1 for details.
+
+```{r}
+data(Kline)
+d <- Kline %>%
+  mutate(log_pop_s = log(population),
+         log_pop_s = as.vector(scale(log_pop_s)),
+         cid = factor(contact, levels = c("low", "high")))
+rm(Kline)
+```
+
+$$
+total\_tools_i \sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} = \alpha_{cid[i]} + \beta_{cid[i]} \log{log\_pop\_s_i} \\
+\alpha_j \sim \mathcal{N}(3, 0.5) \\
+\beta_k \sim \mathcal{N}(0, 0.2)
+$$
+the fit *including* Hawaii is
+
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b11M08a.rds")
+b11M08a <- readRDS(a_file)
+# b11M08a <- brm(data = d,
+#              family = poisson,
+#              formula = bf(total_tools ~ a + b * log_pop_s,
+#                           a + b ~ 0 + cid,
+#                           nl = TRUE),
+#              prior = c(prior(normal(3, 0.5), nlpar = a),
+#                        prior(normal(0, 0.2), nlpar = b)),
+#              cores = detectCores(), seed = 11)
+# b11M08a <- brms::add_criterion(b11M08a, criterion = c("waic", "loo"))
+# saveRDS(b11M08a, file = a_file)
+summary(b11M08a)
+```
+
+and the fit *excluding* Hawaii is
+
+
+
+```{r}
+dh <- d %>%
+  filter(culture != "Hawaii")
+a_file <- here::here(getwd(),"fits", "b11M08b.rds")
+b11M08b <- readRDS(a_file)
+# b11M08b <- brm(data = dh,
+#              family = poisson,
+#              formula = bf(total_tools ~ a + b * log_pop_s,
+#                           a + b ~ 0 + cid,
+#                           nl = TRUE),
+#              prior = c(prior(normal(3, 0.5), nlpar = a),
+#                        prior(normal(0, 0.2), nlpar = b)),
+#              cores = detectCores(), seed = 11)
+# b11M08b <- brms::add_criterion(b11M08b, criterion = c("waic", "loo"))
+# saveRDS(b11M08b, file = a_file)
+summary(b11M08b)
+```
+
+Conclusion: The impact is on the factor *low* which has a lower cluster factor
+of 3.18 without Hawaii vs 3.32 with Hawaii.  The effect without Hawaii is also
+lower with 0.19 vs 0.38 with Hawaii.
+
+It is important ot note that these differences are relative, as described in
+section 10.2.4 of chapter 10.
+
+## 11H1 {-}
+
+

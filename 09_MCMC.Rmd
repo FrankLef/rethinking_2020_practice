@@ -508,24 +508,43 @@ ggmcmc::ggs_autocorrelation(b09H01_ggs) +
 
 ## 9H2 {-}
 
-To do
+```{r echo=FALSE}
+message("TODO")
+```
+
 
 ## 9H3 {-}
 
-To do
+```{r echo=FALSE}
+message("TODO")
+```
+
 
 ## 9H4 {-}
 
-To do
+
+```{r echo=FALSE}
+message("TODO")
+```
+
 
 ## 9H5 {-}
 
-To do
+
+```{r echo=FALSE}
+message("TODO")
+```
 
 ## 9H6 {-}
 
-To do
+
+```{r echo=FALSE}
+message("TODO")
+```
 
 ## 9H7 {-}
 
-To do
+
+```{r echo=FALSE}
+message("TODO")
+```
