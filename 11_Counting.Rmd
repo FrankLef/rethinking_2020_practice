@@ -191,14 +191,128 @@ It has the same constraints as the binomial distribution in that case.
 
 ## 11M7 {-}
 
-```{r echo=FALSE}
-message("TODO")
+See section 11.1.1, p. 330, for the m11.4 model.
+
+
+```{r}
+d <- data(chimpanzees)
+d <- chimpanzees %>%
+  mutate(treatment = as.integer(1 + prosoc_left + 2 * condition)) %>%
+  select(pulled_left, actor, treatment)
+rm(chimpanzees)
+# unique(d$treatment)
+skimr::skim(d)
 ```
 
+### Model with $\mathcal{N}(0, 1.5)$ {-}
+
+$$
+\begin{align*}
+pulled\_left_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha_{actor[i]} + \beta_{treatment[i]} \\
+\alpha_j &\sim \mathcal{N}(0, 1.5) \\
+\beta_k &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
+
+The fit with hamiltonian MCMC
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11M07a.rds")
+m11M07a <- readRDS(a_file)
+# m11M07a <- ulam(
+#   flist = alist(
+#     pulled_left ~ dbinom(1, p),
+#     logit(p) <- a[actor] + b[treatment],
+#     a[actor] ~ dnorm(0, 1.5),
+#     b[treatment] ~ dnorm(0, 0.5)),
+#   data = d, chains = 4, log_lik = TRUE
+#   )
+# saveRDS(m11M07a, file = a_file)
+precis(m11M07a, depth = 2)
+```
+
+and with quadratic approximation
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11M07b.rds")
+m11M07b <- readRDS(a_file)
+# m11M07b <- quap(
+#   flist = alist(
+#     pulled_left ~ dbinom(1, p),
+#     logit(p) <- a[actor] + b[treatment],
+#     a[actor] ~ dnorm(0, 1.5),
+#     b[treatment] ~ dnorm(0, 0.5)),
+#   data = d)
+# saveRDS(m11M07b, file = a_file)
+precis(m11M07b, depth = 2)
+```
+
+Conclusion: The 2 ethods generate about the same results.  Probably caused because
+the posterior is gaussian.  When the posterior is gaussian, the quadratic
+approximation gives similar results to MCMC but much faster.
+
+
+### Model with $\mathcal{N}(0, 10)$ {-}
+
+$$
+\begin{align*}
+pulled\_left_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha_{actor[i]} + \beta_{treatment[i]} \\
+\alpha_j &\sim \mathcal{N}(0, 10) \\
+\beta_k &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
+
+The fit with hamiltonian MCMC
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11M07c.rds")
+m11M07c <- readRDS(a_file)
+message("22 divergent pairs after warmup, examine pairs() plot for diagnosis")
+# m11M07c <- ulam(
+#   flist = alist(
+#     pulled_left ~ dbinom(1, p),
+#     logit(p) <- a[actor] + b[treatment],
+#     a[actor] ~ dnorm(0, 10),
+#     b[treatment] ~ dnorm(0, 0.5)),
+#   data = d, chains = 4, log_lik = TRUE
+#   )
+# saveRDS(m11M07c, file = a_file)
+precis(m11M07c, depth = 2)
+```
+
+and with quadratic approximation
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11M07d.rds")
+m11M07d <- readRDS(a_file)
+# m11M07d <- quap(
+#   flist = alist(
+#     pulled_left ~ dbinom(1, p),
+#     logit(p) <- a[actor] + b[treatment],
+#     a[actor] ~ dnorm(0, 10),
+#     b[treatment] ~ dnorm(0, 0.5)),
+#   data = d)
+# saveRDS(m11M07d, file = a_file)
+precis(m11M07d, depth = 2)
+```
+
+There is a significant different for actor # 2 who has mean = 11.09 and sd= 5.23
+with MCMC and mean = 6.97, sd = 3.51 with quap.  In addition the MCMC warns
+that we have 22 divergent samples after warmup and is therefore more informative
+with for the diagnosis.
+
+The quap offers no diagnosis and the mean is less affected by the new prior has
+it gives a more centralized value.  The quap might be giving a false sense of
+security as one might tend to conclude that the mean of 6.97 is more reasonable
+when in fact it does not reflect that actor #2 is actually a clear outlier as it always
+pull the left lever as discussed in section 11.1.1 and illustrated in figure 11.4.
 
 ## 11M8 {-}
 
-See section 11.2.1 for details.
+See section 11.2.1 for details and section 10.2.4 of chapter 10 on how to
+be careful when interpreting the relative importance of the coefficients.
 
 ```{r}
 data(Kline)
@@ -263,6 +377,157 @@ lower with 0.19 vs 0.38 with Hawaii.
 It is important ot note that these differences are relative, as described in
 section 10.2.4 of chapter 10.
 
+
 ## 11H1 {-}
 
+
+```{r}
+d <- data(chimpanzees)
+d <- chimpanzees %>%
+  mutate(actor = factor(actor),
+         treatment = factor(1 + prosoc_left + 2 * condition)) %>%
+  select(pulled_left, actor, treatment)
+rm(chimpanzees)
+```
+
+### Null model, general intercept {-}
+
+This corresponds to model `m11.1` in the textbook but with the calibrated
+prior.
+
+$$
+\begin{align*}
+pulled\_left_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha \\
+\alpha &\sim \mathcal{N}(0, 1.5)
+\end{align*}
+$$
+
+
+
+```{r}
+a_file <- here::here("fits", "b11H01a.rds")
+b11H01a <- readRDS(file = a_file)
+# b11H01a <- brm(data = d,
+#               family = binomial,
+#               formula = pulled_left | trials(1) ~ 1,
+#               prior = c(
+#                 prior(normal(0, 1.5), class = Intercept)
+#                 ),
+#               seed = 11, cores = detectCores()
+#               )
+# b11H01a <- brms::add_criterion(b11H01a, criterion = c("waic", "loo"))
+# saveRDS(b11H01a, file = a_file)
+summary(b11H01a)
+brms::inv_logit_scaled(fixef(b11H01a))
+```
+
+### Model with treatment intercepts {-}
+
+This corresponds to model `m11.3` in the textbook.
+
+$$
+\begin{align*}
+pulled\_left_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha + \beta_{treatment[i]} \\
+\alpha &\sim \mathcal{N}(0, 1.5) \\
+\beta_k &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
+
+
+```{r}
+a_file <- here::here("fits", "b11H01b.rds")
+b11H01b <- readRDS(file = a_file)
+# b11H01b <- brm(data = d,
+#               family = binomial,
+#               formula = bf(pulled_left | trials(1) ~ a + b,
+#                            a ~ 1,
+#                            b ~ 0 + treatment,
+#                            nl = TRUE),
+#               prior = c(
+#                 prior(normal(0, 1.5), nlpar = a),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment1),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment2),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment3),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment4)
+#                 ),
+#              cores = detectCores(), seed = 11)
+# b11H01b <- brms::add_criterion(b11H01b, criterion = c("waic", "loo"))
+# saveRDS(b11H01b, file = a_file)
+summary(b11H01b)
+brms::inv_logit_scaled(fixef(b11H01b))
+```
+
+
+### Model with treatment and actor intercepts {-}
+
+This corresponds to model `m11.4` in the textbook.
+
+$$
+\begin{align*}
+pulled\_left_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha_{actor[i]} + \beta_{treatment[i]} \\
+\alpha_j &\sim \mathcal{N}(0, 1.5) \\
+\beta_k &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
+
+
+
+```{r}
+a_file <- here::here("fits", "b11H01c.rds")
+b11H01c <- readRDS(file = a_file)
+# b11H01c <- brm(data = d,
+#               family = binomial,
+#               formula = bf(pulled_left | trials(1) ~ a + b,
+#                            a ~ 0 + actor,
+#                            b ~ 0 + treatment,
+#                            nl = TRUE),
+#               prior = c(
+#                 prior(normal(0, 1.5), nlpar = a),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment1),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment2),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment3),
+#                 prior(normal(0, 0.5), nlpar = b, coef = treatment4)
+#                 ),
+#              cores = detectCores(), seed = 11)
+# b11H01c <- brms::add_criterion(b11H01c, criterion = c("waic", "loo"))
+# saveRDS(b11H01c, file = a_file)
+summary(b11H01c)
+brms::inv_logit_scaled(fixef(b11H01c))
+```
+
+
+### Model comparison {-}
+
+The model with general intercept ("null model") and treatment-only intercepts
+have about the same performance.  The model with actor and treatment intercept
+is mthe most informative as the treatment is directly related to what the actor
+choose.
+
+```{r}
+# no need to print all the columns, the result is obvious
+loo_compare(b11H01a, b11H01b, b11H01c, criterion = "waic")
+```
+
+## 11H2 {-}
+
+```{r}
+data(eagles, package = "MASS")
+d <- eagles
+rm(eagles)
+skimr::skim(d)
+```
+
+### (a) {-}
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{Binomial}(n_i, p_i) \\
+logit(p_i) &= \alpha + \beta_P P_i + \beta_V V_i, + \beta_A A_i \\
+\alpha &\sim \mathcal{N}(0, 1.5) \\
+\beta_P, \beta_V, \beta_A &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
 
