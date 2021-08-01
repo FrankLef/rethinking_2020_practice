@@ -257,11 +257,96 @@ df <- Howell1 %>%
   mutate(weight_c = as.vector(scale(weight, center = TRUE, scale = FALSE)))
 rm(Howell1)
 skimr::skim(df)
-prac04M07$data[["raw"]] <- df
+prac04M07$data$raw <- df
+```
+
+### Model {-}
+
+$$
+\begin{align*}
+height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta(x_i - \bar{x}) \\
+\alpha &\sim \mathcal{N}(178, 20) \\
+\beta &\sim \mathcal{LogNormal}(0, 1) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+### Priors {-}
+
+The raw data is
+
+```{r}
+df_raw <- prac04M07$data$raw
+str(df_raw)
+stopifnot(identical(dim(df_raw), c(352L, 5L)))
 ```
 
 
-### Using `quap` {-}
+The following priors are evaluated by comparing the prior distribution
+and the prior predictive distribution (also called likelihood).
+
+```{r}
+alpha_mean <- 178
+alpha_sd <- 20
+beta_mean <- 0
+beta_sd <- 1
+sigma_rate <- 1
+n_samples <- 50  # nb of samples from the prior
+n_trials <- 50  # nb of observations for each of the prior sample item
+```
+
+The prior predictive distribution is simulated as follows.  This is heavily
+inspired by https://vasishth.github.io/bayescogsci/book/sec-priorpred.html.
+
+**Important:** We could use the prior prediction from the ``brms` fit
+objects.  However then we depend on the `rstan` sampler which is subject
+to possible convergence problems.  This method is independent of the fitting
+methodology.  Not to mention it makes one really understand what is going on
+which is the avowed objective of this book.
+
+```{r}
+set.seed(4)
+x_pred <- modelr::seq_range(x = df_raw$weight_c ,n = n_samples)
+alpha_sim <- rnorm(n = n_samples, mean = alpha_mean, sd = alpha_sd)
+beta_sim <- rlnorm(n = n_samples, meanlog = beta_mean, sdlog = beta_sd)
+sigma_sim <- rexp(n = n_samples, rate = sigma_rate)
+mu_sim <- alpha_sim + beta_sim * x_pred
+
+prior_pred <- purrr::map2_dfr(.x = mu_sim, .y = sigma_sim, 
+                              .f = function(mu, sigma) {
+                                tibble(
+                                  trial = seq_len(n_trials),
+                                  predict = rnorm(n = n_trials , 
+                                                  mean = mu, sd = sigma)
+                                )
+                              }, .id = "iter") %>%
+  mutate(iter = as.integer(iter))
+# str(prior_pred)
+
+prior_pred$predict
+mode(prior_pred$predict)
+
+ggplot(prior_pred) +
+  geom_density(aes(x = predict, y = ..scaled.., color = "prior predicted"),
+               size = 1, alpha = 0.8) +
+  geom_density(data = df_raw, aes(x = height, y = ..scaled.., color = "observed"),
+               size = 1, alpha = 0.8) +
+  scale_color_manual(values = c("prior predicted" = "mediumvioletred", 
+                                "observed" = "lightseagreen")) +
+  ggdist::theme_ggdist() +
+  theme(legend.position = c(0.8, 0.8),
+        ) +
+  labs(title = "Comparing prior predictive distribution vs observed distribution",
+       subtitle = "4M7",
+       x = "height", y = NULL, color = NULL)
+  
+```
+The prior is reasonable as it reflects an opinion on the overall general
+population.
+
+
+### Fit `quap` {-}
 
 #### Centered scale {-}
 
@@ -736,14 +821,41 @@ a_fit <- inla(
   formula = height ~ weight,
   family = "gaussian",
   data = df,
-  control.compute = list(config = TRUE))
+  control.compute = list(dic = TRUE, waic = TRUE))
 saveRDS(a_fit, file = a_file)
 prac04M07$fit[[tools::file_path_sans_ext(basename(a_file))]] <- a_fit
 a_fit$summary.fixed
+a_fit$summary.fitted.values
+a_fit$summary.linear.predictor
 ```
 
 ```{r}
-summary(prac04M07$fit$i04M07_natural)
+a_fit$summary.fitted.values
+```
+
+```{r}
+# a_fit$marginals.fixed
+```
+
+
+
+```{r}
+a_fit$summary.linear.predictor
+```
+
+```{r}
+a_fit$summary.random
+```
+
+```{r}
+a_fit$summary.hyperpar
+```
+
+
+
+```{r}
+summ <- summary(prac04M07$fit$i04M07_natural)
+summ$hyperpar
 ```
 which is about the same results as with `brm`
 
