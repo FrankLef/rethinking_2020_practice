@@ -16,7 +16,7 @@ Custom functions used, to avoid repeating codes and avoid error
 
 ```{r}
 # Pivot a dataframe from ggdist::point_interval to longer format
-#  For example, this is a useful funciton when plotting with ggrepel
+#  For example, this is a useful function when plotting with ggrepel
 gather_interval <- function(df, value_var, func=ggdist::median_qi, width = c(2/3, 0.89),
                             names_to="stat", values_to="value") {
   val_col <- deparse1(substitute(value_var))
@@ -1035,78 +1035,63 @@ p1 + p2 + p3
 ```
 
 
+#### Plot predictions
 
 ```{r}
-brinla::bri.hyperpar.plot
-brinla::bri.hyper.sd
-```
-
-
-
-
-```{r}
-str(a_fit$marginals.hyperpar)
-str(a_fit$internal.marginals.hyperpar)
-df <- data.frame(a_fit$marginals.hyperpar[[1]])
-dfi <- a_fit$internal.marginals.hyperpar[[1]]
-dfi <- data.frame(inla.tmarginal(marginal = dfi, fun = function(tau) 1 / sqrt(exp(tau))))
-
-p1 <- ggplot(df, aes(x =x, y = y)) +
-  geom_line() +
-  labs(title = "Posterior of precision")
-p1
-
-p2 <- ggplot(dfi, aes(x = x, y = y)) +
-  geom_line() +
-  labs(title = "Posterior of parameter's precision")
-p2
-
+# new_fit$marginals.fixed
 ```
 
 
 
 ```{r}
-a_fit$marginals.fixed$`(Intercept)`
-a_fit$summary.fitted.values
+# the fit values for the new predictions
+fit_inla <- new_fit$summary.fitted.values %>%
+  select(mean, sd, `0.025quant`, `0.975quant`) %>%
+  slice_tail(n = length(xseq)) %>%
+  mutate(weight = xseq)
+# fit_inla
+
+# the sigma values for the new predictions
+sigma_inla <- new_fit$internal.marginals.hyperpar[[1]]
+sigma_inla <- inla.tmarginal(marginal = sigma_inla, 
+                             fun = function(tau) 1 / sqrt(exp(tau))) %>%
+  as.data.frame()
+
+
+set.seed(4)
+# sample of mu values to use in sim
+sample_mu <- rnorm(n = nrow(fit_inla), mean = fit_inla$mean, sd = fit_inla$sd)
+# sample of sigma values to use in sim
+sample_sigma <- sample(x = sigma_inla$x, size = nrow(fit_inla),
+                       replace = TRUE, prob = sigma_inla$x)
+nsamples <- 500
+df <- fit_inla %>%
+  select(weight, mean, sd) %>%
+  mutate(sigma = sample_sigma) %>%
+  mutate(mu_sim = rnorm(n = nrow(.), mean = mean, sd = sd)) %>%
+  expand(nesting(weight, mu_sim, sigma)) %>%
+  mutate(height_sim = purrr::map2(.x = mu_sim, .y = sigma, 
+                             .f = ~ rnorm(n = nsamples, mean = .x, sd = .y))) %>%
+  unnest(cols = c(height_sim))
+  # group_by(weight) %>%
+  # summarize(height.mean = mean(height_sim),
+  #           height.lower = quantile(height_sim, probs = 0.025),
+            # height.upper = quantile(height_sim, probs = 0.975))
+# df
+
+p <- ggplot(df, aes(x = weight)) +
+  stat_lineribbon(aes(y = height_sim), .width = c(0.67, 0.80, 0.95),
+                  color = "steelblue4") +
+  geom_point(data = data04M07, mapping = aes(x = weight, y = height),
+             inherit.aes = FALSE, color = "indianred") +
+  scale_fill_paletteer_d("ggsci::teal_material") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.15, 0.8)) +
+  labs(title = "Predictions with INLA", subtitle = "4M7",
+       x = "weight", y = "height")
+p
 ```
-
-```{r}
-# a_fit$marginals.fixed
-```
-
-
-
-```{r}
-a_fit$summary.linear.predictor
-```
-
-```{r}
-a_fit$summary.random
-```
-
-```{r}
-a_fit$summary.hyperpar
-```
-
-
-
-```{r}
-summ <- summary(prac04M07$fit$i04M07_natural)
-summ$hyperpar
-```
-which is about the same results as with `brm`
-
-```{r}
-summary(prac04M07$fit$b04M07_natural)
-```
-
-```{r}
-stop("TODO")
-fit <- prac04M07$fit$i04M07_natural
-df <- INLA::inla.posterior.sample(n = 30, result = fit)
-# str(df)
-```
-
 
 
 ## 4M8 {-}
