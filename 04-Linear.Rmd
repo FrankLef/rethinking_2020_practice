@@ -1096,7 +1096,334 @@ p
 
 ## 4M8 {-}
 
-Not done
+The methodology used here comes from section 4.5 of @kurtz2020b to whom
+I am forever grateful for the wonderful books he gives us.
+
+
+We remove the rows with `NA` in the `doy` variable.
+
+```{r}
+data("cherry_blossoms")
+data04M08 <- cherry_blossoms %>%
+  drop_na(doy)
+rm(cherry_blossoms)
+skimr::skim(data04M08)
+```
+
+### Model
+
+$$
+\begin{align*}
+doy_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \sum_{k=1}^Kw_kB_{k, i} \\
+\alpha &\sim \mathcal{N}(100, 10) \\
+w_j &\sim \mathcal{N}(0, 10) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+### a) Knots = 15, $w_j \sim \mathcal{N}(0, 10)$
+
+
+```{r}
+nknots <- 15
+knots <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
+knots
+```
+
+
+```{r}
+colr <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
+ggplot(data04M08, aes(x = year, y = doy, color = temp)) +
+  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+  geom_point(shape = 20, size = 2, alpha = 2/3) +
+  scale_x_continuous(breaks = knots, labels = knots) +
+  scale_color_gradientn(colors = colr) +
+  theme_classic() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.05, 0.8),
+        axis.text.x = element_text(size = rel(0.9))
+        ) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", nknots),
+       subtitle = "4M8 a)")
+```
+Create the bias function with degree 3 (cubic spline) and an intercept
+
+```{r}
+library(splines)
+# must specify intercept = TRUE
+B <- splines::bs(x = data04M08$year, knots = knots[-c(1, nknots)], 
+                 degree = 3, intercept = TRUE)
+# str(B)
+# this data.frame will be reused below with the posteriors
+df_bias <- B %>%
+  as.data.frame() %>%
+  setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
+  mutate(year = data04M08$year) %>%
+  pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
+# str(df_bias)
+```
+
+
+then the data structure used to fit
+
+```{r}
+dfB <- data04M08 %>%
+  mutate(B = B)
+# the last column is a matrix column, with same nb of rows as the other
+# columns but with a column including 17 subcolumns (!)
+# glimpse(dfB)
+```
+
+
+
+```{r}
+a_file <- here::here("fits", "b04M08a.rds")
+b04M08a <- readRDS(file = a_file)
+# b04M08a <- brm(data = dfB,
+#       family = gaussian,
+#       doy ~ 1 + B,
+#       prior = c(prior(normal(100, 10), class = Intercept),
+#                 prior(normal(0, 10), class = b),
+#                 prior(exponential(1), class = sigma)),
+#       cores = detectCores(), seed = 4)
+# saveRDS(b04M08a, file = a_file)
+```
+```{r}
+summary(b04M08a)
+```
+
+
+
+
+```{r}
+df <- fitted(b04M08a) %>%
+  as.data.frame() %>%
+  bind_cols(data04M08)
+str(df)
+clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
+pA <- ggplot(df, aes(x = year, y = doy)) +
+  geom_vline(xintercept = knots[-c(1, length(knots))], color = "slateblue", alpha = 1/2) +
+  geom_point(aes(color = temp)) +
+  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
+  scale_x_continuous(breaks = knots, labels = knots) +
+  scale_color_gradientn(colors = clrs) +
+  ggthemes::theme_tufte() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "none",
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", nknots),
+       subtitle = "4M8 a)")
+pA
+```
+
+### b) Knots = 25, $w_j \sim \mathcal{N}(0, 10)$
+
+
+```{r}
+nknots <- 25
+knots <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
+knots
+```
+
+
+Create the bias functions with degree 3 (cubic spline) and an intercept
+
+```{r}
+library(splines)
+# must specify intercept = TRUE
+B <- splines::bs(x = data04M08$year, knots = knots[-c(1, nknots)], 
+                 degree = 3, intercept = TRUE)
+# str(B)
+# this data.frame will be reused below with the posteriors
+df_bias <- B %>%
+  as.data.frame() %>%
+  setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
+  mutate(year = data04M08$year) %>%
+  pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
+# str(df_bias)
+```
+
+
+then the data structure used to fit
+
+```{r}
+dfB <- data04M08 %>%
+  mutate(B = B)
+# the last column is a matrix column, with same nb of rows as the other
+# columns but with a column including 17 subcolumns (!)
+# glimpse(dfB)
+```
+
+
+
+```{r}
+a_file <- here::here("fits", "b04M08b.rds")
+b04M08b <- readRDS(file = a_file)
+# b04M08b <- brm(data = dfB,
+#       family = gaussian,
+#       doy ~ 1 + B,
+#       prior = c(prior(normal(100, 10), class = Intercept),
+#                 prior(normal(0, 10), class = b),
+#                 prior(exponential(1), class = sigma)),
+#       cores = detectCores(), seed = 4)
+# saveRDS(b04M08b, file = a_file)
+```
+
+
+
+
+```{r}
+df <- fitted(b04M08b) %>%
+  as.data.frame() %>%
+  bind_cols(data04M08)
+str(df)
+clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
+pB <- ggplot(df, aes(x = year, y = doy)) +
+  geom_vline(xintercept = knots[-c(1, length(knots))], color = "slateblue", alpha = 1/2) +
+  geom_point(aes(color = temp)) +
+  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
+  scale_color_gradientn(colors = clrs) +
+  ggthemes::theme_tufte() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "none",
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", nknots),
+       subtitle = "4M8 b)")
+pB
+```
+
+### c) Knots = 25, $w_j \sim \mathcal{N}(0, 20)$
+
+
+```{r}
+nknots <- 25
+knots <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
+knots
+```
+
+
+Create the bias functions with degree 3 (cubic spline) and an intercept
+
+```{r}
+library(splines)
+# must specify intercept = TRUE
+B <- splines::bs(x = data04M08$year, knots = knots[-c(1, nknots)], 
+                 degree = 3, intercept = TRUE)
+# str(B)
+# this data.frame will be reused below with the posteriors
+df_bias <- B %>%
+  as.data.frame() %>%
+  setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
+  mutate(year = data04M08$year) %>%
+  pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
+# str(df_bias)
+```
+
+
+then the data structure used to fit
+
+```{r}
+dfB <- data04M08 %>%
+  mutate(B = B)
+# the last column is a matrix column, with same nb of rows as the other
+# columns but with a column including 17 subcolumns (!)
+# glimpse(dfB)
+```
+
+
+
+```{r}
+a_file <- here::here("fits", "b04M08c.rds")
+b04M08c <- readRDS(file = a_file)
+# b04M08c <- brm(data = dfB,
+#       family = gaussian,
+#       doy ~ 1 + B,
+#       prior = c(prior(normal(100, 10), class = Intercept),
+#                 prior(normal(0, 20), class = b),
+#                 prior(exponential(1), class = sigma)),
+#       cores = detectCores(), seed = 4)
+# saveRDS(b04M08c, file = a_file)
+```
+
+
+
+
+```{r}
+df <- fitted(b04M08c) %>%
+  as.data.frame() %>%
+  bind_cols(data04M08)
+str(df)
+clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
+pC <- ggplot(df, aes(x = year, y = doy)) +
+  geom_vline(xintercept = knots[-c(1, length(knots))], color = "slateblue", alpha = 1/2) +
+  geom_point(aes(color = temp)) +
+  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
+  scale_color_gradientn(colors = clrs) +
+  ggthemes::theme_tufte() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "none",
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots and increased weight sd to 20", nknots),
+       subtitle = "4M8 c)")
+# pC
+```
+
+### Conclusion
+
+#### Plots
+
+The increase of nb of knots increases the fits (i.e. nb of turns)
+
+```{r}
+pA / pB
+```
+
+and the increase in variability of the weight increase the range of the coefficient.
+However this is not visually obvious when looking at the scatter plot.
+See just below the coefficient comparisons which is more informative.
+
+```{r}
+pB / pC
+```
+
+
+#### Summaries
+
+```{r}
+summA <- data.frame(model = "A", fixef(b04M08a)) %>%
+  tibble::rownames_to_column(var = "variable")
+summB <- data.frame(model = "B", fixef(b04M08b)) %>%
+  tibble::rownames_to_column(var = "variable")
+summC <- data.frame(model = "C", fixef(b04M08c)) %>%
+  tibble::rownames_to_column(var = "variable")
+df <- bind_rows(summA, summB, summC) %>%
+  mutate(variable = factor(variable,
+                           levels = c("Intercept", sprintf("B%d", 1:27)),
+                           ordered = TRUE))
+
+ggplot(df, aes(x = variable, y = Estimate, ymin = Q2.5, ymax = Q97.5, color = model)) +
+  geom_pointinterval(position = position_dodge(width = 1/2)) +
+  scale_color_paletteer_d("futurevisions::cancri") +
+  ggthemes::theme_tufte() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.15, 0.8),
+        axis.text.x = element_text(size = rel(0.85))) +
+  labs(title = "Comparing the models' coefficients",
+       subtitle = "4M8",
+       x = NULL, y = NULL)
+  # coord_flip()
+```
+
+We can see that the model are similar expect that
+
+* Model A has significantly lower B16 and B17 coefficients. They are
+nonetheless similar to the B26 and B27 coefficients of models B and C
+* Model B and C have the same coefficient but model C which is the model
+with the increased prior variance for the weights has a wider confidence range
+for all coefficients
 
 ## 4H1 {-}
 
