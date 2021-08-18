@@ -140,10 +140,8 @@ transform_hyper_marginal <- function(obj, sd_name = "sd") {
   SIMPLIFY = FALSE)
   
   # edit the names to replace "precision" by sd_name
-  names(marg_lst) <- sub(pattern = prec_regex,
-                                 replacement = sd_name,
-                                 x = names(marg_lst), 
-                                 ignore.case = TRUE)
+  names(marg_lst) <- sub(pattern = prec_regex, replacement = sd_name,
+                         x = names(marg_lst), ignore.case = TRUE)
   marg_lst
 }
 ```
@@ -217,18 +215,19 @@ stopifnot(identical(out, c("b_Intercept", "sigma", "b_weight_c")))
 
 
 
-## 4E1 {-}
+## 4E1 {-#prac4E1}
 
-See section 4.4.1
+See section 4.4.1 in @elreath2020
 
 $y_i \sim \mathcal{N}(\mu, \sigma)$
 
-## 4E2 {-}
+## 4E2 {-#prac4E2}
+
 
 2 parameters, $\mu$ and $\sigma$ which are in the posterior distribution
 $y_i \sim \mathcal{N}(\mu, \sigma)$
 
-## 4E3 {-}
+## 4E3 {-#prac4E3}
 
 See Overthinking in section 4.3.1
 
@@ -279,15 +278,15 @@ P(\mu, \sigma \mid y) &=
 $$
 
 
-## 4E4 {-}
+## 4E4 {-#prac4E4}
 
 $\mu_i = \alpha + \beta x_i$
 
-## 4E5 {-}
+## 4E5 {-#prac4E5}
 
 2 parameters, $\mu$ and $\sigma$
 
-## 4M1 {-}
+## 4M1 {-#prac4M1}
 
 See R code 4.13 in section 4.3.2 using this model
 
@@ -329,7 +328,7 @@ ggplot(data = df, mapping = aes(x = height)) +
        subtitle = sprintf("4M1, sample size = %d", nrow(df)))
 ```
 
-## 4M2 {-}
+## 4M2 {-#prac4M2}
 
 ### with `quap` {-}
 
@@ -348,7 +347,7 @@ alist(
 ```
 
 
-## 4M3 {-}
+## 4M3 {-#prac4M3}
 
 Make sure you remember to index the $y$ so that it is $y_i$ as well as $\mu$.
 See section 4.4.2.  The published answer does not put an index on $\mu$ but it
@@ -366,7 +365,7 @@ y_i &\sim \mathcal{N}(mean = \mu_i, sd = \sigma)\\
 \end{align*}
 $$
 
-## 4M4 {-}
+## 4M4 {-#prac4M4}
 
 Don't forget the index so that $height$ is $height_i$.
 
@@ -383,7 +382,7 @@ height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \end{align*}
 $$
 
-## 4M5 {-}
+## 4M5 {-#prac4M5}
 
 This tells us that $\beta$ should always be positive be with large values unlikely.
 We therefore use the log-normal dist as a prior for $\beta$. See section 4.4.2.
@@ -398,7 +397,7 @@ height_i &\sim Normal(\mu_i, \sigma) \\
 \end{align*}
 $$
 
-## 4M6 {-}
+## 4M6 {-#prac4M6}
 
 Instead of using the average range as a prior for $\sigma$ we would use
 $\sigma = \sqrt{64} = 8$.
@@ -415,7 +414,7 @@ mu_i = \alpha + \beta \cdot year_i \\
 \sigma \sim Uniform(0, 8)
 $$
 
-## 4M7 {-}
+## 4M7 {-#prac4M7}
 
 See section 4.4.2 for model m4.3.  We add the centered weight to the data
 and call it $weight_c$.
@@ -429,7 +428,7 @@ rm(Howell1)
 skimr::skim(data04M07)
 ```
 
-### Model {-}
+### Model {-#prac4M7-Model}
 
 $$
 \begin{align*}
@@ -441,7 +440,7 @@ height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \end{align*}
 $$
 
-### Priors {-}
+### Priors {-#prac4M7-Priors}
 
 
 The following priors are evaluated by comparing the prior distribution
@@ -987,7 +986,14 @@ and again with the same results as when using `quap`.
 The fit with `inla` will only be done for the data on the natural scale.
 It can easily be duplicated for the centered data.
 
-#### Setting `inla` arguments {-}
+#### Arguments {-}
+
+We will use a list to hold the arguments as they will be used repeatedly.
+
+```{r}
+i04M07args_ctr <- list()
+```
+
 
 ##### `formula` {-}
 
@@ -997,14 +1003,25 @@ section 3.2.2 on p. 41 and 42.
 * the model is fixed (no random effect) and
 * the $\beta$ coefficient is constrained, i.e. must be positive
 
-therefore the model has a constrained fixed effect which is indicated by `clinear` 
-fixed effect model as described in 
+Therefore the model has a constrained fixed effect *weight_c* which is 
+indicated by `clinear` in the `f()` function of the formula. This makes
+*weight_c* a *latent effect* as opposed to a *likelihood effect* such
+as $\sigma$ in the current model.
+
+The available priors of *latent effect* are as follows
+
+```{r}
+names(inla.models()$prior)
+inla.models()$prior$logtnormal
+# inla.doc("logtgaussian")
+```
+
+
 
 Therefore we will use
 
 ```{r}
-i04M07lst_ctr <- list()
-i04M07lst_ctr$frmla <- formula(height ~ f(weight_c, 
+i04M07args_ctr$frmla <- formula(height ~ f(weight_c, 
                                           model = "clinear", 
                                           range = c(0, Inf)))
 # the available latent models are in names(inla.models()$latent)
@@ -1016,8 +1033,8 @@ stopifnot("clinear" %in% names(inla.models()$latent))
 `INLA` can work with many families.  They are listed in `inla.models`
 
 ```{r}
-i04M07lst_ctr$family <- "gaussian"
-stopifnot(i04M07lst_ctr$family %in% names(inla.models()$likelihood))
+i04M07args_ctr$family <- "gaussian"
+stopifnot(i04M07args_ctr$family %in% names(inla.models()$likelihood))
 ```
 
 
@@ -1044,7 +1061,7 @@ exp(0)  # exp(1) used because original distribution is LogNormal
 which gives
 
 ```{r}
-i04M07lst_ctr$fixed <- list(
+i04M07args_ctr$fixed <- list(
   mean.intercept = 178, 
   prec.intercept = 1 / (20^2),
   mean = list(weight = exp(0)),
@@ -1064,7 +1081,7 @@ the hyperparameter family to gaussian, give a log normal distribution.
 Therefore we use
 
 ```{r}
-i04M07lst_ctr$hyper <- list(prec = list(prior = "gaussian", param = c(0, 1)))
+i04M07args_ctr$hyper <- list(prec = list(prior = "gaussian", param = c(0, 1)))
 ```
 
 
@@ -1084,7 +1101,7 @@ This arguments, in the form of a list, is as follows
 which gives
 
 ```{r}
-i04M07lst_ctr$compute <- list(config=TRUE, dic = TRUE, waic = TRUE)
+i04M07args_ctr$compute <- list(config=TRUE, dic = TRUE, waic = TRUE)
 ```
 
 ##### Miscellaneous {-}
@@ -1092,25 +1109,25 @@ i04M07lst_ctr$compute <- list(config=TRUE, dic = TRUE, waic = TRUE)
 the quantiles used, they are used later whendoing summaries
 
 ```{r}
-i04M07lst_ctr$quantiles <- c(0.025, 0.5, 0.975)
+i04M07args_ctr$quantiles <- c(0.025, 0.5, 0.975)
 ```
 
 
-##### `inla` {-}
+#### Create `inla` {-}
 
 ```{r}
 a_file <- here::here("fits", "i04M07nat.rds")
 i04M07nat <- readRDS(file = a_file)
 # i04M07nat <- inla(
-#   formula = i04M07lst_ctr$frmla,
-#   family = i04M07lst_ctr$family,
+#   formula = i04M07args_ctr$frmla,
+#   family = i04M07args_ctr$family,
 #   data = data04M07,
-#   quantiles = i04M07lst_ctr$quantiles,
-#   control.fixed = i04M07lst_ctr$fixed,
+#   quantiles = i04M07args_ctr$quantiles,
+#   control.fixed = i04M07args_ctr$fixed,
 #   control.family = list(
-#     hyper = i04M07lst_ctr$hyper
+#     hyper = i04M07args_ctr$hyper
 #     ),
-#   control.compute = i04M07lst_ctr$compute)
+#   control.compute = i04M07args_ctr$compute)
 # saveRDS(i04M07nat, file = a_file)
 ```
 
@@ -1140,19 +1157,19 @@ use the inversed transformed `internal.marginal.hyperpar` for the precision and
 precision is not used for summaries and plotting.
 
 ```{r}
-i04M07lst_ctr$marg <- transform_hyper_marginal(i04M07nat)
-stopifnot(length(i04M07lst_ctr$marg) == 2L)
+i04M07args_ctr$marg <- transform_hyper_marginal(i04M07nat)
+stopifnot(length(i04M07args_ctr$marg) == 2L)
 ```
 
 then create the summary
 
 ```{r}
 
-i04M07lst_ctr$summ <- write_hyper_summary(margs = i04M07lst_ctr$marg, 
-                                          qtl = i04M07lst_ctr$quantiles)
-stopifnot(identical(dim(i04M07lst_ctr$summ), c(2L, 6L)))
+i04M07args_ctr$summ <- write_hyper_summary(margs = i04M07args_ctr$marg, 
+                                          qtl = i04M07args_ctr$quantiles)
+stopifnot(identical(dim(i04M07args_ctr$summ), c(2L, 6L)))
 
-i04M07lst_ctr$summ
+i04M07args_ctr$summ
 ```
 
 
@@ -1160,17 +1177,17 @@ so that a summary with all the parameters can be done
 
 ```{r}
 inla_summ <- i04M07nat$summary.fixed %>%
-  bind_rows(i04M07lst_ctr$summ) %>%
+  bind_rows(i04M07args_ctr$summ) %>%
   tibble::rownames_to_column(var = "var")
 inla_summ
-i04M07lst_ctr$summ <- inla_summ
+i04M07args_ctr$summ <- inla_summ
 ```
 
 and we compare `inla` vs `brm`
 
 
 ```{r}
-inla_summ <- i04M07lst_ctr$summ %>%
+inla_summ <- i04M07args_ctr$summ %>%
   mutate(var = edit_varnames(var)) %>%
   select("var", "mean", "sd")
 inla_summ
@@ -1199,7 +1216,7 @@ So, lets get posterior samples from `inla`
 # sample the inla's posterior distributions
 nsamples <- 2000
 fmarg <- i04M07nat$marginals.fixed
-hmarg <- i04M07lst_ctr$marg
+hmarg <- i04M07args_ctr$marg
 
 # sample the fixed parameters
 fixed_samples <- purrr::map_dfc(
@@ -1306,13 +1323,13 @@ the posterior mean of the linear predictors
 ```{r}
 # must use control.predictor = list(compute = TRUE)
 inla_fit <- inla(
-  formula = i04M07lst_ctr$frmla,
-  family = i04M07lst_ctr$family,
+  formula = i04M07args_ctr$frmla,
+  family = i04M07args_ctr$family,
   data = data_fit,
-  quantiles = i04M07lst_ctr$quantiles,
-  control.fixed = i04M07lst_ctr$fixed,
+  quantiles = i04M07args_ctr$quantiles,
+  control.fixed = i04M07args_ctr$fixed,
   control.family = list(
-    hyper = i04M07lst_ctr$hyper
+    hyper = i04M07args_ctr$hyper
     ),
   control.predictor = list(compute = TRUE))
 
@@ -1328,7 +1345,7 @@ and we get the fit from `brms` to compare
 
 ```{r}
 brm_fit <- fitted(b04M07ctr, newdata = data.frame(weight_c = xseq), 
-                  probs = i04M07lst_ctr$quantiles) %>%
+                  probs = i04M07args_ctr$quantiles) %>%
   as.data.frame() %>%
   mutate(weight_c = xseq)
 ```
@@ -1386,13 +1403,13 @@ above.
 ```{r}
 # must use control.predictor = list(compute = TRUE)
 inla_predict <- inla(
-  formula = i04M07lst_ctr$frmla,
-  family = i04M07lst_ctr$family,
+  formula = i04M07args_ctr$frmla,
+  family = i04M07args_ctr$family,
   data = data_predict,
-  quantiles = i04M07lst_ctr$quantiles,
-  control.fixed = i04M07lst_ctr$fixed,
+  quantiles = i04M07args_ctr$quantiles,
+  control.fixed = i04M07args_ctr$fixed,
   control.family = list(
-    hyper = i04M07lst_ctr$hyper
+    hyper = i04M07args_ctr$hyper
     ),
   control.predictor = list(compute = TRUE))
 
@@ -1408,7 +1425,7 @@ and we get the predictions from `brms` to compare
 
 ```{r}
 brm_predict <- predict(b04M07ctr, newdata = data.frame(weight_c = xseq), 
-                  probs = i04M07lst_ctr$quantiles) %>%
+                  probs = i04M07args_ctr$quantiles) %>%
   as.data.frame() %>%
   mutate(weight_c = xseq)
 ```
@@ -1418,7 +1435,7 @@ brm_predict <- predict(b04M07ctr, newdata = data.frame(weight_c = xseq),
 ```{r}
 # the marginal of sigma for the new predictions
 # converted to sd aon the natural scales
-marg_sigma <- i04M07lst_ctr$marg
+marg_sigma <- i04M07args_ctr$marg
 marg_sigma <- marg_sigma[[grep("sd", x = names(marg_sigma))]] %>%
   as.data.frame()
 
@@ -1468,7 +1485,7 @@ p
 ```
 
 
-## 4M8 {-}
+## 4M8 {-#prac4M8}
 
 The methodology used here comes from section 4.5 of @kurtz2020b to whom
 I am forever grateful for the wonderful books he gives us.
@@ -1801,7 +1818,7 @@ nonetheless similar to the B26 and B27 coefficients of models B and C
 with the increased prior variance for the weights has a wider confidence range
 for all coefficients
 
-## 4H1 {-}
+## 4H1 {-#prac4H1}
 
 We first create the dataframes in many of the following practices.
 
@@ -1912,10 +1929,9 @@ preds
 ```
 
 
-## 4H2 {-}
+## 4H2 {-#prac4H2}
 
 Load the data
-
 
 ```{r}
 data("Howell1")
@@ -2142,7 +2158,7 @@ The data points seem to have a nonlinear relation with weight, visually, it seem
 that a quadratice might be a better fit.
 
 
-## 4H3 {-}
+## 4H3 {-#prac4H3}
 
 This is covered by section 4.5.1 polynomial regression but instead of polynomial
 we use a log equation.
@@ -2331,7 +2347,7 @@ ggplot(data = data04H03, aes(x = weight)) +
   labs(title = "BRMS fit - Practice 4H3", x = "weight", y = "height")
 ```
 
-## 4H4 {-}
+## 4H4 {-#prac4H4}
 
 See section 4.5.1  for reference to this practice. R code 4.65 (p. 111)
 
@@ -2544,27 +2560,27 @@ ggplot(data04H04, aes(x = weight_c)) +
   labs(title = "BRMS fit with PRIOR - Practice 4H4", x = "weight", y = "height")
 ```
 
-## 4H5 {-}
+## 4H5 {-#prac4H5}
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
-## 4H6 {-}
+## 4H6 {-#prac4H6}
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
 
-## 4H7 {-}
+## 4H7 {-#prac4H7}
 
 ```{r echo=FALSE}
 message("Practice 4H7 is missing in the second edition!")
 ```
 
 
-## 4H8 {-}
+## 4H8 {-#prac4H8}
 
 ```{r echo=FALSE}
 message("TODO")

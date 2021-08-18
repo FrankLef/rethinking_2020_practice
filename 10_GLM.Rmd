@@ -6,4 +6,7 @@ library(brms)
 
 # Big Entropy and the Generalized Linear Model {#GLM}
 
-No practice in this chapter.
+```{r echo=FALSE}
+message("No practice in this chapter")
+```
+
