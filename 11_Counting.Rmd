@@ -18,7 +18,7 @@ library(paletteer, quietly = TRUE)
 
 # Counting and Classification {#Counting}
 
-## 11E1 {-}
+## 11E1 {-#prac11E1}
 
 ```{r}
 prob <- 0.35
@@ -28,7 +28,7 @@ lodds
 # in coding we use a predefined function such as `gtools::logit()`
 stopifnot(lodds == gtools::logit(prob))
 ```
-## 11E2 {-}
+## 11E2 {-#prac11E2}
 
 ```{r}
 lodds <- 3.2
@@ -37,7 +37,7 @@ prob
 # in coding we use a predefined function such as `gtools::inv.logit()`
 stopifnot(prob == gtools::inv.logit(lodds))
 ```
-## 11E3 {-}
+## 11E3 {-#prac11E3}
 
 See Overthinking box in section 11.1.2.
 
@@ -71,7 +71,7 @@ Therefore the proportional change $z$ is $e^\beta$ which in this case is
 exp(1.7)
 ```
 
-## 11E4 {-}
+## 11E4 {-#prac11E4}
 
 See section 11.2.3 for details.
 
@@ -102,7 +102,7 @@ $$
 For example if the count is over days and weeks then the exposures will be 1 and 7.
 
 
-## 11M1 {-}
+## 11M1 {-#prac11M1}
 
 See beginning of section 11.1.3 for discussion.
 
@@ -118,7 +118,7 @@ of success then $P(x_1 = 1 \mid n =2)= \binom{1}{2}p(1-p)$ because we have to ta
 into account there are $\binom{1}{2}$ possible orderings.
 
 
-## 11M2 {-}
+## 11M2 {-#prac11M2}
 
 See 11E3 above for similar question and same method to answer.
 
@@ -149,21 +149,21 @@ rate $\lambda_i$ by
 exp(1.7)
 ```
 
-## 11M3 {-}
+## 11M3 {-#prac11M3}
 
 See section 10.2.2 in chapter 10.
 
 The $logit$ link puts the parameter $p \in [0,1]$ on the scale $(-\infty, \infty)$ so that the
 Gaussian model can be used on the transformed variable.
 
-## 11M4 {-}
+## 11M4 {-#prac11M4}
 
 See section 10.2.2 in chapter 10.
 
 The $log$ link puts the parameter $\lambda \in [0,\infty)$ on the scale $(-\infty, \infty)$ so that the
 Gaussian model can be used on the transformed variable.
 
-## 11M5 {-}
+## 11M5 {-#prac11M5}
 
 If $\lambda \in [0,1]$ then the logit link used is justified as discussed in
 11M3 above.
@@ -176,7 +176,7 @@ distribution (i.e. $p$ is not small).
 As an example, when $\lambda$ is expressed  as a percentage of dark-colored
 cars passing every day at an intersection.
 
-## 11M6 {-}
+## 11M6 {-#prac11M6}
 
 See section 10.1.2 in chapter 10 for the binomial distribution.  It has maximum 
 entropy when
@@ -190,7 +190,7 @@ It is a special case of the binomial distribution when the probability of
 success $p$ is very small and the number of trials is very large. 
 It has the same constraints as the binomial distribution in that case.
 
-## 11M7 {-}
+## 11M7 {-#prac11M7}
 
 See section 11.1.1, p. 330, for the m11.4 model.
 
@@ -310,7 +310,7 @@ security as one might tend to conclude that the mean of 6.97 is more reasonable
 when in fact it does not reflect that actor #2 is actually a clear outlier as it always
 pull the left lever as discussed in section 11.1.1 and illustrated in figure 11.4.
 
-## 11M8 {-}
+## 11M8 {-#prac11M8}
 
 See section 11.2.1 for details and section 10.2.4 of chapter 10 on how to
 be careful when interpreting the relative importance of the coefficients.
@@ -379,7 +379,7 @@ It is important ot note that these differences are relative, as described in
 section 10.2.4 of chapter 10.
 
 
-## 11H1 {-}
+## 11H1 {-#prac11H1}
 
 
 ```{r}
@@ -512,7 +512,7 @@ choose.
 loo_compare(b11H01a, b11H01b, b11H01c, criterion = "waic")
 ```
 
-## 11H2 {-}
+## 11H2 {-#prac11H2}
 
 ```{r}
 data(eagles, package = "MASS")

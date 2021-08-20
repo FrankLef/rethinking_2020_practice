@@ -8,24 +8,24 @@ library(paletteer)
 # Small Worlds and Large Worlds {#worlds}
 
 
-## 2E1 {-}
+## 2E1 {-#prac2E1}
 
 $Pr(rain \mid Monday)$ and $\frac{Pr(rain, Monday)}{Pr(Monday)}$
 
-## 2E2 {-}
+## 2E2 {-#prac2E2}
 
 Prob that it is Monday, given it is raining
 
-## 2E3 {-}
+## 2E3 {-#prac2E3}
 
 $Pr(Monday \mid rain)$ and $\frac{Pr(rain \mid Monday)Pr(Monday)}{Pr(rain)}$
 
-## 2E4 {-}
+## 2E4 {-#prac2E4}
 
 Based on what we observe small world, the earth, we conjecture that water
 occupies 70% of the space.
 
-## 2M1 {-}
+## 2M1 {-#prac2M1}
 
 Creating the function to compute the grid
 
@@ -106,7 +106,7 @@ p2M1 <- ggplot(data = pd, mapping = aes(x = param, y = post, color = label)) +
 p2M1
 ```
 
-## 2M2 {-}
+## 2M2 {-#prac2M2}
 
 See R code 2.5 in for example of such a prior.
 
@@ -185,7 +185,7 @@ p2M2 <- ggplot(data = pd, mapping = aes(x = param, y = post, color = label)) +
 p2M2
 ```
 
-## 2M3 {-}
+## 2M3 {-#prac2M3}
 
 We first need to formulate the probabilites
 
@@ -213,7 +213,7 @@ prob_land_mars <- 1 - prob_water_mars
     (prob_land_earth * prob_earth + prob_land_mars * prob_mars)
 ```
 
-## 2M4 {-}
+## 2M4 {-#prac2M4}
 
 We have the random variables
 
@@ -252,7 +252,7 @@ P(H=b \mid F=b) = \frac{P(H=b,F=b)}{P(F=b)} = \frac{P(C=1)}{P(F=b)}= \\
 \frac{\frac{1}{3}}{1 \cdot \frac{1}{3} + 0.5 \cdot \frac{1}{3} + 0 \cdot \frac{1}{3}} = \frac{2}{3} \approx 0.67
 $$
 
-## 2M5 {-}
+## 2M5 {-#prac2M5}
 
 Using the same convention as in 2M4 and given that
 
@@ -270,7 +270,7 @@ $$
 
 
 
-## 2M6 {-}
+## 2M6 {-#prac2M6}
 
 
 |Card|Probability|
@@ -287,7 +287,7 @@ $$
 $$
 
 
-## 2M7 {-}
+## 2M7 {-#prac2M7}
 
 $C_i$: The card chosen in the $i$ pick
 $F_i$: The face on the $i$ pick
@@ -321,7 +321,7 @@ P(H_1 = b \mid F_1 = b, F_2 = w) = \\
 $$
 
 
-## 2H1 {-}
+## 2H1 {-#prac2H1}
 
 We use $A,B$ to identify the species.
 
@@ -344,7 +344,7 @@ P(T_2=1 \mid T_1=1)=\\
 
 $$
 
-## 2H2 {-}
+## 2H2 {-#prac2H2}
 
 $$
 P(A \mid T_1 = 1) = \frac{P(A, T_1=1)}{P(T_1=1)} = \\
@@ -353,7 +353,7 @@ P(A \mid T_1 = 1) = \frac{P(A, T_1=1)}{P(T_1=1)} = \\
 $$
 
 
-## 2H3 {-}
+## 2H3 {-#prac2H3}
 
 since $T_i$ are independent then
 
@@ -365,7 +365,7 @@ P(A \mid T_1 = 1, T_2 =0)=\\
 \frac{0.045}{0.045+0.08}=\frac{9}{25}=0.36
 $$
 
-## 2H4 {-}
+## 2H4 {-#prac2H4}
 
 The new genetic test, called $G=a,b$ when it identifies species A or B with a and b.
 

@@ -30,7 +30,8 @@ mode <- function(x) {
 
 
 However `ggdist::Mode()` which is used in all `ggdist::mode_xxxx()` functions
-gives a different number. For example
+gives a different number which is, in the case of a continuous variable, the
+value with the highest probabilioty density.
 
 ```{r}
 data(Howell1)
@@ -189,7 +190,7 @@ The variable names used by INLA are not easy to work with, this function convert
 these variable names to the naming convention used by `brms`
 
 ```{r}
-edit_varnames <- function(x) {
+rename_inlavars <- function(x) {
   stopifnot(is.character(x), length(x) != 0)
   
   df <- data.frame(
@@ -203,12 +204,12 @@ edit_varnames <- function(x) {
 }
 ```
 
-test `edit_varnames`
+test `rename_inlavars`
 
 ```{r}
 vars <- c("(Intercept)", "sd for the Gausssian observations   ",
           "Beta for weight_c")
-out <- edit_varnames(vars)
+out <- rename_inlavars(vars)
 # str(out)
 stopifnot(identical(out, c("b_Intercept", "sigma", "b_weight_c")))
 ```
@@ -493,8 +494,10 @@ prior_sim <- df %>%
                               })) %>%
   unnest(cols = c(height))
 # str(prior_sim)
+```
+and plot the priors vs the observations
 
-
+```{r}
 ggplot(prior_sim) +
   geom_density(aes(x = height_pred, y = ..scaled.., color = "prior predicted"),
                size = 1, alpha = 0.8) +
@@ -988,6 +991,9 @@ It can easily be duplicated for the centered data.
 
 #### Arguments {-}
 
+Please see [details](#app-inla-04M07) for explanations on the
+arguments used.
+
 We will use a list to hold the arguments as they will be used repeatedly.
 
 ```{r}
@@ -1188,7 +1194,7 @@ and we compare `inla` vs `brm`
 
 ```{r}
 inla_summ <- i04M07args_ctr$summ %>%
-  mutate(var = edit_varnames(var)) %>%
+  mutate(var = rename_inlavars(var)) %>%
   select("var", "mean", "sd")
 inla_summ
 
@@ -1244,7 +1250,7 @@ hyper_samples <- purrr::map_df(
 
 # put all posteriors together in long format
 inla_post <- bind_cols(fixed_samples, hyper_samples) %>%
-  setNames(edit_varnames(names(.))) %>%
+  setNames(rename_inlavars(names(.))) %>%
   pivot_longer(cols = everything(), names_to = ".variable",
                values_to = ".value") %>%
   mutate(fit = "inla")

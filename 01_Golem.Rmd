@@ -1,3 +1,5 @@
-# The Golem of Prague
+# The Golem of Prague {#golem}
 
-> There is no practice in this chapter.
+```{r}
+message("There is no practice for this chapter.")
+```

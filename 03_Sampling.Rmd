@@ -7,7 +7,7 @@ library(ggdist)
 library(paletteer)
 ```
 
-# Sampling the Imaginary
+# Sampling the Imaginary {#sampling}
 
 ```{r}
 p_grid <- seq(from = 0, to = 1, length.out = 1000)
@@ -20,7 +20,7 @@ samples <- sample(x = p_grid, size = 1e4, prob = posterior, replace = TRUE)
 ```
 
 
-## 3E1 {-}
+## 3E1 {-#prac3E1}
 
 note: published solution on internet has 5 instead of 4!
 I verified the code several times.
@@ -35,7 +35,7 @@ prop <- nb / length(samples)
 sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
 ```
 
-## 3E2 {-}
+## 3E2 {-#prac3E2}
 
 ```{r}
 # nb of samples < 0.8
@@ -44,7 +44,7 @@ nb <- sum(samples > 0.8)
 prop <- nb / length(samples)
 sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
 ```
-## E3 {-}
+## 3E3 {-#prac3E3}
 
 ```{r}
 # nb of samples between 0.2 ad 0.8
@@ -53,20 +53,20 @@ nb <- sum(0.2 <= samples & samples <= 0.8)
 prop <- nb / length(samples)
 sprintf("%d samples representing %0.2f%%", nb, 100 * prop)
 ```
-## 3E4 {-}
+## 3E4 {-#prac3E4}
 
 ```{r}
 quantile(x = samples, probs = 0.2)
 ```
 
-## 3E5 {-}
+## 3E5 {-#prac3E5}
 
 ```{r}
 quantile(x = samples, probs = 1 - 0.2)
 ```
 
 
-## 3E6 {-}
+## 3E6 {-#prac3E6}
 
 This is the posterior high density interval.
 
@@ -83,7 +83,7 @@ rethinking::HPDI(samples, prob = 0.66)
 ggdist::mean_hdi(.data = samples, .width = 0.66)
 ```
 
-## 3E7 {-}
+## 3E7 {-#prac3E7}
 
 
 This is the usual quantile, symetric, interval.
@@ -103,7 +103,7 @@ ggdist::mean_qi(.data = samples, .width = 0.66)
 ```
 
 
-## 3M1 {-}
+## 3M1 {-#prac3M1}
 
 Create the grid
 
@@ -134,7 +134,7 @@ ggplot(data = df, mapping = aes(x = p_grid, y = posterior)) +
 ```
 
 
-## 3M2 {-}
+## 3M2 {-#prac3M2}
 
 Create the sampled data
 
@@ -160,7 +160,7 @@ ggdist::mean_hdi(.data = the_samples$p_grid, .width = 0.9)
 ```
 
 
-## 3M3 {-}
+## 3M3 {-#prac3M3}
 
 
 Constructing a posterior prediction by simulating $W$ with the sampled $p$.
@@ -199,7 +199,7 @@ ggplot(the_samples, aes(x=predict)) +
 
 
 
-## 3M4 {-}
+## 3M4 {-#prac3M4}
 
 Prob of 6 $W$ in 9 tosses with the post dist of 8 $W$ in 15 tosses. Same process as
 in 3M3.
@@ -209,7 +209,7 @@ post_pred <- rbinom(n = nrow(the_samples), size = 9, prob = the_samples$p_grid)
 sum(post_pred == 6 ) / length(post_pred)
 ```
 
-## 3M5 {-}
+## 3M5 {-#prac3M5}
 
 Create the grid
 
@@ -293,7 +293,7 @@ ggplot(the_samples, aes(x=predict)) +
        subtitle = sprintf("Frequencies of %d predictions", nrow(the_samples)))
 ```
 
-## 3M6 {-}
+## 3M6 {-#prac3M6}
 
 
 We perform a sampling from a grid as in section 3.1 but, this time, with a grid
@@ -355,7 +355,7 @@ but is used, the high-density interval `rethinking::HPDI(x, prob = 0.99)` could 
 a flat uniform prior, using increments of 500 for the nb of tosses.
 
 
-## 3H1 {-}
+## 3H1 {-#prac3H1}
 
 Loading the data from the rethinking package
 
@@ -389,7 +389,7 @@ the posterior
 (df$p_grid[which.max(df$posterior)])
 ```
 
-## 3H2 {-}
+## 3H2 {-#prac3H2}
 
 ```{r}
 samples <- sample(x = df$p_grid, size = 1e4, prob = df$posterior, replace = TRUE)
@@ -404,7 +404,7 @@ ggdist::mean_hdi(.data = samples, .width = c(0.50, 0.89, 0.97))
 ```
 
 
-## 3H3 {-}
+## 3H3 {-#prac3H3}
 
 ```{r}
 # do a posterior prediction
@@ -452,7 +452,7 @@ ggplot(pred, aes(x = pred)) +
   labs(title = "Practice 3H3", x = "nb of boys", y = "probability", fill = "quantiles")
 ```
 
-## 3H4 {-}
+## 3H4 {-#prac3H4}
 
 Finding the posterior dist with only the first-born
 
@@ -514,7 +514,7 @@ ggplot(pred, aes(x = pred)) +
 ```
 
 
-## 3H5 {-}
+## 3H5 {-#prac3H5}
 
 The idea here is that, if boys are independent of girls then
 $P(boy \mid girl) = P(boy)$ when $boy$ and $girl$ are independent.
