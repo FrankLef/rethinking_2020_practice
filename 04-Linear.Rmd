@@ -14,51 +14,6 @@ library(paletteer, quietly = TRUE)
 
 ## Notes {-}
 
-### Mode {-}
-
-Technically, the mode is defined as the most likely value.  Usually
-the following function does precisely that.
-
-
-```{r}
-# find the mode
-mode <- function(x) {
-  ux <- unique(x)
-  ux[which.max(tabulate(match(x, ux)))]
-}
-```
-
-
-However `ggdist::Mode()` which is used in all `ggdist::mode_xxxx()` functions
-gives a different number which is, in the case of a continuous variable, the
-value with the highest probabilioty density.
-
-```{r}
-data(Howell1)
-d <- Howell1 %>%
-  filter(age  >= 18)
-rm(Howell1)
-the_modes <- c("mode" = mode(d$height), "ggdist" = ggdist::Mode(d$height)) 
-ggplot(d, aes(x = height)) +
-  geom_density() +
-  geom_vline(xintercept = the_modes, color = c("red", "blue")) +
-  geom_text(data = data.frame(x = the_modes, y = c(0.01, 0.02)),
-            aes(x = x, y = y, label = x), color = c("red", "blue"), 
-            inherit.aes = FALSE) +
-  theme_light() +
-  theme(panel.grid = element_blank()) +
-  labs(title = "Compare mode() and ggdist::Mode()",
-       subtitle = sprintf("ggdist::Mode = %.6f\nmode = %f", 
-                          the_modes["ggdist"], the_modes["mode"]))
-```
-
-As shown just above, when plotting the density, `ggdist::Mode()` always gives the
-right position with maximum density.  The custom `mode()` function, as recommended
-for example at [mode](https://stackoverflow.com/questions/2547402/how-to-find-the-statistical-mode)
-is pretty much always off.  Often by a lot.
-
-The `ggdist::Mode()` is the function used in this project.
-
 ## Custom functions {-}
 
 ### With `ggdist` {-}
@@ -986,168 +941,40 @@ and again with the same results as when using `quap`.
 
 ### Using `inla` {-}
 
-The fit with `inla` will only be done for the data on the natural scale.
-It can easily be duplicated for the centered data.
+The fit with `inla` will only be done for the data with the centered predictor
+$weight_c$.
 
-#### Arguments {-}
+Please see [details](#app-inla-04M07) for more details on the arguments.
 
-Please see [details](#app-inla-04M07) for explanations on the
-arguments used.
-
-We will use a list to hold the arguments as they will be used repeatedly.
 
 ```{r}
-i04M07args_ctr <- list()
+a_file <- here::here("fits", "i04M07.rds")
+# i04M07 <- readRDS(file = a_file)
+i04M07 <- inla(
+  formula = height ~ f(weight_c, model = "clinear", range = c(0, Inf),
+                         prior = "logtnormal", param = c(0, 1)),
+  family = "gaussian",
+  data = data04M07,
+  quantiles = c(0.025, 0.5, 0.975),
+  control.fixed = list(mean.intercept = 178, prec.intercept = 1 / (20^2)),
+  control.family = list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
+  control.compute = list(config = TRUE, dic = TRUE, waic = TRUE))
+saveRDS(i04M07, file = a_file)
 ```
 
-
-##### `formula` {-}
-
-See section 3.2.1 and 3.2.2 of @gomez2020, example on p. 40 at the end of 
-section 3.2.2 on p. 41 and 42.
-
-* the model is fixed (no random effect) and
-* the $\beta$ coefficient is constrained, i.e. must be positive
-
-Therefore the model has a constrained fixed effect *weight_c* which is 
-indicated by `clinear` in the `f()` function of the formula. This makes
-*weight_c* a *latent effect* as opposed to a *likelihood effect* such
-as $\sigma$ in the current model.
-
-The available priors of *latent effect* are as follows
-
-```{r}
-names(inla.models()$prior)
-inla.models()$prior$logtnormal
-# inla.doc("logtgaussian")
-```
-
-
-
-Therefore we will use
-
-```{r}
-i04M07args_ctr$frmla <- formula(height ~ f(weight_c, 
-                                          model = "clinear", 
-                                          range = c(0, Inf)))
-# the available latent models are in names(inla.models()$latent)
-stopifnot("clinear" %in% names(inla.models()$latent))
-```
-
-##### `family` {-}
-
-`INLA` can work with many families.  They are listed in `inla.models`
-
-```{r}
-i04M07args_ctr$family <- "gaussian"
-stopifnot(i04M07args_ctr$family %in% names(inla.models()$likelihood))
-```
-
-
-##### `control.fixed` {-}
-
-See example on p. 47 at the end of section 3.2 of @wang2018.
-
-The intercept prior is $\alpha \sim \mathcal{N}(178, 20)$ where $sd = 20$ and 
-therefore precision is
-
-```{r}
-1 / (20^2)
-```
-
-and similarly the effect prior is $\beta \sim \mathcal{LogNormal}(0, 1)$ which
-is a constrained effect described in the *Model* just above. Converting the mean
-and sd we have the precision
-
-```{r}
-exp(0)  # exp(1) used because original distribution is LogNormal
-1 / (exp(1)^2)  # exp(1) used because original distribution is LogNormal
-```
-
-which gives
-
-```{r}
-i04M07args_ctr$fixed <- list(
-  mean.intercept = 178, 
-  prec.intercept = 1 / (20^2),
-  mean = list(weight = exp(0)),
-  prec = list(weight = 1 / (exp(1)^2))
-  )
-```
-
-##### `control.family` {-}
-
-See example on p. 47 at the end of section 3.2 of @wang2018.
-See also section 3.5.1 in @gomez2020.
-
-By default, the prior of the family precision $\tau$ is assumed to be a
-diffuse gamma. Since $\tau$ is expressed as $\log{}\tau$ internally, setting
-the hyperparameter family to gaussian, give a log normal distribution.
-
-Therefore we use
-
-```{r}
-i04M07args_ctr$hyper <- list(prec = list(prior = "gaussian", param = c(0, 1)))
-```
-
-
-
-##### `control.compute` {-}
-
-See section 3.4 in @wang2018 for moel selection and checking.
-For `cpo`, see section 3.4.3 in @wang2018 for details
-
-This arguments, in the form of a list, is as follows
-
-* `config = TRUE`: Compute the posteriors
-* `dic = TRUE`: Compute the Divergence information criteria
-* `waic = TRUE`: Compute the waic
-* `cpo = TRUE`: Compute the conditional predictive ordinance.
-
-which gives
-
-```{r}
-i04M07args_ctr$compute <- list(config=TRUE, dic = TRUE, waic = TRUE)
-```
-
-##### Miscellaneous {-}
-
-the quantiles used, they are used later whendoing summaries
-
-```{r}
-i04M07args_ctr$quantiles <- c(0.025, 0.5, 0.975)
-```
-
-
-#### Create `inla` {-}
-
-```{r}
-a_file <- here::here("fits", "i04M07nat.rds")
-i04M07nat <- readRDS(file = a_file)
-# i04M07nat <- inla(
-#   formula = i04M07args_ctr$frmla,
-#   family = i04M07args_ctr$family,
-#   data = data04M07,
-#   quantiles = i04M07args_ctr$quantiles,
-#   control.fixed = i04M07args_ctr$fixed,
-#   control.family = list(
-#     hyper = i04M07args_ctr$hyper
-#     ),
-#   control.compute = i04M07args_ctr$compute)
-# saveRDS(i04M07nat, file = a_file)
-```
 
 which gives the summary for fixed parameters
 
 ```{r}
-i04M07nat$summary.fixed
+i04M07$summary.fixed
 ```
 
 and hyperparameters which are shown on the *internal scale* which is the *log*
 and this case.
 
 ```{r}
-i04M07nat$summary.hyperpar
+i04M07$summary.hyperpar
 ```
 
 
@@ -1163,37 +990,35 @@ use the inversed transformed `internal.marginal.hyperpar` for the precision and
 precision is not used for summaries and plotting.
 
 ```{r}
-i04M07args_ctr$marg <- transform_hyper_marginal(i04M07nat)
-stopifnot(length(i04M07args_ctr$marg) == 2L)
+i04M07hmarg <- transform_hyper_marginal(i04M07)
+stopifnot(length(i04M07marg) == 2L)
 ```
 
 then create the summary
 
 ```{r}
+i04M07_hyper_summ <- write_hyper_summary(margs = i04M07hmarg, 
+                                          qtl = i04M07$.args$quantiles)
+stopifnot(all.equal(dim(i04M07_hyper_summ), c(2L, 6L)))
 
-i04M07args_ctr$summ <- write_hyper_summary(margs = i04M07args_ctr$marg, 
-                                          qtl = i04M07args_ctr$quantiles)
-stopifnot(identical(dim(i04M07args_ctr$summ), c(2L, 6L)))
-
-i04M07args_ctr$summ
+i04M07_hyper_summ
 ```
 
 
 so that a summary with all the parameters can be done
 
 ```{r}
-inla_summ <- i04M07nat$summary.fixed %>%
-  bind_rows(i04M07args_ctr$summ) %>%
+i04M07summ <- i04M07nat$summary.fixed %>%
+  bind_rows(i04M07_hyper_summ) %>%
   tibble::rownames_to_column(var = "var")
-inla_summ
-i04M07args_ctr$summ <- inla_summ
+i04M07summ
 ```
 
 and we compare `inla` vs `brm`
 
 
 ```{r}
-inla_summ <- i04M07args_ctr$summ %>%
+inla_summ <- i04M07summ %>%
   mutate(var = rename_inlavars(var)) %>%
   select("var", "mean", "sd")
 inla_summ
@@ -1221,8 +1046,8 @@ So, lets get posterior samples from `inla`
 ```{r}
 # sample the inla's posterior distributions
 nsamples <- 2000
-fmarg <- i04M07nat$marginals.fixed
-hmarg <- i04M07args_ctr$marg
+fmarg <- i04M07$marginals.fixed
+hmarg <- i04M07hmarg
 
 # sample the fixed parameters
 fixed_samples <- purrr::map_dfc(
@@ -1249,7 +1074,7 @@ hyper_samples <- purrr::map_df(
 # str(hyper_samples)
 
 # put all posteriors together in long format
-inla_post <- bind_cols(fixed_samples, hyper_samples) %>%
+i04M07post <- bind_cols(fixed_samples, hyper_samples) %>%
   setNames(rename_inlavars(names(.))) %>%
   pivot_longer(cols = everything(), names_to = ".variable",
                values_to = ".value") %>%
@@ -1262,7 +1087,7 @@ and, as recommended section 2.7, p.37, of @gomez2020 we will compare
 the posteriors to the `brm` posteriors which are obtained as follows
 
 ```{r}
-get_variables(b04M07nat)
+get_variables(b04M07ctr)
 ```
 Get the posterior from `brm`
 
@@ -1277,7 +1102,7 @@ and plot the posterior densities and modes
 
 ```{r}
 # all data together
-pdf <- rbind(inla_post, brm_post) %>%
+pdf <- rbind(i04M07post, brm_post) %>%
   mutate(.variable = factor(.variable, 
                             levels = c("b_Intercept", "b_weight_c", "sigma"),
                             ordered = TRUE))
@@ -1324,27 +1149,34 @@ data_fit <- data04M07 %>%
 
 
 We need to add `control.predictor=list(compute=TRUE)` to compute
-the posterior mean of the linear predictors
+the posterior mean of the linear predictors and use the data with the
+sequence with `NA`
 
 ```{r}
-# must use control.predictor = list(compute = TRUE)
-inla_fit <- inla(
-  formula = i04M07args_ctr$frmla,
-  family = i04M07args_ctr$family,
+# use the exact same arguments as the original (except data and control.predictor)
+i04M07fitted <- inla(
+  formula = i04M07$.args$formula,
+  family = i04M07$.args$family,
   data = data_fit,
-  quantiles = i04M07args_ctr$quantiles,
-  control.fixed = i04M07args_ctr$fixed,
-  control.family = list(
-    hyper = i04M07args_ctr$hyper
-    ),
+  quantiles = i04M07$.args$quantiles,
+  control.fixed = i04M07$.args$control.fixed,
+  control.family = i04M07$.args$control.family,
+  control.compute = i04M07$.args$control.compute,
   control.predictor = list(compute = TRUE))
+# i04M07fitted
+```
 
-inla_fit <- inla_fit$summary.linear.predictor %>%
+get the fitted data in a data.frame with only the new values (`slice_tail`)
+
+```{r}
+i04M07fitted_df <- i04M07fitted$summary.fitted.values %>%
   select(mean, sd, `0.025quant`, `0.975quant`) %>%
   slice_tail(n = length(xseq)) %>%
   mutate(weight_c = xseq)
-str(inla_fit)
+str(i04M07fitted_df)
+stopifnot(all.equal(dim(i04M07fitted_df), c(length(xseq), 5L)))
 ```
+
 
 
 and we get the fit from `brms` to compare
@@ -1360,7 +1192,7 @@ brm_fit <- fitted(b04M07ctr, newdata = data.frame(weight_c = xseq),
 and we plot the results
 
 ```{r}
-p1 <- ggplot(data = inla_fit, aes(x = weight_c, y = mean, ymin = `0.025quant`,
+p1 <- ggplot(data = i04M07fitted_df, aes(x = weight_c, y = mean, ymin = `0.025quant`,
                                   ymax = `0.975quant`)) +
   geom_lineribbon(size = 1, color = "rosybrown", fill = "rosybrown1") +
   ggdist::theme_ggdist() +
@@ -1374,7 +1206,7 @@ p2 <- ggplot(data = brm_fit, aes(x = weight_c, y = Estimate, ymin = Q2.5,
   labs(title = "brm fit", y = "mean")
 # p2
 
-p3 <- ggplot(data.frame(brm = brm_fit$Estimate, inla = inla_fit$mean), 
+p3 <- ggplot(data.frame(brm = brm_fit$Estimate, inla = i04M07fitted_df$mean), 
              aes(x = brm, y = inla)) +
   geom_point() +
   ggdist::theme_ggdist() +
@@ -1406,25 +1238,32 @@ We need to add `control.predictor=list(compute=TRUE)` to compute
 the posterior mean of the linear predictors. This is the same as for fitted just
 above.
 
+**Important:** See 
+
 ```{r}
 # must use control.predictor = list(compute = TRUE)
-inla_predict <- inla(
-  formula = i04M07args_ctr$frmla,
-  family = i04M07args_ctr$family,
+# use the exact same arguments as the original (except data and control.compute)
+i04M07predict <- inla(
+  formula = i04M07$.args$formula,
+  family = i04M07$.args$family,
   data = data_predict,
-  quantiles = i04M07args_ctr$quantiles,
-  control.fixed = i04M07args_ctr$fixed,
-  control.family = list(
-    hyper = i04M07args_ctr$hyper
-    ),
+  quantiles = i04M07$.args$quantiles,
+  control.fixed = i04M07$.args$control.fixed,
+  control.family = i04M07$.args$control.family,
+  control.compute = i04M07$.args$control.compute,
   control.predictor = list(compute = TRUE))
+# i04M07fitted
 
-inla_predict <- inla_predict$summary.linear.predictor %>%
+i04M07predict_summ <- i04M07predict$summary.linear.predictor %>%
   select(mean, sd, `0.025quant`, `0.975quant`) %>%
   slice_tail(n = length(xseq)) %>%
   mutate(weight_c = xseq)
-str(inla_predict)
+# str(i04M07predict)
 ```
+
+
+
+
 
 
 and we get the predictions from `brms` to compare
@@ -1504,7 +1343,7 @@ data("cherry_blossoms")
 data04M08 <- cherry_blossoms %>%
   drop_na(doy)
 rm(cherry_blossoms)
-stopifnot(identical(dim(data04M08), c(827L, 5L)))
+stopifnot(all.equal(dim(data04M08), c(827L, 5L)))
 skimr::skim(data04M08)
 ```
 
@@ -1834,7 +1673,7 @@ data04H01 <- Howell1 %>%
   filter(age >= 18) %>%
   mutate(weight_c = scale(weight, center = TRUE, scale = FALSE))
 rm("Howell1")
-stopifnot(identical(dim(data04H01), c(352L, 5L)))
+stopifnot(all.equal(dim(data04H01), c(352L, 5L)))
 ```
 
 ### Model {-}
@@ -1946,7 +1785,7 @@ data04H02 <- Howell1 %>%
   mutate(weight_c = scale(weight, center = TRUE, scale = FALSE))
 rm("Howell1")
 # there should be 192 rows
-stopifnot(identical(dim(data04H02), c(192L, 5L)))
+stopifnot(all.equal(dim(data04H02), c(192L, 5L)))
 skimr::skim(data04H02)
 ```
 
@@ -2176,7 +2015,7 @@ data("Howell1")
 data04H03 <- Howell1 %>%
   mutate(weight_c = scale(weight, center = TRUE, scale = FALSE))
 rm("Howell1")
-stopifnot(identical(dim(data04H03), c(544L, 5L)))
+stopifnot(all.equal(dim(data04H03), c(544L, 5L)))
 skimr::skim(data04H03)
 ```
 
@@ -2366,7 +2205,7 @@ data04H04 <- Howell1 %>%
   mutate(weight_c = scale(weight, center = TRUE, scale = FALSE),
          weight_c2 = weight_c ^ 2)
 rm("Howell1")
-stopifnot(identical(dim(data04H04), c(544L, 6L)))
+stopifnot(all.equal(dim(data04H04), c(544L, 6L)))
 skimr::skim(data04H04)
 ```
 
