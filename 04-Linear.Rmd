@@ -1260,9 +1260,14 @@ also [predict_inla](#app-inla-04M07-predict_inla) for the function `predict_inla
 from the `eflINLA` package.
 
 ```{r}
+i04M07ctr_args_new <- i04M07ctr_args
+i04M07ctr_args_new$control.predictor <- list(compute = TRUE)
+i04M07ctr_args_new$data <- newdata$data
 preds <- list(n = 1000L)
-preds$data <- eflINLA::predict_inla(args = i04M07ctr_args, n = preds$n, 
-                                    newdata = newdata$data, dep_var = "height")
+preds$inla <- do.call(INLA::inla, i04M07ctr_args_new)
+preds$data <- eflINLA::predict_inla(object = preds$inla,
+                                    pos = which(is.na(newdata$data$height)),
+                                    n = preds$n)
 
 # get the intervals
 preds$intervals <- preds$data %>%
@@ -1726,16 +1731,18 @@ summ %>%
   round(digits = 2)
 ```
 We observe that the coefficients are very similar. The errors are very 
-different however.  This aspect was not investigasted in this project as
-additive models are not the main scope of the book.
+different however.  This aspect was not investigated in this project as
+additive models are not the main scope of the book. My hypothesis is that
+inla's sd shows the standard deviation of the predictions whereas brms shows
+the standard deviaiton of the *mean*.
 
 
 ## 4H1 {-#prac4H1}
 
-We first create the dataframes in many of the following practices.
+
+### Data and model {-}
 
 ```{r}
-
 data("Howell1")
 data04H01 <- Howell1 %>%
   filter(age >= 18) %>%
@@ -1744,7 +1751,7 @@ rm("Howell1")
 stopifnot(all.equal(dim(data04H01), c(352L, 5L)))
 ```
 
-### Model {-}
+
 
 and the model that will be used
 
@@ -1778,45 +1785,42 @@ m04H01 <- readRDS(file = a_file)
 saveRDS(object = m04H01, file = a_file)
 ```
 
-```{r}
-vcov(m04H01)
-# matrixcalc::is.positive.definite(vcov(m04H01), tol = 1e-4)
-```
 
-
-get the posterior
+get the samples of posterior likelihood
 
 ```{r}
-m04H01_post <- extract.samples(m04H01)
-m04H01_pred <- rnorm(n = nrow(m04H01_post), 
-                   mean = m04H01_post$a + m04H01_post$b * 46.95,
-                   sd = m04H01_post$sigma)
-ggdist::mean_hdi(m04H01_pred, .width = 0.89)
+samples <- list(n = 1000L)
+samples$data <- extract.samples(m04H01, n = samples$n)
 ```
 
 ### Using `rethinking::link()` {-}
 
-and find the predictions using the detailed method as described
+Find the predictions using the detailed method as described
 in overthinking box of section 4.4.3.4. The `rethinking::link()` function
 does that.
 
 ```{r}
-the_weights <- c(46.95, 43.72, 64.78, 32.59, 54.63)
-nsamples <- 1000
+# the predictors used to make predictions
+preds <- list(weight = c(46.95, 43.72, 64.78, 32.59, 54.63))
 
+# the simulated predictions using the sampled posterior likelihood
 set.seed(4)
-preds <- sapply(X = the_weights, FUN = function(x) {
-  rnorm(n = nsamples, 
-        mean = m04H01_post$a + m04H01_post$b * x,
-        sd = m04H01_post$sigma)
+preds$sim <- sapply(X = preds$weight, FUN = function(x) {
+  rnorm(n = samples$n, 
+        mean = samples$data$a + samples$data$b * x, 
+        sd = samples$data$sigma)
   })
-preds <- apply(X = preds, MARGIN = 2, FUN = ggdist::mean_hdi, .width = 0.89)
-preds <- do.call(rbind, preds)
-preds <- preds %>%
-  mutate(individual = seq_along(the_weights)) %>%
+
+
+# get the interval of predictions and create the data.frame
+preds$intervals <- apply(X = preds$sim, MARGIN = 2, FUN = ggdist::mean_hdi, 
+                         .width = 0.89)
+preds$intervals <- do.call(rbind, preds$intervals)
+preds$intervals <- preds$intervals %>%
+  mutate(individual = seq_along(preds$weight)) %>%
   rename(height = y) %>%
   relocate(individual)
-preds
+preds$intervals
 ```
 
 ### Using `tidyverse` {-}
@@ -1824,21 +1828,28 @@ preds
 The tidyverse way will be used from hereon.
 
 ```{r}
-obs <- data.frame("individual" = seq_along(the_weights), "weight" = the_weights)
+preds <- list(weight = c(46.95, 43.72, 64.78, 32.59, 54.63))
+preds$newdata <- with(preds, {
+  data.frame("individual" = seq_along(weight), "weight" = weight)
+  })
+
+# get the simulated predictions
 set.seed(4)
-preds <- obs %>%
-  expand(nesting(individual, weight)) %>%
-  mutate(height = purrr::map(.x = weight, 
-                            .f = ~ rnorm(
-                              n = nsamples, 
-                              mean = m04H01_post$a + m04H01_post$b * .x, 
-                              sd = m04H01_post$sigma)
-                            )
-         ) %>%
-  unnest(cols = c(height)) %>%
-  group_by(individual) %>%
-  ggdist::mean_hdi(height, .width = 0.89)
-preds
+preds$sim <- purrr::map_dfr(
+  .x = preds$newdata$weight,
+  .f = function(x) {
+    mu <- samples$data$a + samples$data$b * x
+    y <- rnorm(n = length(mu), mean = mu, sd = samples$data$sigma)
+    data.frame(weight = x, height = y)
+  })
+
+# the predictions intervals
+preds$intervals <- preds$sim %>%
+  group_by(weight) %>%
+  ggdist::mean_hdi(height, .width = 0.89) %>%
+  mutate(individual = preds$newdata$individual[order(preds$newdata$weight)]) %>%
+  relocate(individual)
+preds$intervals
 ```
 
 
@@ -1899,8 +1910,7 @@ m04H02 <- readRDS(file = a_file)
 #     start = list(a = mean(data04H01$height), b = 1)
 # )
 # saveRDS(m04H02, file = a_file)
-m04H02_summ <- rethinking::precis(m04H02, prob = 0.89)
-m04H02_summ
+rethinking::precis(m04H02, prob = 0.89)
 ```
 
 for 10 more units of weights the child should be taller between 26 and 28 cm.
@@ -1912,55 +1922,60 @@ for 10 more units of weights the child should be taller between 26 and 28 cm.
 See section 4.4.3.4 for more details.
 
 ```{r}
-weight_seq <- modelr::seq_range(data04H02$weight, n = 30)
-weight_seq <- data.frame(weight = weight_seq)
+preds <- list(n = 30L)
+preds$newdata <- data.frame(weight = modelr::seq_range(data04H02$weight, 
+                                                       n = preds$n))
 ```
 
 ```{r}
 precis(m04H02)
-# m04H02_post <- extract.samples(m04H02)
 ```
 
 See the overthinking box in section 4.4.3.4 to explain `rethinking::link()`
 
 ```{r}
-m04H02_fitted <- rethinking::link(fit = m04H02, 
-                                 data = weight_seq, 
-                                 n = 1000)
-# str(m04H02_fitted)
-m04H02_fitted_inrvl <- apply(X = m04H02_fitted, MARGIN = 2, FUN = function(x) {
+# get the samples of fitted values
+samples <- list(n = 1000L)
+samples$fitted <- rethinking::link(fit = m04H02, 
+                                 data = preds$newdata, 
+                                 n = samples$n)
+
+# the intervals of fitted values
+samples$fitted_intervals <- apply(X = samples$fitted, MARGIN = 2, FUN = function(x) {
   c("mean" = mean(x), rethinking::HPDI(x))
-}) %>%
+  }) %>%
   t() %>%
-  bind_cols(weight = weight_seq) %>%
+  bind_cols(weight = preds$newdata) %>%
   as.data.frame()
-# m04H02_fitted_inrvl
+samples$fitted_intervals
 ```
 and the prediction intervals are obtained as described in section 4.4.3.5
 using `rethinking::sim()`
 
 ```{r}
-m04H02_predict <- rethinking::sim(fit = m04H02,
-                                 data = data.frame(weight = weight_seq),
-                                 n = 1000)
-m04H02_predict_inrvl <- apply(X = m04H02_predict, MARGIN = 2, FUN = function(x) {
-  c("mean" = mean(x), rethinking::HPDI(x))
-}) %>% 
+samples$predict <- rethinking::sim(fit = m04H02,
+                                 data = preds$newdata,
+                                 n = samples$n)
+samples$predict_intervals <- 
+  apply(X = samples$predict, MARGIN = 2, 
+        FUN = function(x) {
+          c("mean" = mean(x), rethinking::HPDI(x))
+          }) %>% 
   t() %>%
-  bind_cols(weight = weight_seq) %>%
+  bind_cols(weight = preds$newdata) %>%
   as.data.frame()
-# m04H02_predict_inrvl
+samples$predict_intervals
 ```
 
 
 
 
 ```{r}
-ggplot(data = data04H01, aes(x = weight)) +
-  geom_ribbon(data = m04H02_predict_inrvl,
+ggplot(data = data04H02, aes(x = weight)) +
+  geom_ribbon(data = samples$predict_intervals,
               aes(ymin = `|0.89`, ymax = `0.89|`),
               fill = "lightcyan") +
-  geom_smooth(data = m04H02_fitted_inrvl,
+  geom_smooth(data = samples$fitted_intervals,
               aes(y = mean, ymin = `|0.89`, ymax = `0.89|`),
               stat = "identity",
               fill = "lightcyan3", color = "black", alpha = 1, size = 1/2) +
@@ -1999,23 +2014,23 @@ b04H02_fixf
 
 
 ```{r}
-weight_seq <- modelr::seq_range(data04H02$weight, n = 30)
-weight_seq <- data.frame(weight = weight_seq)
-```
+# use the same samples size as before
+samples <- list(n = samples$n,
+                probs = c(0.055, 0.945))
 
-
-```{r}
-b04H02_fitted <-
-  fitted(b04H02, newdata = weight_seq, probs = c(0.055, 0.945)) %>%
+# get the fitted values
+samples$fitted <- fitted(b04H02, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
   data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H02_fitted)
+  bind_cols(preds$newdata)
+samples$fitted
 
-b04H02_predict <-
-  predict(b04H02, newdata = weight_seq, probs = c(0.055, 0.945)) %>%
+# get the predicted values
+samples$predict <- predict(b04H02, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
   data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H02_predict)
+  bind_cols(preds$newdata)
+samples$predict
 ```
 
 
@@ -2024,10 +2039,10 @@ and we illustrate the results
 
 ```{r}
 ggplot(data = data04H02, aes(x = weight)) +
-  geom_ribbon(data = b04H02_predict,
+  geom_ribbon(data = samples$predict,
               aes(ymin = Q5.5, ymax = Q94.5),
               fill = "lightcyan") +
-  geom_smooth(data = b04H02_fitted,
+  geom_smooth(data = samples$fitted,
               aes(y = Estimate, ymin = Q5.5, ymax = Q94.5),
               stat = "identity",
               fill = "lightcyan3", color = "black", alpha = 1, size = 1/2) +
@@ -2040,50 +2055,28 @@ ggplot(data = data04H02, aes(x = weight)) +
   labs(title = "BRMS fit - Practice 4H2", x = "weight", y = "height")
 ```
 
-### 4H2 a) with `inla` {-}
-
-
-```{r}
-a_file <- here::here("fits", "i04H02nat.rds")
-# i04H02 <- readRDS(file = a_file)
-i04H02 <- inla(
-  formula = height ~ weight,
-  family = "gaussian",
-  data = data04H02,
-  control.fixed=list(mean.intercept = 80, prec.intercept = 1 / 40^2, prec=0.001),
-  control.compute = list(config=TRUE, dic = TRUE, waic = TRUE))
-saveRDS(i04H02, file = a_file)
-```
-
-
-```{r}
-# the fixed coefficients
-i04H02$summary.fixed[c("(Intercept)", "weight"), c("mean", "sd")] %>%
-  bind_cols(as.data.frame(fixef(b04M07nat)[, c("Estimate", "Est.Error")])) %>%
-  round(digits = 2)
-```
-
-
 
 ### 4H2 c) {-}
 
-The data points seem to have a nonlinear relation with weight, visually, it seems, maybe,
-that a quadratice might be a better fit.
+The data points seem to have a nonlinear relation with weight, visually.
+The relation could hypothetized to be quadratic.  It could also be logarithmic.
 
 
 ## 4H3 {-#prac4H3}
 
 This is covered by section 4.5.1 polynomial regression but instead of polynomial
-we use a log equation.
+we use a logarithmic relation..
 
 The data is
 
 ```{r}
 data("Howell1")
 data04H03 <- Howell1 %>%
-  mutate(weight_c = scale(weight, center = TRUE, scale = FALSE))
+  mutate(weight_c = scale(weight, center = TRUE, scale = FALSE),
+         weight_log = log(weight))
 rm("Howell1")
-stopifnot(all.equal(dim(data04H03), c(544L, 5L)))
+stopifnot(all.equal(dim(data04H03), c(544L, 6L)),
+          all(is.finite(data04H03$weight_log)))
 skimr::skim(data04H03)
 ```
 
@@ -2096,17 +2089,17 @@ height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \mu_i &= \alpha + \log{(\beta)} \cdot weight_i \\
 \alpha &\sim \mathcal{N}(178, 20) \\
 \beta &\sim \mathcal{N}(0, 10) \\
-\sigma &\sim \mathcal{Uniform}(0, 50)
+\sigma &\sim \mathcal{Exponential}(1)
 \end{align*}
 $$
 
 ### 4H3 a) using `quap` {-}
 
-> Important: We have to use `dunif` for sigma to make the `quap` converge. Otherwise
-the cov matrix is not positive definite.
+> Important: We have to use `dunif` for sigma to make the `quap` converge.
+Otherwise the cov matrix is not positive definite.
 
 ```{r}
-a_file <- here::here("fits", "m04H03.rds")  # save to rds file
+a_file <- here::here("fits", "m04H03.rds")
 m04H03 <- readRDS(file = a_file)
 # m04H03 <- rethinking::quap(
 #     flist = alist(
@@ -2124,7 +2117,7 @@ precis(m04H03, prob = 0.89)
 
 Since we use $\log{weight}$ than any change of $\log{weight}$ represents
 a percentage change of $weight$, therefore $b$ represents that, for every
-percentage increase of the weight, the height is reduced by -2.65 of a percentage.
+percentage increase of the weight, the height is increased by 46.76 of a percentage.
 
 
 ### 4H3 b) using `quap` {-}
@@ -2132,51 +2125,57 @@ percentage increase of the weight, the height is reduced by -2.65 of a percentag
 We use the same process as in 4H2 just above
 
 ```{r}
-weight_seq <- data.frame(
-  weight = modelr::seq_range(data04H03$weight, n = 30)
-  )
+preds <- list(n = 30L)
+preds$newdata <- data.frame(
+  weight = modelr::seq_range(data04H03$weight, n = preds$n))
 ```
 
-same process as in 4H2 above
+same process as in 4H2 above where we sample the fitted and predicted values
 
 ```{r}
-m04H03_fitted <- rethinking::link(fit = m04H03, 
-                                 data = weight_seq, 
-                                 n = 1000)
-# str(m04H03_fitted)
-m04H03_fitted_inrvl <- apply(X = m04H03_fitted, MARGIN = 2, FUN = function(x) {
+# get the samples of fitted values
+samples <- list(n = 1000L)
+samples$fitted <- rethinking::link(fit = m04H03, 
+                                 data = preds$newdata, 
+                                 n = samples$n)
+
+# the intervals of fitted values
+samples$fitted_intervals <- apply(X = samples$fitted, MARGIN = 2, FUN = function(x) {
   c("mean" = mean(x), rethinking::HPDI(x, prob = 0.97))
-}) %>%
+  }) %>%
   t() %>%
-  bind_cols(weight = weight_seq) %>%
+  bind_cols(weight = preds$newdata) %>%
   as.data.frame()
-# m04H03_fitted_inrvl
+samples$fitted_intervals
 ```
+
 and the prediction intervals are obtained as described in section 4.4.3.5
 using `rethinking::sim()` (sames as in 4H2 above)
 
-```{r}
-m04H03_predict <- rethinking::sim(fit = m04H03,
-                                 data = data.frame(weight = weight_seq),
-                                 n = 1000)
-m04H03_predict_inrvl <- apply(X = m04H03_predict, MARGIN = 2, FUN = function(x) {
-  c("mean" = mean(x), rethinking::HPDI(x, prob = 0.97))
-}) %>% 
-  t() %>%
-  bind_cols(weight = weight_seq) %>%
-  as.data.frame()
-# m04H03_predict_inrvl
-```
 
+```{r}
+samples$predict <- rethinking::sim(fit = m04H03,
+                                 data = preds$newdata,
+                                 n = samples$n)
+samples$predict_intervals <- 
+  apply(X = samples$predict, MARGIN = 2, 
+        FUN = function(x) {
+          c("mean" = mean(x), rethinking::HPDI(x, prob = 0.97))
+          }) %>% 
+  t() %>%
+  bind_cols(weight = preds$newdata) %>%
+  as.data.frame()
+samples$predict_intervals
+```
 
 
 
 ```{r}
 ggplot(data = data04H03, aes(x = weight)) +
-  geom_ribbon(data = m04H03_predict_inrvl,
+  geom_ribbon(data = samples$predict_intervals,
               aes(ymin = `|0.97`, ymax = `0.97|`),
               fill = "aquamarine1") +
-  geom_smooth(data = m04H03_fitted_inrvl,
+  geom_smooth(data = samples$fitted_intervals,
               aes(y = mean, ymin = `|0.97`, ymax = `0.97|`),
               stat = "identity",
               fill = "aquamarine4", color = "black", alpha = 1, size = 1/2) +
@@ -2208,46 +2207,42 @@ b04H03 <- readRDS(file = a_file)
 #                    iter = 2000, warmup = 1000, chains = 4,
 #                    cores = detectCores(), seed = 4)
 # saveRDS(b04H03, file = a_file)
-b04H03_fixf <- brms::fixef(b04H03)
-b04H03_fixf
+brms::fixef(b04H03)
 ```
 
-prior(cauchy(0, 1), class = sigma)
 
 ### 4H3 b) using `brm` {-}
 
-
 ```{r}
-weight_seq <- data.frame(
-  weight = modelr::seq_range(data04H03$weight, n = 30)
-  )
+# use the same samples size as before
+samples <- list(n = samples$n,
+                probs = c(0.015, 0.985))
+
+# get the fitted values
+samples$fitted <- fitted(b04H03, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
+  data.frame() %>%
+  bind_cols(preds$newdata)
+samples$fitted
+
+# get the predicted values
+samples$predict <- predict(b04H03, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
+  data.frame() %>%
+  bind_cols(preds$newdata)
+samples$predict
 ```
 
 
-```{r}
-b04H03_fitted <-
-  fitted(b04H03, newdata = weight_seq, probs = c(0.015, 0.985)) %>%
-  data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H03_fitted)
-
-b04H03_predict <-
-  predict(b04H03, newdata = weight_seq, probs = c(0.015, 0.985)) %>%
-  data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H03_predict)
-```
-
-
-and we illustrate the results
+and we illustrate the results which are similar to `quap` above.
 
 
 ```{r}
 ggplot(data = data04H03, aes(x = weight)) +
-  geom_ribbon(data = b04H03_predict,
+  geom_ribbon(data = samples$predict,
               aes(ymin = Q1.5, ymax = Q98.5),
               fill = "aquamarine1") +
-  geom_smooth(data = b04H03_fitted,
+  geom_smooth(data = samples$fitted,
               aes(y = Estimate, ymin = Q1.5, ymax = Q98.5),
               stat = "identity",
               fill = "aquamarine4", color = "black", alpha = 1, size = 1/2) +
@@ -2316,16 +2311,22 @@ m04H04 <- readRDS(file = a_file)
 # saveRDS(m04H04, file = a_file)
 rethinking::precis(m04H04)
 ```
-The function `rethinking::extract.prior()` is used to extract the sample distributions
-from the fit.  Then the process of finding the mus is the same as the overthinking box
-of section 4.4.3.4 (p.107).  Or in other words, using the `link` function with
-the prior used in the `post` argument
-.
+
+The function `rethinking::extract.prior()` is used to sample the prior distributions
+from the fit.  Then the process of finding the mu's is the same as the overthinking box
+of section 4.4.3.4 (p.107).  See also practice 4H1 above for the method.
 
 ```{r}
-m04H04_prior <- extract.prior(m04H04, n = 1000) %>%
+samples <- list(n = 1000L)
+# extract the samples of prior distributions
+# for sigma simulate it, as extract.prior does not return it
+samples$prior <- extract.prior(m04H04, n = samples$n) %>%
   as.data.frame() %>%
   mutate(sigma = rexp(n = nrow(.), rate = 1))
+
+# m04H04_prior <- extract.prior(m04H04, n = 1000) %>%
+#   as.data.frame() %>%
+#   mutate(sigma = rexp(n = nrow(.), rate = 1))
 # str(m04H04_prior)
 ```
 
@@ -2334,36 +2335,40 @@ in overthinking box of section 4.4.3.4. The `rethinking::link()` function
 does that. For an example, see at the beginning of section 5.1 in the next chapter, 
 R code 5.4.
 
-For this exercise, we will do it the long way.
+For this exercise, we will do it the long way. See practice 4H1 for an example
+on how to do this.
 
 ```{r}
-weight_seq <- data.frame(
-  weight_c = modelr::seq_range(data04H04$weight_c, n = 30)
-  )
+preds <- list(n = 30L)
+preds$newdata <- data.frame(
+  weight_c = modelr::seq_range(data04H04$weight_c, n = preds$n)
+  ) %>%
+  mutate(weight_c2 = weight_c^2)
 ```
 
-
 ```{r}
-nsamples <- 500
+# get the simulated predictions
 set.seed(4)
-prior_preds <- sapply(X = weight_seq$weight_c, FUN = function(x) {
-  rnorm(n = nsamples, 
-        mean = m04H04_prior$a + m04H04_prior$b1 * x + m04H04_prior$b2 * x^2,
-        sd = m04H04_prior$sigma)
-  })
-prior_preds <- apply(X = prior_preds, MARGIN = 2, FUN = ggdist::mean_hdi, .width = 0.89)
-prior_preds <- do.call(rbind, prior_preds)
-prior_preds <- prior_preds %>%
-  mutate(weight_c = weight_seq$weight_c) %>%
-  relocate(weight_c)
-# str(prior_preds)
-```
+preds$sim <- purrr::map_dfr(
+  .x = preds$newdata$weight_c,
+  .f = function(x) {
+    mu <- samples$prior$a + samples$prior$b1 * x + samples$prior$b2 * x^2
+    y = rnorm(n = length(mu), mean = mu, sd = samples$prior$sigma)
+    data.frame(weight_c = x, height = y)
+    })
+# str(preds$sim)
 
+# the predictions intervals
+preds$intervals <- preds$sim %>%
+  group_by(weight_c) %>%
+  ggdist::mean_hdi(height, .width = 0.89)
+preds$intervals
+```
 
 
 ```{r}
 ggplot(data = data04H04, aes(x = weight_c)) +
-  geom_line(data = prior_preds, aes(y = y), size = 1, color = "purple") +
+  geom_line(data = preds$intervals, aes(y = height), size = 1, color = "purple") +
   geom_point(aes(y = height, color = age), shape = 20, size = 2, alpha = 2/3) +
   scale_x_continuous( breaks = scales::breaks_extended(n = 7)) +
   scale_color_paletteer_c("pals::kovesi.rainbow_bgyrm_35_85_c71") +
@@ -2404,49 +2409,54 @@ b04H04 <- readRDS(file = a_file)
 brms::fixef(b04H04)
 ```
 
-create the sequence of weights to use
+sample the prior, simulate the prior predictive distribution and calculate
+the intervals
 
 ```{r}
-weight_seq <- data.frame(
-  weight_c = modelr::seq_range(data04H04$weight_c, n = 30)
-  ) %>%
-  mutate(weight_c2 = weight_c^2)
-# glimpse(weight_seq)
-```
+# sample the prior distribution
+samples <- list(n = 1000L,
+                width = 0.89,
+                probs = c(0.055, 0.945))
+samples$prior <- brms::prior_samples(b04H04)
+str(samples$prior)
 
-sample the prior and create the fit
+# simulate the the prior predictive distribution
+set.seed(4)
+preds$sim <- purrr::map_dfr(
+  .x = preds$newdata$weight_c,
+  .f = function(x) {
+    mu <- samples$prior$Intercept + samples$prior$b_weight_c * x +
+      samples$prior$b_weight_c2 * x^2
+    y = rnorm(n = length(mu), mean = mu, sd = samples$prior$sigma)
+    data.frame(weight_c = x, height = y)
+    })
+# str(preds$sim)
 
-```{r}
-b04H04_prior <- brms::prior_samples(b04H04)
-b04H04_prior_fit <- b04H04_prior %>%
-  slice_sample(n = 100) %>%
-  tibble::rownames_to_column("draw") %>%
-  expand(nesting(draw, Intercept, b_weight_c, b_weight_c2),
-                 x = weight_seq$weight_c, x2 = weight_seq$weight_c2) %>%
-  mutate(height_fit = Intercept + b_weight_c * x + b_weight_c2 * x2)
-glimpse(b04H04_prior_fit)
-b04H04_prior_fit_interval <- b04H04_prior_fit %>%
-  group_by(x) %>%
-  do(ggdist::mean_hdi(.$height_fit, .width = 0.89)) %>%
-  rename("mu" = x, "height" = y)
-# glimpse(b04H04_prior_fit_interval)
+# the predictions intervals
+preds$intervals <- preds$sim %>%
+  group_by(weight_c) %>%
+  ggdist::mean_hdi(height, .width = samples$width)
+# preds$intervals
 ```
 
 
 get the posterior fit($\mu$) and prediction  ($\hat{y}$)
 
-```{r}
-b04H04_fitted <-
-  fitted(b04H04, newdata = weight_seq, probs = c(0.055, 0.945)) %>%
-  data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H04_fitted)
 
-b04H04_predict <-
-  predict(b04H04, newdata = weight_seq, probs = c(0.055, 0.945)) %>%
+```{r}
+# get the fitted values
+samples$fitted <- fitted(b04H04, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
   data.frame() %>%
-  bind_cols(weight_seq)
-# glimpse(b04H04_predict)
+  bind_cols(preds$newdata)
+# samples$fitted
+
+# get the predicted values
+samples$predict <- predict(b04H04, newdata = preds$newdata, 
+                         probs = samples$probs) %>%
+  data.frame() %>%
+  bind_cols(preds$newdata)
+# samples$predict
 ```
 
 
@@ -2454,14 +2464,14 @@ visualize the prior and posterior
 
 ```{r}
 ggplot(data04H04, aes(x = weight_c)) +
-  geom_ribbon(data = b04H04_predict,
+  geom_ribbon(data = samples$predict,
               aes(ymin = Q5.5, ymax = Q94.5),
               fill = "slategray1") +
-  geom_smooth(data = b04H04_fitted,
+  geom_smooth(data = samples$fitted,
               aes(y = Estimate, ymin = Q5.5, ymax = Q94.5),
               stat = "identity",
-              fill = "slategray4", color = "black", alpha = 2/3, size = 1) +
-  geom_line(data = prior_preds, aes(x = weight_c, y = y), inherit.aes = FALSE, 
+              fill = "slategray4", color = "steelblue", alpha = 2/3, size = 1) +
+  geom_line(data = preds$intervals, aes(x = weight_c, y = height), inherit.aes = FALSE, 
             size = 1, linetype = "dashed", color = "purple") +
   geom_point(aes(y = height, color = age), shape = 20, size = 2, alpha = 2/3) +
     theme_minimal() +
@@ -2470,7 +2480,9 @@ ggplot(data04H04, aes(x = weight_c)) +
   scale_color_paletteer_c("pals::kovesi.rainbow_bgyrm_35_85_c71") +
   theme(title = element_text(color = "midnightblue"),
         legend.position = c(0.80, 0.30)) +
-  labs(title = "BRMS fit with PRIOR - Practice 4H4", x = "weight", y = "height")
+  labs(title = "BRMS fit with PRIOR - Practice 4H4",
+       subtitle = "Prior predictions = purple line", 
+       x = "weight", y = "height", color = "age")
 ```
 
 ## 4H5 {-#prac4H5}
