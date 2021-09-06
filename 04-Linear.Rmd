@@ -2718,13 +2718,86 @@ ggplot(samples$fitted, aes(x = temp, y = doy, color = year)) +
        subtitle = "4H5")
 ```
 
+### Simulate
+
+```{r}
+sim <- list(n = 50L)
+posterior_summary(b04H05)
+sim$coef <- posterior_summary(b04H05)[paste0("b_B", 1:14), c("Estimate", "Est.Error")]
+# sim$coef
+sim$intercept <- posterior_summary(b04H05)["b_Intercept", c("Estimate", "Est.Error")]
+# sim$intercept
+sim$sigma <- posterior_summary(b04H05)["sigma", c("Estimate", "Est.Error")]
+```
+
+
+
+```{r}
+# the nb of mu's here should be equal to the nb of rows in the data
+# sim$mu <-  sim$intercept["Estimate"] + data$B %*% sim$coef[, "Estimate"]
+# sim$y <- rnorm(n=nrow(sim$mu), mean=sim$mu, sd=sim$sigma["Estimate"])
+
+# this will create a matrix with one column per observation
+# and the nb of rows equal to the sample size
+set.seed(4)
+sim$data <- sapply(X=seq_len(nrow(data$B)), FUN = function(i) {
+  # get a sample of intercept
+  intercept <- rnorm(n=1, 
+                     mean=sim$intercept["Estimate"], 
+                     sd=sim$intercept["Est.Error"])
+  # get the sample of coefficients
+  coefs <- sapply(X = seq_len(nrow(sim$coef)), FUN = function(j) {
+    rnorm(n=1, 
+          mean=sim$coef[j, "Estimate"], 
+          sd=sim$coef[j, "Est.Error"])
+    })
+  # multiply the coefficients by the B matrix for that specific observation
+  mu <- intercept + data$B[i, ] %*% coefs
+  # sample the predictions
+  rnorm(n=sim$n, 
+        mean=mu, 
+        sd=sim$sigma["Estimate"])
+  })
+stopifnot(all.equal(dim(sim$data), c(sim$n, nrow(data04H05))))
+```
+
+```{r}
+sim$data_lng <- sim$data %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(), names_to = "temp", values_to = "doy") %>%
+  mutate(temp = rep(data04H05$temp, times = sim$n))
+str(sim$data_lng)
+
+sim$intervals <- sim$data_lng %>%
+  group_by(temp) %>%
+  ggdist::mean_qi()
+sim$intervals
+
+ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+  # stat_lineribbon(data=sim$data_lng, mapping=aes(x = temp, y = doy),
+  #                 .width=c(0.5, 0.75, 0.95), size = 1,
+  #                 inherit.aes = FALSE) +
+  geom_smooth(data=sim$intervals, inherit.aes = FALSE,
+              mapping=aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
+              stat = "identity", size = 0.5, color = "royalblue", fill = "lightskyblue") +
+  geom_point(size = 1) +
+  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_fill_paletteer_d("ggsci::amber_material") +
+  scale_color_paletteer_c("pals::isol") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "none") +
+  labs(title = sprintf("Predictions of cherry blossoms with %d knots", length(knots)),
+       subtitle = "4H5")
+```
 
 
 
 ## 4H6 {-#prac4H6}
 
 ```{r echo=FALSE}
-message("TODO")
+message("TODO: see 4H5 above on how to do simulation of splines")
 ```
 
 
