@@ -10,6 +10,7 @@ library(tidybayes, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
+library(gt, quietly = TRUE)
 ```
 
 # Linear Models {#linear}
@@ -985,6 +986,7 @@ then create the summary
 ```{r}
 i04M07_hyper_summ <- write_hyper_summary(margs = i04M07hmarg, 
                                           qtl = i04M07ctr$.args$quantiles)
+i04M07_hyper_summ <- i04M07_hyper_summ[c(2, 1), ]  # put sd in last row
 stopifnot(all.equal(dim(i04M07_hyper_summ), c(2L, 6L)))
 
 i04M07_hyper_summ
@@ -1302,6 +1304,85 @@ ggplot(P04M07$data, aes(x = weight_c, y = height)) +
        x = "weight", y = "height")
 ```
 
+0### Compare `quap`, `brm`, `inla`
+
+Now we compare the 3 fitting methods.  See above in the section
+about `inla` for `i04M07summ` which needed to be processed
+
+```{r}
+summ <- list()
+summ$lst <- list(
+  quap = as.data.frame(unclass(precis(m04M07ctr, prob=0.95)),
+                       row.names = row.names(precis(m04M07ctr, prob=0.95))) %>%
+    tibble::rownames_to_column(var = "var"),
+  brm = as.data.frame(posterior_summary(b04M07ctr, probs=c(0.025, 0.975))) %>% 
+    filter(rownames(.) != "lp__") %>%
+    tibble::rownames_to_column(var = "var"),
+  inla = i04M07summ %>% select(-`0.5quant`,-mode, -kld)
+)
+
+
+summ$df <- lapply(X = seq_along(summ$lst), function(x) {
+  d <- summ$lst[[x]]
+  d$var <- summ$lst[["brm"]]$var
+  names(d) <- names(summ$lst[["brm"]])
+  summ$lst[[x]] <- d
+})
+
+# format the data to be able to create a tableau with gt
+# in the next step
+summ$df <- do.call(rbind, summ$df) %>%
+  mutate(method = rep(names(summ$lst), each = 3)) %>%
+  pivot_longer(cols = c("Estimate", "Est.Error", "Q2.5", "Q97.5"), 
+               names_to = "value_id", values_to = "value") %>%
+  unite(col = "value_id", value_id, method, sep = "_") %>%
+  filter(grepl(pattern = "Estimate|Est[.]Error", x = value_id)) %>%
+  pivot_wider(names_from = "value_id", values_from = "value")
+# summ$df
+
+# create tableau with gt
+summ$tbl <- summ$df %>%
+  gt::gt(rowname_col = "var") %>%
+  tab_header(title = md("**Comparing quap, brm and inla**"),
+             subtitle = "Practice 4M7") %>%
+  tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
+  tab_footnote(
+    footnote = "mean",
+    locations = cells_column_spanners(spanners = contains("Estimate"))
+  ) %>%
+  tab_footnote(
+    footnote = "standard deviation",
+    locations = cells_column_spanners(spanners = contains("Est.Error"))
+  ) %>%
+  tab_source_note(
+    source_note = "Source: Rethinking, 2nd edition, Richard McElreath"
+  ) %>%
+  fmt_number(columns = everything(), decimals = 2) %>%
+  tab_style(style = list(cell_fill(color = "mintcream")),
+            locations = cells_body(columns = everything())) %>%
+  tab_style(style = list(cell_fill(color = "ivory")),
+            locations = cells_footnotes()) %>%
+  tab_style(style = cell_borders(sides = c("left"),
+                                 color = "steelblue",
+                                 weight = px(1.5),
+                                 style = "solid"),
+            locations = list(cells_body(columns = "Est.Error_quap"),
+                             cells_column_labels(columns = "Est.Error_quap"),
+                             cells_column_spanners(spanners = "Est.Error"))
+            ) %>%
+  tab_options(
+    heading.background.color = "slategray2",
+    heading.title.font.weight = "bold",
+    heading.subtitle.font.weight = "bold",
+    column_labels.background.color = "slategray1",
+    column_labels.font.weight = "bold",
+    stub.background.color = "slategray1",
+    source_notes.font.size = pct(50)
+  )
+summ$tbl
+```
+
+
 
 ## 4M8 {-#prac4M8}
 
@@ -1399,6 +1480,7 @@ b04M08a <- readRDS(file = a_file)
 #       cores = detectCores(), seed = 4)
 # saveRDS(b04M08a, file = a_file)
 ```
+
 ```{r}
 summary(b04M08a)
 ```
@@ -2487,9 +2569,157 @@ ggplot(data04H04, aes(x = weight_c)) +
 
 ## 4H5 {-#prac4H5}
 
+### The data
+
 ```{r echo=FALSE}
-message("TODO")
+data("cherry_blossoms")
+data04H05 <- cherry_blossoms %>%
+  drop_na()
+skimr::skim(data04H05)
 ```
+
+```{r}
+ggplot(data04H05, aes(x = temp, y = doy, color = year)) +
+  geom_point(size = 1.2) +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+  scale_color_paletteer_c("pals::isol") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.90, 0.85)) +
+  labs(title = "cherry blossoms", subtitle = "4H5")
+```
+
+### The model
+
+There does not seem to be an obvious relations in the data.  We will therefore
+use cubic splines again.
+
+
+$$
+\begin{align*}
+doy_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \sum_{k=1}^Kw_kB_{k, i} \\
+\alpha &\sim \mathcal{N}(100, 10) \\
+w_j &\sim \mathcal{N}(0, 10) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+### The fit
+
+
+```{r}
+knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
+```
+
+
+```{r}
+ggplot(data04H05, aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+  geom_point(shape = 20, size = 2, alpha = 2/3) +
+  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_color_paletteer_c("pals::isol") +
+  theme_classic() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.90, 0.85),
+        axis.text.x = element_text(size = rel(0.9))
+        ) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knots)),
+       subtitle = "4H5")
+```
+
+Create the bias function with degree 3 (cubic spline) and an intercept
+
+```{r}
+library(splines)
+data <- list()
+# must specify intercept = TRUE
+data$B <- splines::bs(x = data04H05$temp, knots = knots[-c(1, length(knots))], 
+                 degree = 3, intercept = TRUE)
+# str(data$B)
+# head(data$B)
+
+# this data.frame will be reused below with the posteriors
+data$bias <- data$B %>%
+  as.data.frame() %>%
+  setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
+  mutate(temp = data04H05$temp) %>%
+  pivot_longer(cols = -temp, names_to = "bias_func", values_to = "bias")
+
+# the data structure used to fit
+data$fit <-
+  data04H05 %>%
+  mutate(B = data$B)
+```
+
+
+then the data structure used to fit
+
+```{r}
+# dfB <- data04M08 %>%
+#   mutate(B = B)
+# the last column is a matrix column, with same nb of rows as the other
+# columns but with a column including 17 subcolumns (!)
+# glimpse(dfB)
+```
+
+
+
+```{r}
+a_file <- here::here("fits", "b04H05.rds")
+b04H05 <- readRDS(file = a_file)
+# b04H05 <- brm(data = data$fit,
+#       family = gaussian,
+#       doy ~ 1 + B,
+#       prior = c(prior(normal(100, 10), class = Intercept),
+#                 prior(normal(0, 10), class = b),
+#                 prior(exponential(1), class = sigma)),
+#       cores = detectCores(), seed = 4)
+# saveRDS(b04H05, file = a_file)
+summary(b04H05)
+```
+
+and we sample the fit
+
+```{r}
+samples <- list()
+# the fitted values
+# NOTE: We remove duplicated rowss to be able to plot.
+#       Otherwise the ribbon does not work well in the plot
+samples$fitted <- fitted(b04H05) %>%
+  as.data.frame() %>%
+  bind_cols(data04H05)
+  # filter(temp %in% knots) %>%
+  # filter(!duplicated(temp))
+str(samples$fitted)
+```
+
+and plot the results
+
+```{r}
+# NOTE: geom_lineribbon does not work well here.  geom_smooth works great.
+ggplot(samples$fitted, aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+  geom_point(size = 1) +
+  # geom_lineribbon(samples$fitted, 
+  #                 mapping = aes(x = temp, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+  #                 inherit.aes = FALSE,
+  #                 color = "darksalmon", fill = "sandybrown", alpha = 1/2) +
+  geom_smooth(mapping = aes(x = temp, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              stat = "identity", color = "darksalmon", fill = "sandybrown") +
+  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_color_paletteer_c("pals::isol") +
+  theme_classic() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.90, 0.85),
+        axis.text.x = element_text(size = rel(0.9))
+        ) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knots)),
+       subtitle = "4H5")
+```
+
+
+
 
 ## 4H6 {-#prac4H6}
 
