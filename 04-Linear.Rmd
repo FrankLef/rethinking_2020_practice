@@ -2652,18 +2652,11 @@ data$fit <-
   mutate(B = data$B)
 ```
 
-
-then the data structure used to fit
-
-```{r}
-# dfB <- data04M08 %>%
-#   mutate(B = B)
-# the last column is a matrix column, with same nb of rows as the other
-# columns but with a column including 17 subcolumns (!)
-# glimpse(dfB)
-```
+### With `quap`
 
 
+
+### With `brm`
 
 ```{r}
 a_file <- here::here("fits", "b04H05.rds")
@@ -2679,7 +2672,9 @@ b04H05 <- readRDS(file = a_file)
 summary(b04H05)
 ```
 
-and we sample the fit
+#### Fitted
+
+sample the fit
 
 ```{r}
 samples <- list()
@@ -2714,91 +2709,214 @@ ggplot(samples$fitted, aes(x = temp, y = doy, color = year)) +
         legend.position = c(0.90, 0.85),
         axis.text.x = element_text(size = rel(0.9))
         ) +
-  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knots)),
+  labs(title = sprintf("Fitted Cherry Blossom in Japan with %d knots", length(knots)),
        subtitle = "4H5")
 ```
 
-### Simulate
+
+#### Predict
+
+Sample the predictions
+
+## 4H6 {-#prac4H6}
+
+See 4.5.2 on splines for a discussion on the spline matrix.  The following
+simulation is inspired by that section.
+
+The dimensions f the B matrix are explained in section 4.5.2, on p. 117,
+between R code 4.74 and R code 4.75.
+
+### The initial model
+
+
+$$
+\begin{align*}
+doy_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \sum_{k=1}^Kw_kB_{k, i} \\
+\alpha &\sim \mathcal{N}(100, 10) \\
+w_j &\sim \mathcal{N}(0, 10) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+#### Functions used
+
+We need to create functions to simulate the prior and plotting.
+
+The functions used for the simulation
 
 ```{r}
-sim <- list(n = 50L)
-posterior_summary(b04H05)
-sim$coef <- posterior_summary(b04H05)[paste0("b_B", 1:14), c("Estimate", "Est.Error")]
-# sim$coef
-sim$intercept <- posterior_summary(b04H05)["b_Intercept", c("Estimate", "Est.Error")]
-# sim$intercept
-sim$sigma <- posterior_summary(b04H05)["sigma", c("Estimate", "Est.Error")]
-```
+# create the B (basis) matrix
+get_B <- function(x, knots, degree = 3L, intercept = TRUE) {
+  out <- splines::bs(x = x, 
+                   knots = knots[-c(1, length(knots))], 
+                   degree = degree, 
+                   intercept = intercept)
+  stopifnot(all.equal(dim(out), c(length(x), length(knots) + degree - 1)))
+  out
+}
 
-
-
-```{r}
-# the nb of mu's here should be equal to the nb of rows in the data
-# sim$mu <-  sim$intercept["Estimate"] + data$B %*% sim$coef[, "Estimate"]
-# sim$y <- rnorm(n=nrow(sim$mu), mean=sim$mu, sd=sim$sigma["Estimate"])
-
-# this will create a matrix with one column per observation
-# and the nb of rows equal to the sample size
-set.seed(4)
-sim$data <- sapply(X=seq_len(nrow(data$B)), FUN = function(i) {
-  # get a sample of intercept
-  intercept <- rnorm(n=1, 
-                     mean=sim$intercept["Estimate"], 
-                     sd=sim$intercept["Est.Error"])
-  # get the sample of coefficients
-  coefs <- sapply(X = seq_len(nrow(sim$coef)), FUN = function(j) {
-    rnorm(n=1, 
-          mean=sim$coef[j, "Estimate"], 
-          sd=sim$coef[j, "Est.Error"])
-    })
-  # multiply the coefficients by the B matrix for that specific observation
-  mu <- intercept + data$B[i, ] %*% coefs
-  # sample the predictions
-  rnorm(n=sim$n, 
-        mean=mu, 
-        sd=sim$sigma["Estimate"])
+# simulate the prior using the B matrix
+sim_prior_gam <- function(B, n = 1000L,
+                          alpha_prior = list(mean = 0, sd = 10),
+                          weight_prior = list(mean = 0, sd = 10),
+                          sigma_prior = list(rate = 1)) {
+  
+  out <- sapply(X=seq_len(nrow(B)), FUN = function(i) {
+    # get a sample of intercept
+    intercept <- rnorm(n=1, alpha_prior$mean, sd=alpha_prior$sd)
+    # get the sample of coefficients, one for each coefficient
+    weights <- sapply(X = seq_len(ncol(B)), FUN = function(j) {
+      rnorm(n=1, mean=weight_prior$mean, sd=weight_prior$sd)
+      })
+    # multiply the weights by the B matrix for that specific observation
+    # to get the mu
+    mu <- intercept + B[i, ] %*% weights
+    # sample sigma
+    sigma <- rexp(n = 1, rate = sigma_prior$rate)
+    # sample the predictions with mu and sigma
+    rnorm(n=n, mean=mu, sd=sigma)
   })
-stopifnot(all.equal(dim(sim$data), c(sim$n, nrow(data04H05))))
+  stopifnot(all.equal(dim(out), c(n, nrow(B))))
+  out
+}
+
 ```
 
+
+
+#### Prior distribution simulation
+
+The simulation with sd in priors set to 10
+
 ```{r}
+# the list used to hold sim data and variables
+sim <- list(n = 1000L)
+# the knots used
+sim$knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
+# the predictors used
+sim$preds <- seq_range(data04H05$temp, n = 20L)
+sim$B <- get_B(x=sim$preds, knots=sim$knots, degree = 3L, intercept = TRUE)
+# str(sim$B)
+
+sim$data <- sim_prior_gam(B=sim$B, n = sim$n,
+                          alpha_prior = list(mean = 100, sd = 10),
+                          weight_prior = list(mean = 0, sd = 10),
+                          sigma_prior = list(rate = 1))
+# str(sim$data)
+```
+
+
+```{r}
+# put data in log fomrat for use with stat_lineribbon
 sim$data_lng <- sim$data %>%
   as.data.frame() %>%
   pivot_longer(cols = everything(), names_to = "temp", values_to = "doy") %>%
-  mutate(temp = rep(data04H05$temp, times = sim$n))
-str(sim$data_lng)
+  mutate(temp = rep(sim$preds, times = sim$n))
+# str(sim$data_lng)
 
+# create dataframe of intervals for use with geom_smooth
 sim$intervals <- sim$data_lng %>%
   group_by(temp) %>%
   ggdist::mean_qi()
-sim$intervals
+# sim$intervals
 
-ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
+# the plot is made with both geom_smooth and stat_lineribbon which
+# can be used interchangeably. stat_lineribbon gives the better visual
+# to my taste
+p <- list()
+p$A <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
   geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
   # stat_lineribbon(data=sim$data_lng, mapping=aes(x = temp, y = doy),
-  #                 .width=c(0.5, 0.75, 0.95), size = 1,
+  #                 .width=c(0.5, 0.75, 0.95), size = 1, color = "lightcoral",
   #                 inherit.aes = FALSE) +
   geom_smooth(data=sim$intervals, inherit.aes = FALSE,
               mapping=aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
-              stat = "identity", size = 0.5, color = "royalblue", fill = "lightskyblue") +
+              stat = "identity", size = 1, color = "royalblue", fill = "lightskyblue") +
   geom_point(size = 1) +
   scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_y_continuous(breaks = scales::breaks_extended(n = 5), 
+                     labels = scales::label_number(accuracy = 1),
+                     limits = c(30, 150)) +
   scale_fill_paletteer_d("ggsci::amber_material") +
   scale_color_paletteer_c("pals::isol") +
   ggdist::theme_ggdist() +
   theme(title = element_text(color = "midnightblue"),
         legend.position = "none") +
-  labs(title = sprintf("Predictions of cherry blossoms with %d knots", length(knots)),
-       subtitle = "4H5")
+  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(knots)),
+       subtitle = "with sd = 10")
+```
+
+The simulation with sd in priors set to 20
+
+
+
+```{r}
+# the list used to hold sim data and variables
+sim <- list(n = 1000L)
+# the knots used
+sim$knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
+# the predictors used
+sim$preds <- seq_range(data04H05$temp, n = 20L)
+sim$B <- get_B(x=sim$preds, knots=sim$knots, degree = 3L, intercept = TRUE)
+# str(sim$B)
+
+sim$data <- sim_prior_gam(B=sim$B, n = sim$n,
+                          alpha_prior = list(mean = 100, sd = 20),
+                          weight_prior = list(mean = 0, sd = 20),
+                          sigma_prior = list(rate = 1))
+# str(sim$data)
 ```
 
 
+```{r}
+# put data in log fomrat for use with stat_lineribbon
+sim$data_lng <- sim$data %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(), names_to = "temp", values_to = "doy") %>%
+  mutate(temp = rep(sim$preds, times = sim$n))
+# str(sim$data_lng)
 
-## 4H6 {-#prac4H6}
+# create dataframe of intervals for use with geom_smooth
+sim$intervals <- sim$data_lng %>%
+  group_by(temp) %>%
+  ggdist::mean_qi()
+# sim$intervals
 
-```{r echo=FALSE}
-message("TODO: see 4H5 above on how to do simulation of splines")
+# the plot is made with both geom_smooth and stat_lineribbon which
+# can be used interchangeably. stat_lineribbon gives the better visual
+# to my taste
+p$B <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+  # stat_lineribbon(data=sim$data_lng, mapping=aes(x = temp, y = doy),
+  #                 .width=c(0.5, 0.75, 0.95), size = 1, color = "lightcoral",
+  #                 inherit.aes = FALSE) +
+  geom_smooth(data=sim$intervals, inherit.aes = FALSE,
+              mapping=aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
+              stat = "identity", size = 1, color = "violetred", fill = "mistyrose") +
+  geom_point(size = 1) +
+  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_y_continuous(breaks = scales::breaks_extended(n = 5), 
+                     labels = scales::label_number(accuracy = 1),
+                     limits = c(30, 150)) +
+  scale_fill_paletteer_d("ggsci::amber_material") +
+  scale_color_paletteer_c("pals::isol") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "none") +
+  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(knots)),
+       subtitle = "with sd = 20")
 ```
+
+and comparing the 2 plots
+
+```{r}
+p$A / p$B
+```
+
+
+Conclusion: The prior affect the weights the weights in the same manner as the
+priors affects regression coefficients.  In the current example, by increasing 
+the sd of the normally distributed prior we affect the variability of the weights.
 
 
 ## 4H7 {-#prac4H7}
