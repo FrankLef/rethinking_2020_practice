@@ -11,6 +11,7 @@ library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
 library(gt, quietly = TRUE)
+library(splines)
 ```
 
 # Linear Models {#linear}
@@ -284,8 +285,6 @@ ggplot(data = sim$data, mapping = aes(x = height)) +
 
 ## 4M2 {-#prac4M2}
 
-### with `quap` {-}
-
 See section 4.4.2 on how to use `quap`, R code 4.43 with linear equation with
 the `quap` formula, i.e. `flist = alist(...)`.
 
@@ -335,6 +334,16 @@ height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \sigma &\sim \mathcal{Exponential}(1)
 \end{align*}
 $$
+The choice of priors are
+* $\alpha$: The intercept reflect the population average which is 100 and we expect
+the 95% of the population to be between 80 and 120 at the very most
+* $\beta$: The coefficient should be nonnegative as the height should increase or
+stay the same in younger age.  We choose uniform distribution as we have no
+information whatsoever about the rate of growth.
+* $\sigma$: The overall outcome variance should be positive with a skewed 
+distribution, hence using $\mathcal{Exponential}(1)$. See p. 118 and p. 119 on using
+the exponential distribution in the textbook.
+
 
 ## 4M5 {-#prac4M5}
 
@@ -1401,6 +1410,23 @@ stopifnot(all.equal(dim(data04M08), c(827L, 5L)))
 skimr::skim(data04M08)
 ```
 
+This function will be used to create the B matrix. See R code 4.74 in section
+4.5.2 of the textbook.
+
+```{r}
+# create the B (basis) matrix
+get_B <- function(x, knots, degree = 3L, intercept = TRUE) {
+  out <- splines::bs(x = x, 
+                     knots = knots[-c(1, length(knots))], 
+                     degree = degree, 
+                     intercept = intercept)
+  stopifnot(all.equal(dim(out), c(length(x), length(knots) + degree - 1)))
+  out
+}
+```
+
+
+
 ### Model {-}
 
 $$
@@ -1412,58 +1438,57 @@ w_j &\sim \mathcal{N}(0, 10) \\
 \sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
+### Functions {-}
 
-### a) Knots = 15, $w_j \sim \mathcal{N}(0, 10)$
-
-
-```{r}
-nknots <- 15
-knotsA <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
-knotsA
-```
-
+A function to create the plot used in this practice
 
 ```{r}
-colr <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
-ggplot(data04M08, aes(x = year, y = doy, color = temp)) +
-  geom_vline(xintercept = knotsA, color = "slateblue", alpha = 1/2) +
-  geom_point(shape = 20, size = 2, alpha = 2/3) +
-  scale_x_continuous(breaks = knotsA, labels = knotsA) +
-  scale_color_gradientn(colors = colr) +
+# the basis plot used in 4M8
+plot_04M08 <- function(data, x_var = "year", y_var = "doy", color_var = "temp", 
+                     knots = 15L, colrs = "grDevices::SunsetDark") {
+  ggplot(data, aes(x = .data[[x_var]], y = .data[[y_var]], 
+                   color = .data[[color_var]])) +
+    geom_point(shape = 20, size = 2, alpha = 2/3) +
+    geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+    scale_x_continuous(breaks = knots, labels = scales::label_number(big.mark = "")) +
+  scale_color_paletteer_c(colrs) +
   theme_classic() +
   theme(title = element_text(color = "midnightblue"),
         legend.position = c(0.05, 0.8),
-        axis.text.x = element_text(size = rel(0.9))
-        ) +
-  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knotsA)),
-       subtitle = "4M8 a)")
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knots)),
+       subtitle = "4M8")
+}
 ```
-Create the bias function with degree 3 (cubic spline) and an intercept
+
+### a) Knots = 15, $w_j \sim \mathcal{N}(0, 10)$
+
+Create the knots and  bias function with degree 3 (cubic spline) and an intercept
 
 ```{r}
-library(splines)
+splinA <- list(knots = quantile(data04M08$year, 
+                                 probs = seq(from = 0, to = 1, length.out = 15L)))
 # must specify intercept = TRUE
-B <- splines::bs(x = data04M08$year, knots = knotsA[-c(1, nknots)], 
-                 degree = 3, intercept = TRUE)
-# str(B)
-# this data.frame will be reused below with the posteriors
-df_bias <- B %>%
+splinA$B <- get_B(x = data04M08$year, knots = splinA$knots,
+                 degree = 3L, intercept = TRUE)
+
+# this data.frame will be reused below with the posteriors to plot
+# the splines with their repective year
+splinA$bias <- splinA$B %>%
   as.data.frame() %>%
   setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
   mutate(year = data04M08$year) %>%
   pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
-# str(df_bias)
 ```
 
 
 then the data structure used to fit
 
 ```{r}
-dfB <- data04M08 %>%
-  mutate(B = B)
 # the last column is a matrix column, with same nb of rows as the other
 # columns but with a column including 17 subcolumns (!)
-# glimpse(dfB)
+splinA$data <- data04M08 %>%
+  mutate(B = splinA$B)
 ```
 
 
@@ -1471,7 +1496,7 @@ dfB <- data04M08 %>%
 ```{r}
 a_file <- here::here("fits", "b04M08a.rds")
 b04M08a <- readRDS(file = a_file)
-# b04M08a <- brm(data = dfB,
+# b04M08a <- brm(data = splinA$data,
 #       family = gaussian,
 #       doy ~ 1 + B,
 #       prior = c(prior(normal(100, 10), class = Intercept),
@@ -1489,63 +1514,52 @@ summary(b04M08a)
 
 
 ```{r}
-df <- fitted(b04M08a) %>%
+samples <- list()
+# note: must use mutate() to add B matrix "as is"
+samples$newdata <- data.frame(
+  year = seq_range(data04M08$year, n=30L)) %>%
+  mutate(B = get_B(x = year, knots = splinA$knots, 
+                   degree = 3L, intercept = TRUE))
+
+# sample the fitted values
+samples$fitted <- fitted(b04M08a, newdata = samples$newdata) %>%
   as.data.frame() %>%
-  bind_cols(data04M08)
-str(df)
-clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
-pA <- ggplot(df, aes(x = year, y = doy)) +
-  geom_vline(xintercept = knotsA[-c(1, length(knotsA))], color = "slateblue", alpha = 1/2) +
-  geom_point(aes(color = temp)) +
-  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
-                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
-  scale_x_continuous(breaks = knotsA, labels = knotsA) +
-  scale_color_gradientn(colors = clrs) +
-  ggthemes::theme_tufte() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "none",
-        axis.text.x = element_text(size = rel(0.9))) +
-  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knotsA)),
-       subtitle = "4M8 a)")
-pA
+  bind_cols(year = samples$newdata$year)
+# str(samples$fitted)
+
+# plot the fitted values
+p$A <- plot_04M08(data04M08, knots = splinA$knots) +
+  labs(subtitle = "4M8 a)") +
+  geom_smooth(data = samples$fitted, 
+              mapping = aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              inherit.aes = FALSE,
+              color = "blueviolet", fill = "cornflowerblue", alpha = 1/2)
+p$A
 ```
 
 ### b) Knots = 25, $w_j \sim \mathcal{N}(0, 10)$ {-}
 
+We use the same process as in a) above but with different nb of knots
+
 
 ```{r}
-nknots <- 25
-knotsB <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
-knotsB
-```
-
-
-Create the bias functions with degree 3 (cubic spline) and an intercept
-
-```{r}
-library(splines)
+splinB <- list(knots = quantile(data04M08$year, 
+                                 probs = seq(from = 0, to = 1, length.out = 25L)))
 # must specify intercept = TRUE
-B <- splines::bs(x = data04M08$year, knots = knotsB[-c(1, nknots)], 
-                 degree = 3, intercept = TRUE)
-# str(B)
-# this data.frame will be reused below with the posteriors
-df_bias <- B %>%
+splinB$B <- get_B(x = data04M08$year, knots = splinB$knots,
+                 degree = 3L, intercept = TRUE)
+
+# this data.frame will be reused below with the posteriors to plot
+# the splines with their repective year
+splinB$bias <- splinB$B %>%
   as.data.frame() %>%
   setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
   mutate(year = data04M08$year) %>%
   pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
-# str(df_bias)
-```
 
-
-then the data structure used to fit
-
-```{r}
-dfB <- data04M08 %>%
-  mutate(B = B)
-# the last column is a matrix column, with same nb of rows as the other
-# columns but with a column including 17 subcolumns (!)
-# glimpse(dfB)
+# the dataframe used to fit the model
+splinB$data <- data04M08 %>%
+  mutate(B = splinB$B)
 ```
 
 
@@ -1553,7 +1567,7 @@ dfB <- data04M08 %>%
 ```{r}
 a_file <- here::here("fits", "b04M08b.rds")
 b04M08b <- readRDS(file = a_file)
-# b04M08b <- brm(data = dfB,
+# b04M08b <- brm(data = splinB$data,
 #       family = gaussian,
 #       doy ~ 1 + B,
 #       prior = c(prior(normal(100, 10), class = Intercept),
@@ -1563,66 +1577,60 @@ b04M08b <- readRDS(file = a_file)
 # saveRDS(b04M08b, file = a_file)
 ```
 
+```{r}
+summary(b04M08b)
+```
+
 
 
 
 ```{r}
-df <- fitted(b04M08b) %>%
+samples <- list()
+# note: must use mutate() to add B matrix "as is"
+samples$newdata <- data.frame(
+  year = seq_range(data04M08$year, n=30L)) %>%
+  mutate(B = get_B(x = year, knots = splinB$knots, 
+                   degree = 3L, intercept = TRUE))
+
+# sample the fitted values
+samples$fitted <- fitted(b04M08b, newdata = samples$newdata) %>%
   as.data.frame() %>%
-  bind_cols(data04M08)
-str(df)
-clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
-pB <- ggplot(df, aes(x = year, y = doy)) +
-  geom_vline(xintercept = knotsB[-c(1, length(knotsB))], color = "slateblue", alpha = 1/2) +
-  geom_point(aes(color = temp)) +
-  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
-                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
-  scale_color_gradientn(colors = clrs) +
-  ggthemes::theme_tufte() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "none",
-        axis.text.x = element_text(size = rel(0.9))) +
-  labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knotsB)),
-       subtitle = "4M8 b)")
-pB
+  bind_cols(year = samples$newdata$year)
+# str(samples$fitted)
+
+# plot the fitted values
+p$B <- plot_04M08(data04M08, knots = splinB$knots) +
+  labs(subtitle = "4M8 b)") +
+  geom_smooth(data = samples$fitted, 
+              mapping = aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              inherit.aes = FALSE,
+              color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
+  theme(axis.text.x = element_text(size = rel(0.50)))
+p$B
 ```
+
 
 ### c) Knots = 25, $w_j \sim \mathcal{N}(0, 20)$ {-}
 
 
 ```{r}
-nknots <- 25
-knotsC <- quantile(data04M08$year, probs = seq(from = 0, to = 1, length.out = nknots))
-knotsC
-```
-
-
-Create the bias functions with degree 3 (cubic spline) and an intercept
-
-```{r}
-library(splines)
+splinC <- list(knots = quantile(data04M08$year, 
+                                 probs = seq(from = 0, to = 1, length.out = 25L)))
 # must specify intercept = TRUE
-B <- splines::bs(x = data04M08$year, knots = knotsC[-c(1, nknots)], 
-                 degree = 3, intercept = TRUE)
-# str(B)
-# this data.frame will be reused below with the posteriors
-df_bias <- B %>%
+splinC$B <- get_B(x = data04M08$year, knots = splinC$knots,
+                 degree = 3L, intercept = TRUE)
+
+# this data.frame will be reused below with the posteriors to plot
+# the splines with their repective year
+splinC$bias <- splinC$B %>%
   as.data.frame() %>%
   setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
   mutate(year = data04M08$year) %>%
   pivot_longer(cols = -year, names_to = "bias_func", values_to = "bias")
-# str(df_bias)
-```
 
-
-then the data structure used to fit
-
-```{r}
-dfB <- data04M08 %>%
-  mutate(B = B)
-# the last column is a matrix column, with same nb of rows as the other
-# columns but with a column including 17 subcolumns (!)
-# glimpse(dfB)
+# the dataframe used to fit the model
+splinC$data <- data04M08 %>%
+  mutate(B = splinC$B)
 ```
 
 
@@ -1630,7 +1638,7 @@ dfB <- data04M08 %>%
 ```{r}
 a_file <- here::here("fits", "b04M08c.rds")
 b04M08c <- readRDS(file = a_file)
-# b04M08c <- brm(data = dfB,
+# b04M08c <- brm(data = splinC$data,
 #       family = gaussian,
 #       doy ~ 1 + B,
 #       prior = c(prior(normal(100, 10), class = Intercept),
@@ -1640,29 +1648,43 @@ b04M08c <- readRDS(file = a_file)
 # saveRDS(b04M08c, file = a_file)
 ```
 
-
+```{r}
+summary(b04M08c)
+```
 
 
 ```{r}
-df <- fitted(b04M08c) %>%
+samples <- list()
+# note: must use mutate() to add B matrix "as is"
+samples$newdata <- data.frame(
+  year = seq_range(data04M08$year, n=30L)) %>%
+  mutate(B = get_B(x = year, knots = splinC$knots, 
+                   degree = 3L, intercept = TRUE))
+
+# sample the fitted values
+samples$fitted <- fitted(b04M08c, newdata = samples$newdata) %>%
   as.data.frame() %>%
-  bind_cols(data04M08)
-str(df)
-clrs <- unclass(paletteer::paletteer_d("futurevisions::cancri"))
-pC <- ggplot(df, aes(x = year, y = doy)) +
-  geom_vline(xintercept = knotsC[-c(1, length(knotsC))], color = "slateblue", alpha = 1/2) +
-  geom_point(aes(color = temp)) +
-  geom_lineribbon(aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
-                  color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
-  scale_color_gradientn(colors = clrs) +
-  ggthemes::theme_tufte() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "none",
-        axis.text.x = element_text(size = rel(0.9))) +
-  labs(title = sprintf("Cherry Blossom in Japan with %d knots and increased weight sd to 20", length(knotsC)),
+  bind_cols(year = samples$newdata$year)
+# str(samples$fitted)
+
+# plot the fitted values
+p$C <- plot_04M08(data04M08, knots = splinC$knots) +
+  labs(subtitle = "4M8 c)") +
+  geom_smooth(data = samples$fitted, 
+              mapping = aes(x = year, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              inherit.aes = FALSE,
+              color = "blueviolet", fill = "cornflowerblue", alpha = 1/2) +
+  theme(axis.text.x = element_text(size = rel(0.50))) +
+  labs(title = sprintf("Cherry Blossom in Japan with %d knots and increased weight sd to 20", 
+                       length(splinC$knots)),
        subtitle = "4M8 c)")
-# pC
+p$C
 ```
+
+
+
+
+
 
 ### Conclusion {-}
 
@@ -1671,34 +1693,36 @@ pC <- ggplot(df, aes(x = year, y = doy)) +
 The increase of nb of knots increases the fits (i.e. nb of turns)
 
 ```{r}
-pA / pB
+p$A / p$B
 ```
 
 and the increase in variability of the weight increase the range of the coefficient.
-However this is not visually obvious when looking at the scatter plot.
-See just below the coefficient comparisons which is more informative.
 
 ```{r}
-pB / pC
+p$B / p$C
 ```
 
+However this is not visually obvious when looking at the scatter plot.
+See just below the coefficient comparisons which is more informative.
 
 #### Summaries {-}
 
 
 ```{r}
-summA <- data.frame(model = "A", fixef(b04M08a)) %>%
+summ <- list()
+summ$A <- data.frame(model = "A", fixef(b04M08a)) %>%
   tibble::rownames_to_column(var = "variable")
-summB <- data.frame(model = "B", fixef(b04M08b)) %>%
+summ$B <- data.frame(model = "B", fixef(b04M08b)) %>%
   tibble::rownames_to_column(var = "variable")
-summC <- data.frame(model = "C", fixef(b04M08c)) %>%
+summ$C <- data.frame(model = "C", fixef(b04M08c)) %>%
   tibble::rownames_to_column(var = "variable")
-df <- bind_rows(summA, summB, summC) %>%
+summ$data <- bind_rows(summ$A, summ$B, summ$C) %>%
   mutate(variable = factor(variable,
                            levels = c("Intercept", sprintf("B%d", 1:27)),
                            ordered = TRUE))
 
-ggplot(df[df$variable != "Intercept", ], aes(x = variable, y = Estimate, ymin = Q2.5, ymax = Q97.5, color = model)) +
+ggplot(summ$data[summ$data$variable != "Intercept", ], 
+       aes(x = variable, y = Estimate, ymin = Q2.5, ymax = Q97.5, color = model)) +
   geom_pointinterval(position = position_dodge(width = 1/2)) +
   scale_color_paletteer_d("futurevisions::cancri") +
   ggthemes::theme_hc() +
@@ -1724,21 +1748,19 @@ To better visualize, we could look at the models coefficient after aliging the
 knots with the year
 
 ```{r}
-summA <- data.frame(model = "A", fixef(b04M08a)) %>%
-  mutate(knots = c(NA, min(data04M08$year) -1, knotsA, max(data04M08$year) + 1))
-# summA
-summB <- data.frame(model = "B", fixef(b04M08b)) %>%
-  mutate(knots = c(NA, min(data04M08$year) -1, knotsB, max(data04M08$year) + 1))
-# summB
-summC <- data.frame(model = "C", fixef(b04M08c)) %>%
-  mutate(knots = c(NA, min(data04M08$year) -1, knotsC, max(data04M08$year) + 1))
-# summC
-df <- bind_rows(summA, summB, summC) %>%
+summ <-list()
+summ$A <- data.frame(model = "A", fixef(b04M08a)) %>%
+  mutate(knots = c(NA, min(data04M08$year) -1, splinA$knots, max(data04M08$year) + 1))
+summ$B <- data.frame(model = "B", fixef(b04M08b)) %>%
+  mutate(knots = c(NA, min(data04M08$year) -1, splinB$knots, max(data04M08$year) + 1))
+summ$C <- data.frame(model = "C", fixef(b04M08c)) %>%
+  mutate(knots = c(NA, min(data04M08$year) -1, splinC$knots, max(data04M08$year) + 1))
+summ$data <- bind_rows(summ$A, summ$B, summ$C) %>%
   filter(!is.na(knots)) %>%
   mutate(knots = round(knots)) %>%
   mutate(knots = factor(knots, ordered = TRUE))
-# df
-ggplot(df, 
+
+ggplot(summ$data, 
        aes(x = knots, y = Estimate, ymin = Q2.5, ymax = Q97.5, color = model)) +
   geom_pointinterval(position = position_dodge(width = 1/2)) +
   scale_color_paletteer_d("futurevisions::cancri") +
@@ -1746,7 +1768,8 @@ ggplot(df,
   theme(title = element_text(color = "midnightblue"),
         legend.position = "bottom",
         legend.direction = "horizontal",
-        axis.text.x = element_text(size = rel(0.85))) +
+        axis.text.x = element_text(size = rel(0.85)),
+        axis.text.y = element_text(size = rel(0.80))) +
   labs(title = "Comparing the models' coefficients based on year",
        subtitle = "4M8",
        x = "year", y = NULL) +
@@ -1755,17 +1778,20 @@ ggplot(df,
 
 ### Using `inla`
 
-See section 9.2, p. 204, of @gomez2020 on using `inla` with *B-spline*.
+See section 9.2, p. 204, of @gomez2020 on using `inla` with *B-spline*. Also,
+see section 3.2, p.47 of @wang2018 on setting the priors.
 
 ```{r}
-library(splines)
-# create newdata with dependent variable set to NA  to estimate the splines
-# newdata <- list(n = 15L)
-# newdata$knots <- quantile(data04M08$year, 
-#                           probs = seq(from= 0 , to = 1, length.out = newdata$n))
-# we use the same knots as for model  above
-newdata$knots <- knotsA
+names(inla.models()$priors)
+```
 
+
+
+```{r}
+# create newdata with dependent variable set to NA  to samples the splines
+newdata <- list(
+  knots = quantile(data04M08$year, 
+                   probs=seq(from=0 , to=1, length.out=15L)))
 newdata$new<- data.frame(
   year = newdata$knots,
   doy = NA_real_)
@@ -1774,12 +1800,18 @@ newdata$data <- data04M08 %>%
   bind_rows(newdata$new)
 
 # IMPORTANT: We must use the same parameters as for model b04M08a to 
- #           allow comparison.
-i04M08 <- inla(
-  formula = doy ~ 1 + bs(year, knots = newdata$knots, degree = 3, intercept = TRUE),
-  control.predictor = list(compute = TRUE),
-  data = newdata$data
-  )
+# allow comparison.  Se the priors in the parameters.
+a_file <- here::here("fits", "i04M08a.rds")
+i04M08a <- readRDS(a_file)
+# i04M08a <- inla(
+#   formula = doy ~ 1 + bs(year, knots = newdata$knots, degree = 3L, intercept = TRUE),
+#   control.fixed = list(mean.intercept = 100, prec.intercept = 1 / (10^2),
+#                 mean = 0, prec = 1 / (10^2)),
+#   control.family = list(hyper = list(prec = list("gamma", param = c(1, 0.00005)))),
+#   control.predictor = list(compute = TRUE),
+#   data = newdata$data
+#   )
+# saveRDS(i04M08a, file = a_file)
 ```
 
 
@@ -1787,23 +1819,21 @@ and the coefficients are
 
 ```{r}
 # from inla
-i04M08$summary.fixed
-# from brm
-fixef(b04M08a)
+i04M08a$summary.fixed
 ```
 
 The coefficients from `inla` include extra coefficients at the beginning and end
 which are near zero with very large sd.
 
 ```{r}
-i04M08$summary.fixed[c("1", "19"), ]
+i04M08a$summary.fixed[c("1", "19"), ]
 ```
 
 once we remove these extreme items we can compare `inla` and `brm`
 
 ```{r}
-summ <- i04M08$summary.fixed %>%
-  filter(!(rownames(i04M08$summary.fixed) %in% c("1", "19"))) %>%
+summ <- i04M08a$summary.fixed %>%
+  filter(!(rownames(i04M08a$summary.fixed) %in% c("1", "19"))) %>%
   select(mean, sd, `0.025quant`, `0.975quant`)  %>%
   tibble::remove_rownames() %>%
   bind_cols(as.data.frame(fixef(b04M08a)))
@@ -1812,11 +1842,8 @@ summ %>%
   select(mean, Estimate, sd, Est.Error) %>%
   round(digits = 2)
 ```
-We observe that the coefficients are very similar. The errors are very 
-different however.  This aspect was not investigated in this project as
-additive models are not the main scope of the book. My hypothesis is that
-inla's sd shows the standard deviation of the predictions whereas brms shows
-the standard deviaiton of the *mean*.
+We observe that `inla` and `brm` generate coefficients and their errors 
+which are similar.
 
 
 ## 4H1 {-#prac4H1}
@@ -2578,16 +2605,6 @@ data04H05 <- cherry_blossoms %>%
 skimr::skim(data04H05)
 ```
 
-```{r}
-ggplot(data04H05, aes(x = temp, y = doy, color = year)) +
-  geom_point(size = 1.2) +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
-  scale_color_paletteer_c("pals::isol") +
-  ggdist::theme_ggdist() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = c(0.90, 0.85)) +
-  labs(title = "cherry blossoms", subtitle = "4H5")
-```
 
 ### The model
 
@@ -2604,64 +2621,102 @@ w_j &\sim \mathcal{N}(0, 10) \\
 \sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
+### Functions used {-}
 
-### The fit
-
-
-```{r}
-knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
-```
-
+A function to create the plot
 
 ```{r}
-ggplot(data04H05, aes(x = temp, y = doy, color = year)) +
-  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
-  geom_point(shape = 20, size = 2, alpha = 2/3) +
-  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
-  scale_color_paletteer_c("pals::isol") +
+# the basis plot used in 4M8
+plot_4H5 <- function(data, x_var = "temp", y_var = "doy", color_var = "year", 
+                     knots, colrs = "pals::isol") {
+  ggplot(data, aes(x = .data[[x_var]], y = .data[[y_var]], 
+                   color = .data[[color_var]])) +
+    geom_point(shape = 20, size = 2, alpha = 2/3) +
+    geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+    scale_x_continuous(breaks = knots,
+                       labels = scales::label_number(accuracy = 0.1)) +
+  scale_color_paletteer_c(colrs) +
   theme_classic() +
   theme(title = element_text(color = "midnightblue"),
         legend.position = c(0.90, 0.85),
-        axis.text.x = element_text(size = rel(0.9))
-        ) +
+        axis.text.x = element_text(size = rel(0.9))) +
   labs(title = sprintf("Cherry Blossom in Japan with %d knots", length(knots)),
        subtitle = "4H5")
+}
 ```
 
-Create the bias function with degree 3 (cubic spline) and an intercept
+
+
+### The splines {-}
+
 
 ```{r}
-library(splines)
-data <- list()
-# must specify intercept = TRUE
-data$B <- splines::bs(x = data04H05$temp, knots = knots[-c(1, length(knots))], 
-                 degree = 3, intercept = TRUE)
-# str(data$B)
-# head(data$B)
-
-# this data.frame will be reused below with the posteriors
-data$bias <- data$B %>%
-  as.data.frame() %>%
-  setNames(sprintf("B%02d", seq_len(ncol(.)))) %>%
-  mutate(temp = data04H05$temp) %>%
-  pivot_longer(cols = -temp, names_to = "bias_func", values_to = "bias")
+# the data for the spline
+splin <- list(knots = quantile(data04H05$temp, 
+                                probs = seq(from = 0, to = 1, length.out = 12)))
+# basis matrix
+splin$B <- get_B(x=data04H05$temp, knots=splin$knots, degree = 3L, intercept = TRUE)
 
 # the data structure used to fit
-data$fit <-
+splin$data <-
   data04H05 %>%
-  mutate(B = data$B)
+  mutate(B = splin$B)
 ```
 
-### With `quap`
+
+### With `quap` {-}
+
+See code example in R code 4.76, 4.77 and 4.78 in section4.5.2
+
+```{r}
+a_file <- here::here("fits", "m04H05.rds")
+m04H05 <- readRDS(a_file)
+# m04H05 <- quap(
+#   alist(
+#     D ~ dnorm(mu, sigma),
+#     mu <- a + B %*% w,
+#     a ~ dnorm(100, 10),
+#     w ~ dnorm(0, 10),
+#     sigma ~ dexp(1)
+#   ),
+#   data=list(D=data04H05$doy, B=splin$B),
+#   start=list(w=rep(0,ncol(splin$B)))
+# )
+# saveRDS(m04H05, file = a_file)
+```
+
+and the fitted values
+
+```{r}
+samples <- list(n = 100L)
+samples$fitted <- link(m04H05, n = samples$n) %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(), names_to = "temp", values_to = "doy") %>%
+  mutate(temp = rep(data04H05$temp, times = samples$n))
+
+samples$intervals <- samples$fitted %>%
+  group_by(temp) %>%
+  ggdist::mean_qi(.width = 0.95)
+samples$intervals
+
+```
 
 
+```{r}
+plot_4H5(data04H05, knots = splin$knots) +
+  geom_smooth(data = samples$intervals,
+              mapping = aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
+              inherit.aes = FALSE,
+              stat = "identity", color = "darksalmon", fill = "sandybrown")
+```
 
-### With `brm`
+
+### With `brm` {-}
 
 ```{r}
 a_file <- here::here("fits", "b04H05.rds")
 b04H05 <- readRDS(file = a_file)
-# b04H05 <- brm(data = data$fit,
+# b04H05 <- brm(data = splin$data,
 #       family = gaussian,
 #       doy ~ 1 + B,
 #       prior = c(prior(normal(100, 10), class = Intercept),
@@ -2672,51 +2727,29 @@ b04H05 <- readRDS(file = a_file)
 summary(b04H05)
 ```
 
-#### Fitted
+#### Fitted {-}
 
-sample the fit
+Sample the fit
 
 ```{r}
 samples <- list()
 # the fitted values
-# NOTE: We remove duplicated rowss to be able to plot.
-#       Otherwise the ribbon does not work well in the plot
 samples$fitted <- fitted(b04H05) %>%
   as.data.frame() %>%
   bind_cols(data04H05)
-  # filter(temp %in% knots) %>%
-  # filter(!duplicated(temp))
-str(samples$fitted)
 ```
 
 and plot the results
 
 ```{r}
-# NOTE: geom_lineribbon does not work well here.  geom_smooth works great.
-ggplot(samples$fitted, aes(x = temp, y = doy, color = year)) +
-  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
-  geom_point(size = 1) +
-  # geom_lineribbon(samples$fitted, 
-  #                 mapping = aes(x = temp, y = Estimate, ymin = Q2.5, ymax = Q97.5),
-  #                 inherit.aes = FALSE,
-  #                 color = "darksalmon", fill = "sandybrown", alpha = 1/2) +
-  geom_smooth(mapping = aes(x = temp, y = Estimate, ymin = Q2.5, ymax = Q97.5),
-              stat = "identity", color = "darksalmon", fill = "sandybrown") +
-  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
-  scale_color_paletteer_c("pals::isol") +
-  theme_classic() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = c(0.90, 0.85),
-        axis.text.x = element_text(size = rel(0.9))
-        ) +
-  labs(title = sprintf("Fitted Cherry Blossom in Japan with %d knots", length(knots)),
-       subtitle = "4H5")
+plot_4H5(data04H05, knots = splin$knots) +
+  geom_smooth(data = samples$fitted,
+              mapping = aes(x = temp, y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              inherit.aes = FALSE,
+              stat = "identity", color = "darksalmon", fill = "sandybrown")
 ```
 
 
-#### Predict
-
-Sample the predictions
 
 ## 4H6 {-#prac4H6}
 
@@ -2726,7 +2759,18 @@ simulation is inspired by that section.
 The dimensions f the B matrix are explained in section 4.5.2, on p. 117,
 between R code 4.74 and R code 4.75.
 
-### The initial model
+### Data {-}
+
+
+```{r echo=FALSE}
+data("cherry_blossoms")
+data04H06 <- cherry_blossoms %>%
+  drop_na()
+skimr::skim(data04H06)
+```
+
+
+### Model {-}
 
 
 $$
@@ -2738,23 +2782,13 @@ w_j &\sim \mathcal{N}(0, 10) \\
 \sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
-#### Functions used
+### Functions {-}
 
 We need to create functions to simulate the prior and plotting.
 
 The functions used for the simulation
 
 ```{r}
-# create the B (basis) matrix
-get_B <- function(x, knots, degree = 3L, intercept = TRUE) {
-  out <- splines::bs(x = x, 
-                   knots = knots[-c(1, length(knots))], 
-                   degree = degree, 
-                   intercept = intercept)
-  stopifnot(all.equal(dim(out), c(length(x), length(knots) + degree - 1)))
-  out
-}
-
 # simulate the prior using the B matrix
 sim_prior_gam <- function(B, n = 1000L,
                           alpha_prior = list(mean = 0, sd = 10),
@@ -2784,7 +2818,7 @@ sim_prior_gam <- function(B, n = 1000L,
 
 
 
-#### Prior distribution simulation
+### Prior distribution simulation {-}
 
 The simulation with sd in priors set to 10
 
@@ -2792,9 +2826,9 @@ The simulation with sd in priors set to 10
 # the list used to hold sim data and variables
 sim <- list(n = 1000L)
 # the knots used
-sim$knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
+sim$knots <- quantile(data04H06$temp, probs = seq(from = 0, to = 1, length.out = 12))
 # the predictors used
-sim$preds <- seq_range(data04H05$temp, n = 20L)
+sim$preds <- seq_range(data04H06$temp, n = 20L)
 sim$B <- get_B(x=sim$preds, knots=sim$knots, degree = 3L, intercept = TRUE)
 # str(sim$B)
 
@@ -2824,8 +2858,8 @@ sim$intervals <- sim$data_lng %>%
 # can be used interchangeably. stat_lineribbon gives the better visual
 # to my taste
 p <- list()
-p$A <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
-  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+p$A <- ggplot(data=data04H06,mapping=aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = sim$knots, color = "slateblue", alpha = 1/2) +
   # stat_lineribbon(data=sim$data_lng, mapping=aes(x = temp, y = doy),
   #                 .width=c(0.5, 0.75, 0.95), size = 1, color = "lightcoral",
   #                 inherit.aes = FALSE) +
@@ -2833,7 +2867,7 @@ p$A <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
               mapping=aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
               stat = "identity", size = 1, color = "royalblue", fill = "lightskyblue") +
   geom_point(size = 1) +
-  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = sim$knots, labels = scales::label_number(accuracy = 0.1)) +
   scale_y_continuous(breaks = scales::breaks_extended(n = 5), 
                      labels = scales::label_number(accuracy = 1),
                      limits = c(30, 150)) +
@@ -2841,9 +2875,10 @@ p$A <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
   scale_color_paletteer_c("pals::isol") +
   ggdist::theme_ggdist() +
   theme(title = element_text(color = "midnightblue"),
-        legend.position = "none") +
-  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(knots)),
-       subtitle = "with sd = 10")
+        legend.position = "none",
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(sim$knots)),
+       subtitle = "with weights' sd = 10")
 ```
 
 The simulation with sd in priors set to 20
@@ -2854,14 +2889,14 @@ The simulation with sd in priors set to 20
 # the list used to hold sim data and variables
 sim <- list(n = 1000L)
 # the knots used
-sim$knots <- quantile(data04H05$temp, probs = seq(from = 0, to = 1, length.out = 12))
+sim$knots <- quantile(data04H06$temp, probs = seq(from = 0, to = 1, length.out = 12))
 # the predictors used
-sim$preds <- seq_range(data04H05$temp, n = 20L)
+sim$preds <- seq_range(data04H06$temp, n = 20L)
 sim$B <- get_B(x=sim$preds, knots=sim$knots, degree = 3L, intercept = TRUE)
 # str(sim$B)
 
 sim$data <- sim_prior_gam(B=sim$B, n = sim$n,
-                          alpha_prior = list(mean = 100, sd = 20),
+                          alpha_prior = list(mean = 100, sd = 10),
                           weight_prior = list(mean = 0, sd = 20),
                           sigma_prior = list(rate = 1))
 # str(sim$data)
@@ -2869,7 +2904,7 @@ sim$data <- sim_prior_gam(B=sim$B, n = sim$n,
 
 
 ```{r}
-# put data in log fomrat for use with stat_lineribbon
+# put data in log format for use with stat_lineribbon
 sim$data_lng <- sim$data %>%
   as.data.frame() %>%
   pivot_longer(cols = everything(), names_to = "temp", values_to = "doy") %>%
@@ -2885,16 +2920,17 @@ sim$intervals <- sim$data_lng %>%
 # the plot is made with both geom_smooth and stat_lineribbon which
 # can be used interchangeably. stat_lineribbon gives the better visual
 # to my taste
-p$B <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
-  geom_vline(xintercept = knots, color = "slateblue", alpha = 1/2) +
+p$B <- ggplot(data=data04H06,mapping=aes(x = temp, y = doy, color = year)) +
+  geom_vline(xintercept = sim$knots, color = "slateblue", alpha = 1/2) +
   # stat_lineribbon(data=sim$data_lng, mapping=aes(x = temp, y = doy),
   #                 .width=c(0.5, 0.75, 0.95), size = 1, color = "lightcoral",
   #                 inherit.aes = FALSE) +
-  geom_smooth(data=sim$intervals, inherit.aes = FALSE,
+  geom_smooth(data=sim$intervals,
               mapping=aes(x = temp, y = doy, ymin = .lower, ymax = .upper),
+              inherit.aes = FALSE,
               stat = "identity", size = 1, color = "violetred", fill = "mistyrose") +
   geom_point(size = 1) +
-  scale_x_continuous(breaks = knots, labels = scales::label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = sim$knots, labels = scales::label_number(accuracy = 0.1)) +
   scale_y_continuous(breaks = scales::breaks_extended(n = 5), 
                      labels = scales::label_number(accuracy = 1),
                      limits = c(30, 150)) +
@@ -2902,9 +2938,10 @@ p$B <- ggplot(data=data04H05,mapping=aes(x = temp, y = doy, color = year)) +
   scale_color_paletteer_c("pals::isol") +
   ggdist::theme_ggdist() +
   theme(title = element_text(color = "midnightblue"),
-        legend.position = "none") +
-  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(knots)),
-       subtitle = "with sd = 20")
+        legend.position = "none",
+        axis.text.x = element_text(size = rel(0.9))) +
+  labs(title = sprintf("Cherry Blossoms: Prior distribution with %d knots", length(sim$knots)),
+       subtitle = "with weights' sd = 20")
 ```
 
 and comparing the 2 plots
@@ -2928,6 +2965,70 @@ message("Practice 4H7 is missing in the second edition!")
 
 ## 4H8 {-#prac4H8}
 
-```{r echo=FALSE}
-message("TODO")
+```{r}
+data("cherry_blossoms")
+data04H08 <- cherry_blossoms %>%
+  drop_na(doy)
+rm(cherry_blossoms)
+stopifnot(all.equal(dim(data04H08), c(827L, 5L)))
+skimr::skim(data04H08)
 ```
+
+
+```{r}
+# use 15 knots as for model m4.7
+splin <- list(knots = quantile(data04H08$year, 
+                               probs = seq(from = 0, to = 1, length.out = 15L)))
+# must specify intercept = TRUE
+splin$B <- get_B(x = data04H08$year, knots = splin$knots,
+                 degree = 3L, intercept = TRUE)
+
+# data used to fit the model
+splin$data <- data04H08 %>%
+  mutate(B = splin$B)
+```
+
+The model is changed to remove the intercept which is **mu <- B %*% w**
+instead of **mu <- a + B %*% w**
+
+```{r}
+a_file <- here::here("fits", "m04H08.rds")
+# m04H08 <- readRDS(a_file)
+m04H08 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- B %*% w,
+    w ~ dnorm(0, 10),
+    sigma ~ dexp(1)
+  ),
+  data=list(D=data04H08$doy, B=splin$B),
+  start=list(w=rep(0,ncol(splin$B)))
+)
+saveRDS(m04H08, file = a_file)
+```
+
+and the fitted values
+
+```{r}
+samples <- list(n = 100L)
+samples$fitted <- link(m04H08, n = samples$n) %>%
+  as.data.frame() %>%
+  pivot_longer(cols = everything(), names_to = "year", values_to = "doy") %>%
+  mutate(year = rep(data04H08$year, times = samples$n))
+
+samples$intervals <- samples$fitted %>%
+  group_by(year) %>%
+  ggdist::mean_qi(.width = 0.95)
+# samples$intervals
+```
+
+
+```{r}
+# we use the same plot function as in 4M8 above.
+plot_04M08(data04H08, knots = splin$knots) +
+  geom_smooth(data = samples$intervals,
+              mapping = aes(x = year, y = doy, ymin = .lower, ymax = .upper),
+              inherit.aes = FALSE,
+              stat = "identity", color = "blueviolet", fill = "violet")
+```
+
