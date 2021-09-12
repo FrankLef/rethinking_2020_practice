@@ -23,7 +23,9 @@ library(splines)
 ### With `ggdist` {-}
 
 ```{r}
-# Pivot a dataframe from ggdist::point_interval to longer format
+# Pivot a dataframe from ggdist::point_interval to longer format.
+# It removes the duplicate point valaue that repeat itself when putting
+# intervals in long format.
 # This is a useful function when plotting with ggrepel, for example
 gather_interval <- function(df, value_var, fun=ggdist::median_qi, 
                             width = c(2/3, 0.89),
@@ -189,18 +191,18 @@ See Overthinking in section 4.3.1
 
 $$
 \begin{align*}
-P(\mu, \sigma \mid y) &=
+P(\mu, \sigma \mid \textbf{y}) &=
 
 \frac{
-    P(y, \mu, \sigma)
+    P(\textbf{y}, \mu, \sigma)
 }{
-    P(y)
+    P(\textbf{y})
 } \\
 
 &= \frac{
-    P(y, \mu, \sigma)
+    P(\textbf{y}, \mu, \sigma)
 }{
-    \int_{\sigma} \int_{\mu} P(y \mid \mu, \sigma) \cdot P(\mu, \sigma) d\mu d\sigma \\
+    \int_{\sigma} \int_{\mu} P(\textbf{y} \mid \mu, \sigma) \cdot P(\mu, \sigma) d\mu d\sigma \\
 } \\
 
 &= 
@@ -252,8 +254,7 @@ sim <- list(n = 1e4L, width = c(2/3, 0.95, 1), fun = ggdist::median_qi)
 set.seed = 4
 sim$data <-data.frame(
   mu = rnorm(n = sim$n, mean = 0, sd = 10),
-  sigma = rexp(n = sim$n, rate = 1)
-  ) %>%
+  sigma = rexp(n = sim$n, rate = 1)) %>%
   mutate(height = rnorm(n = sim$n, mean = mu, sd = sigma))
 # compute the confidence intervals
 sim$intervals <- sim$data %>%
@@ -275,13 +276,15 @@ ggplot(data = sim$data, mapping = aes(x = height)) +
   ggrepel::geom_text_repel(data = sim$intervals,
                            aes(x = value, label = round(value, 1), y = 0),
                            inherit.aes = FALSE,
-                           color = "violetred") +
+                           color = "violetred", size = 3.5) +
   theme_void() +
   theme(legend.position = c(0.8, 0.8),
         title = element_text(color = "midnightblue")) +
   labs(title = "Prior prediction of height", 
        subtitle = sprintf("4M1, sample size = %d", sim$n))
 ```
+
+
 
 ## 4M2 {-#prac4M2}
 
@@ -2993,18 +2996,18 @@ instead of **mu <- a + B %*% w**
 
 ```{r}
 a_file <- here::here("fits", "m04H08.rds")
-# m04H08 <- readRDS(a_file)
-m04H08 <- quap(
-  alist(
-    D ~ dnorm(mu, sigma),
-    mu <- B %*% w,
-    w ~ dnorm(0, 10),
-    sigma ~ dexp(1)
-  ),
-  data=list(D=data04H08$doy, B=splin$B),
-  start=list(w=rep(0,ncol(splin$B)))
-)
-saveRDS(m04H08, file = a_file)
+m04H08 <- readRDS(a_file)
+# m04H08 <- quap(
+#   alist(
+#     D ~ dnorm(mu, sigma),
+#     mu <- B %*% w,
+#     w ~ dnorm(0, 10),
+#     sigma ~ dexp(1)
+#   ),
+#   data=list(D=data04H08$doy, B=splin$B),
+#   start=list(w=rep(0,ncol(splin$B)))
+# )
+# saveRDS(m04H08, file = a_file)
 ```
 
 and the fitted values

@@ -1,0 +1,276 @@
+
+# `logit()` distribution {-#app-logit}
+
+McElrath and Kurz create `logistic()`, `logit()`, etc. Actually
+both function exist in the base R package `stats` under the name
+`plogis()` for `logistic()` and `qlogis()` for `logit()`.
+
+See [Roman Cheplyaka](https://ro-che.info/articles/2018-08-11-logit-logistic-r)
+for a nice explanation.
+
+
+
+## `logistic()` / `inv_logit()` function
+
+> This function is in the base r package `stats` and is called `plogis()`.
+
+In McElrath's [GitHub page](https://github.com/rmcelreath/rethinking/blob/a309712d904d1db7af1e08a76c521ab994006fd5/R/distributions.r), there are 2 functions, `logistic()` and `inv_logit()` who are identical
+and whose use (inverting the logit function) is the same.
+
+What is the reason?  Shouldn't there be only one function to avoid errors and simplify
+code maintenance?
+
+In the Kurz's [bookdown](https://bookdown.org/content/3890/monsters-and-mixtures.html#adding-predictor-variables.)
+the same function is called `logistic()`. and Kurz mentions he couldn't find an equivalent function
+in `brms`.
+
+
+As a check, we will use the result of the model 11.1 which is called
+`m11.1` by McElrath with `rethinking` and b11.1 by Kurz with `brms`.
+
+```{r}
+intercepts <- c(-1.92, -1.27, -0.72, 0.25, 0.89, 1.77)
+```
+
+
+the logistic function as programmed by McElrath and Kurz is
+
+```{r}
+logistic <- function(x) {
+  p <- 1 / (1 + exp(-x))
+  p <- ifelse(x == Inf, 1, p)
+  p
+}
+```
+
+and the `stats::plogis()` gives the same result
+
+```{r}
+x <- stats::plogis(intercepts)
+y <- logistic(intercepts)
+x
+stopifnot(identical(x, y))
+```
+
+
+## `logit()` function
+
+> This function is in the base r package `stats` and is called `qlogis()`.
+
+The logit function is the quantile function for the logistic distribution.
+Therefore we can use `qlogis` which will return the original intercepts.
+
+
+```{r}
+intercepts <- c(-1.92, -1.27, -0.72, 0.25, 0.89, 1.77)
+x <- logistic(intercepts)
+x.inv <- stats::qlogis(x)
+x.inv
+stopifnot(all.equal(x.inv, intercepts))
+```
+
+
+## `dordlogit()` function
+
+The `dordlogit()` is programmed by McElrath's [GitHub page](https://github.com/rmcelreath/rethinking/blob/a309712d904d1db7af1e08a76c521ab994006fd5/R/distributions.r)
+as follows
+
+```{r}
+dordlogit <- function( x , phi , a , log=FALSE ) {
+    a <- c( as.numeric(a) , Inf )
+    p <- logistic( a[x] - phi )
+    na <- c( -Inf , a )
+    np <- logistic( na[x] - phi )
+    p <- p - np
+    if ( log==TRUE ) p <- log(p)
+    p
+}
+```
+
+
+
+Using the `stats::plogis()`, it can be re-written in a more compact form as
+
+```{r}
+dordlogit.new <- function(x, phi = 0L, log = FALSE) {
+  x <- sort(x)  # the ordering is important
+  p <- stats::plogis(q = c(x, Inf), location = phi)
+  p <- c( p[1], p[2:length(p)] - p[1:(length(p)-1)] )
+  if (log) p <- log(p)
+  p
+}
+```
+
+which can be tested, again using the results of m11.1 (McElrath), b11.1 (Kurz)
+
+```{r}
+intercepts <- c(-1.92, -1.27, -0.72, 0.25, 0.89, 1.77)
+
+pk <- dordlogit(1:7, phi = 0, a = intercepts)
+pk
+
+pk.new <- dordlogit.new(x = intercepts)
+pk.new
+
+stopifnot(identical(pk, pk.new))
+```
+
+
+
+## `pordlogit()` function
+
+Also `pordlogit()` is given by McElrath as
+
+```{r}
+pordlogit <- function( x , phi , a , log=FALSE ) {
+    a <- c( as.numeric(a) , Inf )
+    if ( length(phi) == 1 ) {
+        p <- logistic( a[x] - phi )
+    } else {
+        p <- matrix( NA , ncol=length(x) , nrow=length(phi) )
+        for ( i in 1:length(phi) ) {
+            p[i,] <- logistic( a[x] - phi[i] )
+        }
+    }
+    if ( log==TRUE ) p <- log(p)
+    p
+}
+```
+
+
+which can be rewritten in a much simpler, and probably faster, form as
+
+```{r}
+pordlogit.new <- function(x, phi = 0L, log = FALSE) {
+  p <- t(
+      sapply(X = phi, 
+             FUN = function(y) stats::plogis(q = x, location = y, log.p = log)
+             )
+      )
+  if (length(phi) == 1) p <- as.vector(p)
+  p
+}
+```
+
+and we test it as follows
+
+```{r}
+# test values when several phi and x
+phi <- 1:3
+x <- c(0.15, 0.30, 0.50, 0.70, 0.85)
+
+# using McElrath version
+m <- pordlogit(x = 1:5, phi = phi, a = x, log = FALSE)
+m
+
+# using the new, simpler form
+m.new <- pordlogit.new(x, phi, log = FALSE)
+m.new
+
+# both should give the same thing
+stopifnot(identical(m, m.new))
+
+
+# and test with only 1 phi value
+# using McElrath version
+m1 <- pordlogit(x = 1:5, phi = 1, a = x, log = FALSE)
+m1
+
+# using the new form
+m1.new <- pordlogit.new(x, phi = 1, log = FALSE)
+m1.new
+
+stopifnot(identical(m1, m1.new))
+
+
+# and testing with log == TRUE
+# using McElrath version
+m.log <- pordlogit(x = 1:5, phi = phi, a = x, log = TRUE)
+m.log
+
+# using the new form
+m.log.new <- pordlogit.new(x, phi, log = TRUE)
+m.log.new
+
+stopifnot(all.equal(m.log, m.log.new))
+```
+
+
+## `rordlogit()` function
+
+
+Using the results from above we can also simplify `rordlogit()`.
+
+```{r}
+rordlogit <- function( n , phi=0 , a) {
+    a <- c( as.numeric(a) , Inf )
+    k <- 1:length(a)
+    
+    if ( length(phi)==1 ) {
+        p <- dordlogit( k , a=a , phi=phi , log=FALSE )
+        y <- sample( k , size=n , replace=TRUE , prob=p )
+    } else {
+        # vectorized input
+        y <- rep(NA,n)
+        if ( n > length(phi) ) {
+            # need to repeat some phi values
+            phi <- rep(phi, ceiling(n/length(phi)) )
+        }
+        for ( i in 1:n ) {
+            p <- dordlogit( k , a=a , phi=phi[i] , log=FALSE )
+            y[i] <- sample( k , size=1 , replace=TRUE , prob=p )
+        }
+    }
+    y
+}
+```
+
+
+The simpler, and probably faster, format is as follows
+
+```{r}
+rordlogit.new <- function(n, x, phi = 0L) {
+  
+  k <- seq_len(length(x) + 1)
+  
+  # need to repeat some phi values
+  if (n > length(phi)) phi <- rep(phi, ceiling(n/length(phi)))
+  
+  sapply(X = seq_len(n),
+         FUN = function(i) {
+           p <- dordlogit.new(x = x, phi = phi[i], log = FALSE)
+           sample(k, size = 1, replace = TRUE, prob = p)
+           })
+}
+```
+
+
+and we test it
+
+```{r}
+intercepts <- c(-1.92, -1.27, -0.72, 0.25, 0.89, 1.77)
+
+set.seed(1)
+s <- rordlogit(n = 5, phi = 0:3, a = intercepts)
+s
+
+set.seed(1)
+s.new <- rordlogit.new(n = 5, x = intercepts, phi = 0:3)
+s.new
+
+stopifnot(identical(s, s.new))
+
+
+# and testing it with only 1 phi and n = 1
+set.seed(1)
+s1 <- rordlogit(n = 1, phi = pi, a = intercepts)
+s1
+
+set.seed(1)
+s1.new <- rordlogit.new(n = 1, x = intercepts, phi = pi)
+s1.new
+
+stopifnot(identical(s1, s1.new))
+```
+
+

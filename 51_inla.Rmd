@@ -1,0 +1,565 @@
+```{r include=FALSE}
+library(rethinking)
+library(INLA)
+library(brms)
+library(eflINLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+```
+
+
+
+# `INLA` {-#app-inla}
+
+This appendix details the creation of the `inla` objects in the practices.
+The practices are identified in the sections.
+
+
+## Note on priors {-}
+
+One different aspect of `INLA::inla` from `rethinking::quap` and `brms::brm` is
+its treatment of **priors**.  Contrary to `quap` and `brm` the priors in `inla`
+are scattered among 3 different parameters which can be confusing at first.
+
+The priors for `inla` are organized as follows
+
+* **Fixed effect**: The prior are defined in `control.fixed`. See section 2.3.1, 
+in particular table 2.1, of @gomez2020.
+* **Latent effect**: The priors are in defined using the parameter `hyper` inside the
+`f()` function. See section 5.2 of @gomez2020.
+* **Likelihood**: The priors are defined using the parameter `hyper` inside 
+`control.family`. See section 5.2 of @gomez2020.
+  - The default prior on precision is the Gamma(shape = 1, rate = 0.00005). See
+    p. 19 of @gomez2020.
+
+```{r}
+.libPaths()
+```
+
+
+```{r}
+names(inla.models())
+names(inla.models()$prior)
+```
+
+
+```{r}
+names(inla.set.control.fixed.default())
+```
+
+
+
+```{r}
+inla.set.control.fixed.default()[c("mean", "mean.intercept", "prec", "prec.intercept")]
+```
+
+
+## 4M7 {-#app-inla-04M07}
+
+We use practice 4M7 from chapter 4 to illustrate `inla` in more details.
+
+
+### Data and model {-}
+
+
+```{r}
+data(Howell1)
+data04M07 <- Howell1 %>%
+  filter(age  >= 18) %>%
+  mutate(weight_c = as.vector(scale(weight, center = TRUE, scale = FALSE)))
+rm(Howell1)
+skimr::skim(data04M07)
+```
+
+
+$$
+\begin{align*}
+height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta(x_i - \bar{x}) \\
+\alpha &\sim \mathcal{N}(178, 20) \\
+\beta &\sim \mathcal{LogNormal}(0, 1) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+### Arguments {-}
+
+The arguments will be kept in a list.  This is useful for repeated use and
+ensure consistency when creating different inla model objects. For example
+for fitted and predicted values computations as done below.
+
+```{r}
+app_i04M07args <- list()
+```
+
+
+#### `formula` {-}
+
+See section 3.2.1 and 3.2.2 of @gomez2020, example on p. 40 at the end of 
+section 3.2.2 on p. 41 and 42.
+
+See section 5.2 in @gomez2020 on how to use the prior.
+
+* the model is fixed (no random effect) and
+* the $\beta$ coefficient is constrained, i.e. must be positive
+
+Therefore the model has a **constrained fixed effect** *weight_c* which is 
+indicated by `clinear` in the `f()` function of the formula. This makes
+*weight_c* a *latent effect* as opposed to a *likelihood effect* such
+as $\sigma$ in the current model.
+
+The available priors, defined in `f()` of *latent effect* are as follows
+
+```{r}
+names(inla.models()$prior)
+```
+
+and we will use `logtnormal` which is equivalent to our prior 
+$\beta &\sim \mathcal{LogNormal}(0, 1)$ and is documented as follows
+
+```{r}
+# inla.doc(inla.models()$prior$logtnormal$pdf)  # this command does not work!
+# inla.doc(inla.models()$prior$normal$pdf)  # this command works
+```
+
+which gives the formula of the linear predictor
+
+```{r}
+# linear predictor
+app_i04M07args$formula <- height ~ f(weight_c, model = "clinear", range = c(0, Inf),
+                         prior = "logtnormal", param = c(0, 1))
+# the available latent models are in names(inla.models()$latent)
+stopifnot("clinear" %in% names(inla.models()$latent))
+```
+
+#### `family` {-}
+
+`INLA` can work with many families.  They are listed in `inla.models`.
+For this case the family of the likelihood is
+
+```{r}
+# likelihood family
+app_i04M07args$family <- "gaussian"
+stopifnot(app_i04M07args$family %in% names(inla.models()$likelihood))
+```
+
+
+#### `control.fixed` {-}
+
+See example on p. 47 at the end of section 3.2 of @wang2018.
+
+As indicated in section 2.3.1, p.19, of @gomez2020 the prior for the intercept
+is *gaussian* with the following latent hyperparameters which need to 
+be modified for our model.
+
+```{r}
+inla.set.control.fixed.default()$mean.intercept
+inla.set.control.fixed.default()$prec.intercept
+```
+Therefore the intercept prior for the  is $\alpha \sim \mathcal{N}(178, 20)$ where $sd = 20$ and 
+precision is $\tau = \frac{1}{sd^2} = \frac{1}{20^2} = 0.0025$
+
+```{r}
+app_i04M07args$control.fixed <- list(mean.intercept = 178, prec.intercept = 1 / (20^2))
+```
+
+#### `control.family` {-}
+
+See example on p. 47 at the end of section 3.2 of @wang2018.
+See also section 5.2 in @gomez2020.
+
+In our model we have the prior for the sigma of the likelihood set as
+
+$$
+\sigma \sim \mathcal{Exp}(rate_\sigma = 1)
+$$
+Since $\sigma^2 = \frac{1}{\tau}$ then in terms or $\tau$ the rate becomes
+$rate_\tau = \frac{1}{\sigma^2}$ and thereofre
+
+
+$$
+\begin{align*}
+\sigma \sim \mathcal{Exp}(rate_\sigma = 1) \\
+\therefore \\
+\tau \sim \mathcal{Exp}(rate_\tau = \frac{1}{\sigma^2})\\
+\end{align*}
+$$
+
+
+
+As indicated in section 2.3.1, p. 19, of @gomez2020 the default of the likelihood
+precision is gamma distribution with parameter $shape = 1$ and $rate = 0.00005$.
+Since $shape = 1$ this is equivalent to the beta distribution then we use to
+reflect our model's prior. i.e. 
+
+$$
+\tau \sim \mathcal{Gamma}(shape = 1, rate = \tau)
+$$
+
+The internal representation of the precision is $log{\tau}$ (see table 5.3 in section 
+5.3.1 of @wang2018).  Therefore $\tau \sim \mathcal{Gamma}(1, 1 / log(1^2)) \approx \mathcal{Gamma}(1, 0.00005)$. 
+We use 0.00005 because 0 cannot be used as a denominator.
+It is the default setting.
+
+```{r}
+names(inla.models()$prior)
+# change to TRUE to see document
+if (FALSE) inla.doc("gamma", section = "prior")
+```
+
+
+Therefore we use
+
+```{r}
+app_i04M07args$control.family <- list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005))))
+```
+
+
+#### `control.compute` {-}
+
+See section 3.4 in @wang2018 for model selection and checking.
+For `cpo`, see section 3.4.3 in @wang2018 for details
+
+This arguments, in the form of a list, is as follows
+
+* `config = TRUE`: Compute the posteriors
+* `dic = TRUE`: Compute the Divergence information criteria
+* `waic = TRUE`: Compute the waic
+* `cpo = TRUE`: Compute the conditional predictive ordinance.
+
+which gives
+
+```{r}
+app_i04M07args$control.compute <- list(config = TRUE, dic = TRUE, waic = TRUE)
+```
+
+#### `quantiles` {-}
+
+the quantiles for credibility intervals.  `inla` uses credibility intervals rather
+than confidence intervals, usually similar when data has a centralized distribution.
+
+```{r}
+app_i04M07args$quantiles <- c(0.025, 0.5, 0.975)
+```
+
+
+### Create `inla` {-}
+
+Since we are using a predefined list of arguments, it is convenient to use
+`do.call`.  This ensure that the list of arguments can be reused later for
+fitted and predict.
+
+```{r}
+# the data
+app_i04M07args$data <- data04M07
+# we use do.call to be able to use the list of parameters
+app_i04M07 <- do.call(inla, args = app_i04M07args)
+```
+
+
+
+Note that all the arguments of the `inla` object can be accessed through
+the `.args` item as follows
+
+```{r}
+names(app_i04M07$.args)
+```
+
+### Summaries {-}
+
+which gives the summary for fixed parameters
+
+```{r}
+app_i04M07$summary.fixed
+```
+
+and hyperparameters which are shown on the *internal scale* which is the *log*
+and this case.
+
+```{r}
+app_i04M07$summary.hyperpar
+```
+
+
+### Fitted {-#app-inla-04M07-fitted}
+
+
+See [brinla](http://julianfaraway.github.io/brinla/examples/chicago.html)
+on how to find the fit.
+
+First we create the set of new data where the dependent variable has value `NA`
+
+```{r}
+# the new data
+newdata <- list(n = 20L)
+newdata$new <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = newdata$n),
+  height = NA_real_
+)
+# the complete new dataframe with old and new data
+newdata$data <- data04M07 %>%
+  select(height, weight_c) %>%
+  bind_rows(newdata$new)
+```
+
+
+We need to add `control.predictor=list(compute=TRUE)` to compute
+the posterior mean of the linear predictors and use the data with the
+sequence with `NA`
+
+```{r}
+# use the same arguments as the original and add the new data and
+# the control.predictor
+app_i04M07args$data <- newdata$data
+app_i04M07args$control.predictor <- list(compute = TRUE)
+app_i04M07 <- do.call(inla, args = app_i04M07args)
+```
+
+get the fitted data in a data.frame with only the new values and plot the results
+
+```{r}
+# get the fited data 
+p <- list()
+p$fitted <- app_i04M07$summary.fitted.values %>%
+  select(mean, sd, `0.025quant`, `0.975quant`) %>%
+  slice_tail(n = newdata$n) %>%
+  bind_cols(weight_c = newdata$new$weight_c)
+
+# plot the fitted values against the raw data
+ggplot(p$fitted, 
+       aes(x = weight_c, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
+  geom_lineribbon(size = 1, color = "rosybrown", fill = "rosybrown1") +
+  geom_point(data = data04M07, aes(x = weight_c, y = height, color = age),
+             inherit.aes = FALSE) +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
+                     labels = function(x) x + round(mean(data04M07$weight))) +
+  scale_color_paletteer_c("scico::lapaz") +
+  ggdist::theme_ggdist() +
+  theme(legend.position = c(0.20, 0.80),
+        title = element_text(color = "midnightblue")) +
+  labs(title = "inla fit", x = "weight", y = "height")
+```
+
+
+### Predictions {-#app-inla-04M07-predict}
+
+When it comes to making predictions, we encounter many different ways to do
+it.  The recommended way from inla org is [inla](https://www.r-inla.org/faq#h.821k2r53fvx3).
+Also see an example of another way in section 7.2.3, p.184 of @wang2018.
+
+The method below was found on the internet.  Unfortunately I do not remember
+the address.  My apologies.
+
+The method seems to work for any model which is why it is the chosen method.
+
+The process is in 3 steps, the first 2 seps are the same as for the fitted
+values (see just above)
+
+1. Get the predicted `inla` object with `NA` values to predict
+2. Sample the posterior with `inla.posterior.sample`
+3. Simulate the posterior predictions by adding variability to the 
+linear predictors
+
+#### Predicted `inla` object {-}
+
+We prepare the data set by adding data to predict
+
+First we create the set of new data where the dependent variable has value `NA`
+
+```{r}
+# the new data
+newdata <- list(n = 20L)
+newdata$new <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = newdata$n),
+  height = NA_real_
+)
+# the complete new dataframe with old and new data
+newdata$data <- data04M07 %>%
+  select(height, weight_c) %>%
+  bind_rows(newdata$new)
+```
+
+
+We need to add `control.predictor=list(compute=TRUE)` to compute
+the posterior mean of the linear predictors with the new data.
+
+```{r}
+# use the same arguments as the original and add the new data and
+# the control.predictor
+app_i04M07args$data <- newdata$data
+app_i04M07args$control.predictor <- list(compute = TRUE)
+app_i04M07 <- do.call(inla, args = app_i04M07args)
+```
+
+
+For every lines we can obtain the summary. For example for the new 20
+predictions
+
+```{r}
+app_i04M07$summary.linear.predictor %>%
+  filter(is.na(newdata$data$height))
+```
+and the marginal which was used to compute the line summary is available,
+for example for $predictor.353$ which is the first new
+
+```{r}
+p <- list()
+p$df <- app_i04M07$marginals.linear.predictor[["Predictor.353"]] %>%
+  as.data.frame()
+ggplot(p$df, aes(x = x, y = y)) +
+  geom_line(color = "rosybrown", size = 1) +
+  theme_minimal() +
+  labs(x = "weight_c", y = "height")
+```
+
+**Important**: The variation from the **likelihood precision** is missing.  The
+above is only the linear predictor itself.  When the link function is the
+identify, the linear predictor is the fitted value. Therefore to get the predictions
+we need to sample the posterior as follows.
+
+#### Sample the posterior {-}
+
+From the `inla` object, we extract a list of samples and, for each samples, 
+the list of linear predictors
+
+```{r}
+samples <- list(n = 1000L)
+samples$data <- inla.posterior.sample(n = samples$n, result = app_i04M07)
+with(samples, stopifnot(length(data) == n))
+```
+
+Each sample in the list is structured as follows
+
+```{r}
+str(samples$data[[1]])
+```
+
+We need, for each sample
+
+* The linear predictors which are numbered from their row no in the data
+provided to `inla`
+* The sample's precision to add variability to the linear predictor.  Remember,
+from above, that the linear predictor is a fit and we need to add the likelihood
+variability to it and this, for each sample.
+
+For each sample, a dataframe of simulated data is found in the `latent` item.
+The linear predictors are identified as `"Predictor:<row no>"`.
+
+Since the new predictors are the last items in the latent dataframe we can 
+extract them. Using the first sample as an example, we obtain
+
+```{r}
+# which gives the linear predictors for the first sample
+cat("The linear predictors", "\n")
+samples$data[[1]]$latent[353:372, ]
+# and the sigma value for the first sample
+cat("The sigma", "\n")
+samples$data[[1]]$hyperpar[[1]]
+```
+
+therefore we use this information and repeat it for every sample to simulate
+the linear predictors *with variability*.  The`predict_inla` function automates 
+this process.
+
+#### `predict_inla` {-#app-inla-04M07-predict_inla}
+
+`predict_inla` executes the process of sampling the posterior prediction from
+an inla model object.  It is actually simple.  Please see the documentation
+in the `eflINLA` package for the function `predict_inla`.  For the `R` code,
+just select `predict_inla` and press `F2` to see the code.
+
+```{r}
+app_i04M07args$control.predictor <- list(compute = TRUE)
+app_i04M07args$data <- newdata$data
+preds <- list(n = 1000L)
+preds$inla <- do.call(INLA::inla, app_i04M07args)
+preds$data <- eflINLA::predict_inla(object = preds$inla,
+                                    pos = which(is.na(newdata$data$height)),
+                                    n = preds$n)
+
+# get the intervals
+preds$intervals <- preds$data %>%
+  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
+  mutate(weight_c = newdata$new$weight_c)
+  
+
+# put data in long format
+preds$lng <- preds$data %>%
+  pivot_longer(cols = everything(), names_to = "predictor", values_to = "height") %>%
+  mutate(weight_c = rep(newdata$new$weight_c, times = preds$n))
+# str(preds$lng)
+```
+
+plot the data
+
+```{r}
+ggplot(data04M07, aes(x = weight_c, y = height)) +
+  stat_lineribbon(preds$lng, mapping = aes(x = weight_c, y = height),
+                  color = "slateblue",inherit.aes = FALSE, .width = c(0.50, 0.75, 0.95),
+                  show.legend = FALSE) +
+  geom_point(color = "indianred") +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
+                     labels = function(x) round(x + mean(data04M07$weight))) +
+  scale_fill_paletteer_d("ggsci::indigo_material") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue")) +
+  labs(title = "Predictions with INLA", 
+       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
+                          preds$n, length(preds$data)),
+       x = "weight", y = "height")
+```
+
+
+##### Predictions vs marginal {-}
+
+and we sample the prediction marginals to be able to compare with the prediction
+samples.  The 2 of them should be similar.
+
+
+```{r}
+lpmargs <- list(margs = app_i04M07$marginals.linear.predictor[which(is.na(newdata$data$height))])
+# get the sample for each predictor
+lpmargs$data <- lapply(X = lpmargs$margs, FUN = function(x) {
+  sample(x = x[, "x"],  size = samples$n, prob = x[, "y"], replace = TRUE)
+  })
+lpmargs$data <- do.call(cbind, lpmargs$data) %>%
+  as.data.frame()
+# str(lpmargs$data)
+
+# both data.frame should have the same dim
+stopifnot(all.equal(dim(preds$data), dim(lpmargs$data)))
+
+# add the intervals
+lpmargs$intervals <- lpmargs$data %>%
+  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
+  mutate(weight_c = newdata$new$weight_c)
+# lpmargs_summ
+```
+
+and we plot the results. The samples and marginals are close.  The marginals do
+not take into account the variations.  If we increase `nsamples`, e.g. to 
+5000, they become virtually the same.
+
+```{r}
+ggplot() +
+  geom_point(data = preds$intervals, aes(x = weight_c, y = y, color = "samples"),
+             size = 2) +
+  geom_line(data = lpmargs$intervals, aes(x = weight_c, y = y, color = "marginals"),
+            size = 1) +
+  scale_color_manual(values= c("samples" = "darkmagenta", "marginals" = "peru")) +
+  scale_x_continuous(breaks = scales::breaks_width(width = 5),
+                     labels = function(x) x + round(mean(data04M07$weight))) +
+  theme_minimal() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.20, 0.80)) +
+  labs(title = "Comparing predictions' marginals and samples",
+       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
+                          nrow(preds$data), nrow(preds$intervals)),
+       x = "weight", y = "height", color = NULL)
+```
+

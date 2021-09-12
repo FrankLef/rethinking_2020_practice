@@ -1,0 +1,79 @@
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(INLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+```
+
+
+# `INLA` {-#app-maths}
+
+This appendix is covers a sundry list of mathematical questions, issues and
+notations.
+
+
+### Mode {-#app-maths-mode}
+
+Technically, the mode is defined as the most likely value.  Usually
+the following function does precisely that.
+
+
+```{r}
+# find the mode
+mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+  }
+```
+
+
+However `ggdist::Mode()` which is used in all `ggdist::mode_xxxx()` functions
+gives a different number which is, in the case of a continuous variable, the
+value with the highest probability density.
+
+```{r}
+data(Howell1)
+d <- Howell1 %>%
+  filter(age  >= 18)
+rm(Howell1)
+the_modes <- c("mode" = mode(d$height), "ggdist" = ggdist::Mode(d$height)) 
+ggplot(d, aes(x = height)) +
+  geom_density() +
+  geom_vline(xintercept = the_modes, color = c("red", "blue")) +
+  geom_text(data = data.frame(x = the_modes, y = c(0.01, 0.02)),
+            aes(x = x, y = y, label = x), color = c("red", "blue"), 
+            inherit.aes = FALSE) +
+  theme_light() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Compare mode() and ggdist::Mode()",
+       subtitle = sprintf("ggdist::Mode = %.6f\nmode = %f", 
+                          the_modes["ggdist"], the_modes["mode"]))
+```
+
+As shown just above, when plotting the density, `ggdist::Mode()` always gives the
+right position with maximum density.  The custom `mode()` function, as recommended
+for example at [mode](https://stackoverflow.com/questions/2547402/how-to-find-the-statistical-mode)
+is pretty much always off.  Often by a lot.
+
+The `ggdist::Mode()` is the function used in this project.
+
+
+## \ {-#app-gammaexp}
+
+See [wkipedia](https://en.wikipedia.org/wiki/Gamma_distribution) for more details
+on the gamma distribution
+
+Gamma distribution is usually expressed in 2 ways, as 
+$\Gamma(shape = \alpha, rate = \beta)$ or $\Gamma(shape = \alpha, scale = \theta)$
+where $\theta = \frac{1}{\beta}$ and the chosen notation in `INLA` is 
+$\Gamma(shape = \alpha, rate = \beta)$.
+
+The exponential and gamma distributions are related in that
+
+$$
+\mathcal{Gamma}(1, \beta) = \mathcal{Exponential}(\beta)
+$$
+
