@@ -20,6 +20,25 @@ library(splines)
 
 ## Custom functions {-}
 
+### basics {-}
+
+```{r}
+# A function to inverse transform the data to natural scale
+# will be used in plots below. Normally used with `base::scale()`.
+# If the base::scale function was used originally, the attributes contain 
+# the center and scale values.
+inv.scale <- function(x, 
+                      center = attr(x, which = "scaled:center"),
+                      scale = attr(x, which = "scaled:scale"),
+                      digits = 0L) {
+  if(!is.finite(center)) center <- 0L
+  if(!is.finite(scale)) scale <- 1L
+  round(center + x * scale, digits = digits)
+}
+```
+
+
+
 ### With `ggdist` {-}
 
 ```{r}

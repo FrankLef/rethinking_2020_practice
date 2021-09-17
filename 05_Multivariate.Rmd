@@ -1,9 +1,12 @@
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
+library(INLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
+library(modelr)
+library(scales)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -14,13 +17,109 @@ library(paletteer, quietly = TRUE)
 
 # Multivariate Linear Models {#multivariate}
 
+## Notes {-}
+
+## Custom functions {-}
+
+### basics {-}
+
+
+### inla {-}
+
+In order to compare to `brms` we need to convert the marginals as follows
+* Convert internal scale (log) to natural scale
+* Convert precision (`prec`) to standard deviation (`sd`)
+
+When doing summaries later, we will need to
+use the inverse transformed `internal.marginal.hyperpar` for the precision and
+`marginals.hyperpar` for the other hyperparameters. The `marginals.hyperpar` for
+precision is not used for summaries and plotting.
+
+```{r}
+# Process the hyperparameters' marginals
+#  - use inverse transformed internal.marginals.hyperpar for precision
+#  - marginals.hyperpar for other hyperparameters
+transform_hyper_marginal <- function(obj, sd_name = "sd") {
+  stopifnot(class(obj) == "inla")
+  stopifnot(length(obj$marginals.hyperpar) != 0L)
+  stopifnot(length(obj$internal.marginals.hyperpar) != 0L)
+  stopifnot(is.character(sd_name), nchar(sd_name) != 0L)
+  
+  # don't modify this without a good reason and test it
+  # the regex pattern used to find the precision word
+  prec_regex = "precision"
+  
+  marg_lst <- mapply(
+    FUN = function(marg, nm, imarg) {
+    if(grepl(pattern = prec_regex, x = nm, ignore.case = TRUE)) {
+        # use inverse transformed internal.marginals.hyperpar for precision
+        m <- INLA::inla.tmarginal(fun = function(x) 1 / sqrt(exp(x)), 
+                                  marginal = imarg)
+      } else {
+        # use marginals.hyperpar for other hyperparameters
+        m <- marg
+      }
+    return(m)
+    }, 
+  obj$marginals.hyperpar,
+  names(obj$marginals.hyperpar),
+  obj$internal.marginals.hyperpar,
+  SIMPLIFY = FALSE)
+  
+  # edit the names to replace "precision" by sd_name
+  names(marg_lst) <- sub(pattern = prec_regex, replacement = sd_name,
+                         x = names(marg_lst), ignore.case = TRUE)
+  marg_lst
+}
+```
+
+
+
+```{r}
+# Create the summary for hyperparameters
+write_hyper_summary <- function(margs, qtl = c(0.025, 0.5, 0.975)) {
+  stopifnot(is.list(margs), length(margs) != 0L)
+  stopifnot(is.numeric(qtl), length(qtl) != 0L)
+  
+  # suffix used by INLA, usually not recommended to start the
+  # name of a variable with a number as INLA does.
+  # Done here just to be consistent with INLA.
+  qtl_suffix <- "quant"
+  
+  marg_lst <- mapply(
+    FUN = function(mrg, nm) {
+      the_mean <- INLA::inla.emarginal(fun = function(x) x, marginal = mrg)
+      the_sd <- sqrt(max(0, 
+                         INLA::inla.emarginal(fun = function(x) x^2 - the_mean^2, 
+                                              marginal = mrg)
+                         )
+                     )
+    the_qtl <- t(INLA::inla.qmarginal(qtl, marginal = mrg))
+    colnames(the_qtl) <- paste0(qtl, qtl_suffix)
+    the_mode <- INLA::inla.mmarginal(mrg)
+    data.frame(mean = the_mean,
+               sd = the_sd,
+               the_qtl,
+               mode = the_mode,
+               row.names = nm,
+               check.names = FALSE)
+    },
+    margs,
+    names(margs),
+    SIMPLIFY = FALSE
+    )
+  do.call(rbind, marg_lst)
+  }
+```
+
+
 
 ## 5E1 {-}
 
 1. **Not** multiple linear, just univariate regression.
 2. Multiple linear with 2 variables $x_i$ and $z_i$
-3. **Not** multiple linear, just univariate
-4. Multiple linear
+3. **Not** multiple linear, just univariate with a centralized variable
+4. Multiple linear with 2 variables $x_i$ and $z_i$
 
 ## 5E2 {-}
 
@@ -37,16 +136,17 @@ The model is
 
 $$
 \begin{align*}
-diversity_i &\sim Normal(\mu_i, \sigma)\\
-\mu_i &= \alpha + \beta_1 \cdot latitude_i + \beta_2 \cdot plantdiversity_i\\
-\alpha &\sim Normal(0, 1)\\
-\beta_1 &\sim Normal(0, 1)\\
-\beta_2 &\sim Normal(0, 1)\\
+diversity_i &\sim Normal(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_1 \cdot latitude_i + \beta_2 \cdot plantdiversity_i \\
+\alpha &\sim Normal(0, 1) \\
+\beta_1, \beta_2 &\sim Normal(0, 1) \\
 \sigma &\sim Uniform(0, 1)
 \end{align*}
 $$
 
 ## 5E3 {-}
+
+See section 5.2 on *Masked relationship*.
 
 See overthinking box in section 5.1.5.2 where spurious relationship is when
 a predictor influences both the outcome and another predictor as in the divorce 
@@ -56,18 +156,15 @@ A masked relationship is when there are 2 predictors that are correlated with ea
 However one is positively correlated with the outcome, the other one is negatively 
 correlated with the outcome. See beginning of section 5.2 for description. See practice 5M2.
 
-This practice is closely related to section 5.2 *Masked relationship*.
-
 Model is 
 
 $$
 \begin{align*}
 phd_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \mu_i &= \alpha + \beta_1 \cdot funding_i + \beta_2 \cdot size_i \\
-\alpha &\sim Normal(0, 1)\\
-\beta_1 &\sim Normal(0, 1)\\
-\beta_2 &\sim Normal(0, 1)\\
-\sigma &\sim Uniform(0, 1)
+\alpha &\sim \mathcal{N}(0, 1)\\
+\beta_1, \beta_2 &\sim \mathcal{N}(0, 1)\\
+\sigma &\sim \mathcal{Uniform}(0, 1)
 \end{align*}
 $$
 
@@ -86,13 +183,13 @@ a re-parametrization which was explained in the first edition, edition of 2016.
 
 ## 5M1 {-}
 
-A spurious correlation where an outcome is correlated with 2 predictors but
-when both predictors are entered the correlation between the outcome and one of
-the predictors vanishes.
+A spurious correlation where an outcome is correlated with 2 predictors and
+both predictors and when one predictor is manipulated the correlation between
+the outcome and another predictor vanishes.
 
 For example the performance of a manufacturing plant increases when you buy machineries
-and invest in training.  But if the training is on how to sue the machineries
-that were just acquired then it should give a spurious relationship.
+and invest in training.  But if the training is on how to use the machineries
+then we could have a spurious relationship.
 
 
 ## 5M2 {-}
@@ -106,21 +203,293 @@ it can process but inversely depending on how much waste is generated.
 More divorces could lead to more remarriage and therefore contribute to an increase
 in marriage rate.
 
+This could be evaluated with mutliple regression if a flag is created to
+identify wich marriage is a remarriage.  We could then compare the models with
+and without remarriage.
+
 ## 5M4 {-}
 
-Not done
+### Data
+
+The number of members of the LDS by state for 2021 was scrapped from 
+[population](https://worldpopulationreview.com/state-rankings/mormon-population-by-state)
+
+```{r}
+lds <- read.csv(here::here("Mormon2021.csv"))
+stopifnot(any(is.finite(lds$mormonPop2021)), any(is.finite(lds$Population2021)))
+```
+
+```{r}
+data("WaffleDivorce")
+d <- WaffleDivorce
+rm(WaffleDivorce)
+d <- inner_join(x=d, y=lds, by = "Location") %>%
+  mutate(L = mormonPop2021 / Population2021) %>%
+  select(Location, L, A = MedianAgeMarriage, M = Marriage, D = Divorce) %>%
+  mutate(across(.cols = where(is.numeric), 
+                .fns = function(x) {as.vector(scale(x))}))
+# str(d)
+```
+
+
+### Model
+
+
+$$
+\begin{align*}
+D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_A A_i +  \beta_L L_i + \beta_M M_i\\
+\alpha &\sim \mathcal{N}(0, 0.2) \\
+\beta_A, \beta_L, \beta_M &\sim \mathcal{N}(0, 0.5) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+### `brm`
+
+
+```{r}
+a_file <- here::here("fits", "b05M04.rds")
+b05M04 <- readRDS(file = a_file)
+# b05M04 <- brm(
+#   data = d,
+#   formula = D ~ 1 + A + L + M,
+#   family = gaussian,
+#   prior = c(
+#     prior(normal(0, 0.02), class = Intercept),
+#     prior(normal(0, 0.5), class = b),
+#     prior(exponential(1), class = sigma)
+#   ),
+#   iter = 2000, warmup = 1000, chains = 4, core = detectCores(), seed = 5)
+# saveRDS(b05M04, file = a_file)
+summary(b05M04)
+```
+
+### `inla`
+
+See section 2.3.1, p. 18 from @gomez2020 for multivarable regression
+with `inla`.
+
+```{r}
+a_file <- here::here("fits", "i05M04.rds")
+i05M04 <- readRDS(file = a_file)
+# i05M04 <- inla(
+#   data = d,
+#   formula = D ~ A + L + M,
+#   family = "gaussian",
+#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
+#                        mean = 0, prec = 1 / (0.5^2)),
+#   control.family = list(
+#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
+#   control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
+#   quantiles = c(0.025, 0.975)
+#   )
+# saveRDS(i05M04, file = a_file)
+```
+
+
+and the summaries
+
+```{r}
+summary(i05M04)
+```
+
+```{r}
+i05M04$summary.fixed
+```
+
+```{r}
+i05M04$summary.hyperpar
+```
+
+We need to convert the hyperparameters from inla which are log of precision to
+the original representation of sd
+
+```{r}
+i05M04hmarg <- transform_hyper_marginal(i05M04)
+str(i05M04hmarg)
+```
+and create the summary
+
+```{r}
+i05M04_hsumm <- write_hyper_summary(margs = i05M04hmarg, 
+                                    qtl = i05M04$.args$quantiles)
+i05M04_hsumm
+```
+
+### brm vs inla
+
+create the general summary from inla
+
+```{r}
+summ <- list()
+summ$inla <- bind_rows(i05M04$summary.fixed[, !(names(i05M04$summary.fixed) %in% c("kld"))],
+                         i05M04_hsumm) %>%
+  tibble::rownames_to_column(var = "var")
+summ$inla
+```
+
+and get the summary from `brm` to compare to inla
+
+```{r}
+summ$brm <- posterior_summary(b05M04) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "var") %>%
+  filter(var != "lp__")
+summ$brm
+```
+
+and comparing brm and inla, we can observe they give very similar.
+
+```{r}
+summ$inla %>%
+  mutate(var = summ$brm$var) %>%
+  select(var, mean, sd) %>%
+  bind_cols(summ$brm %>% select(Estimate, Est.Error)) %>%
+  relocate(Estimate, .after = mean) %>%
+  mutate(across(.cols = where(is.numeric), .fns = round, digits = 4))
+```
+
+### Conclusion
+
+For every increase of 1 sd of the mormon population, the divorce
+rate is reduced by about 0.32 which is a significant impact.
+
+The posterior plotsare as follows
+
+```{r}
+gather_draws(model=b05M04, `b_.*`, regex = TRUE) %>%
+  ggplot(aes(x = .value, y = .variable, color = .variable)) +
+  stat_halfeye(.width = c(0.25, 0.5, 0.75), fill = "navajowhite") +
+  geom_vline(xintercept=0, color = "brown", linetype = "dashed") +
+  scale_color_paletteer_d("ggthemes::Classic_10") +
+  ggdist::theme_tidybayes() +
+  theme(legend.position="none") +
+  labs(title = "Practice 5M4", x=NULL, y=NULL)
+```
+
+
 
 ## 5M5 {-}
 
-Not done
+The dag used to illustrate the model is as follows.  The outcome is $obesity$
+and $price$ is a latent variable that impact all the elements since it not only
+affect  the driving but also the restaurant which sees its cost increase because
+of the more expensive fuel.
+
+
+```{r}
+p <- list()
+p$dag <- ggdag::dagify(obesity ~ restaurant + driving + price,
+                       restaurant ~ driving + price,
+                       driving ~ price,
+                       outcome = "obesity",
+                       latent = "price") %>%
+  ggdag::ggdag(seed=5, layout="circle", node=FALSE) +
+  geom_dag_text(color = "springgreen4") +
+  ggdag::theme_dag() +
+  theme(panel.background = element_rect(fill = "mintcream", color = "mintcream"))
+p$dag
+```
+
+One of the multivariable regressions can be formulated as follows
+
+$$
+\begin{align*}
+obesity_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_D \cdot driving_i + \beta_P \cdot price_i + \beta_R \cdot restaurant_i \\
+\alpha &\sim \mathcal{N}(0, 1)\\
+\beta_D, \beta_P, \beta_R &\sim \mathcal{N}(0, 1)\\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+The  data to use could be as follows
+
+```{r}
+data.frame(
+  variable = c("obesity", "driving", "price", "restaurant"),
+  measure = c("body mass index", "km driven", 
+              "cpi for fuel and restaurant", "attendance")
+)
+```
+
+
 
 ## 5H1 {-}
 
 The conditional independency is *M is independent of D conditional on A* as it 
 is a *chain*.
 
-The data does support it as there was no relation be between  M and D once we remove
-the influence of A.  See Figure 5.7 in section 5.1.5.3
+The data does support it as there was no relation between  M and D once we 
+removed the influence of A.  See Figure 5.7 in section 5.1.5.3
+
+### dagitty
+
+We can also use daggity to reaffirm our conclusion above
+
+```{r}
+dag <- ggdag::dagify(D ~ A, A ~ M)
+ggdag(dag, layout = "auto", seed = 5) +
+  ggdag::theme_dag_blank(panel.background = 
+                           element_rect(fill="aliceblue", color="aliceblue"))
+```
+
+and see what has conditional independence
+
+```{r}
+impliedConditionalIndependencies(dag)
+```
+
+and the equivalent ag are
+
+```{r}
+equivalentDAGs(dag)
+```
+
+
 
 ## 5H2 {-}
+
+### Data and model
+
+
+```{r}
+data("WaffleDivorce")
+d <- WaffleDivorce
+rm(WaffleDivorce)
+d <- inner_join(x=d, y=lds, by = "Location") %>%
+  mutate(L = mormonPop2021 / Population2021) %>%
+  select(Location, L, A = MedianAgeMarriage, M = Marriage, D = Divorce) %>%
+  mutate(across(.cols = where(is.numeric), 
+                .fns = function(x) {as.vector(scale(x))}))
+skimr::skim(d)
+```
+
+The dag involves 2 models
+
+The *D model* where $D$ is caused by bot $A$ and $M$
+
+
+$$
+\begin{align*}
+D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_A A_i + \beta_M M_i \\
+\alpha &\sim \mathcal{N}(0, 0.2) \\
+\beta_A, \beta_M &\sim \mathcal{N}(0, 0.5) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+and the *A model* where $A$ is caused by $M$
+
+$$
+\begin{align*}
+A_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_M M_i \\
+\alpha &\sim \mathcal{N}(0, 0.2) \\
+\beta_M &\sim \mathcal{N}(0, 0.5) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+
+
 
