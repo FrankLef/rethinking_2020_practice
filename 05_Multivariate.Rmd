@@ -2,11 +2,14 @@
 library(rethinking)
 library(brms)
 library(INLA)
+library(eflINLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
 library(modelr)
 library(scales)
+library(gt)
+library(gtsummary)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -17,99 +20,130 @@ library(paletteer, quietly = TRUE)
 
 # Multivariate Linear Models {#multivariate}
 
-## Notes {-}
+## `gt, gtsummary` {-}
+
+The `gt` and `gtsummary` will be used in this chapter and subsequent ones
+to illustrate the different tables.
+
 
 ## Custom functions {-}
 
-### basics {-}
+
+## inla {-}
+
+The `INLA` has its own object and conventions. To enable comparisons with
+`rethinking` and `brms` several functions are used that can be found in the
+`eflINLA` package.
 
 
-### inla {-}
+## gt {-}
 
-In order to compare to `brms` we need to convert the marginals as follows
-* Convert internal scale (log) to natural scale
-* Convert precision (`prec`) to standard deviation (`sd`)
-
-When doing summaries later, we will need to
-use the inverse transformed `internal.marginal.hyperpar` for the precision and
-`marginals.hyperpar` for the other hyperparameters. The `marginals.hyperpar` for
-precision is not used for summaries and plotting.
+Functions used to format the gt tables.
 
 ```{r}
-# Process the hyperparameters' marginals
-#  - use inverse transformed internal.marginals.hyperpar for precision
-#  - marginals.hyperpar for other hyperparameters
-transform_hyper_marginal <- function(obj, sd_name = "sd") {
-  stopifnot(class(obj) == "inla")
-  stopifnot(length(obj$marginals.hyperpar) != 0L)
-  stopifnot(length(obj$internal.marginals.hyperpar) != 0L)
-  stopifnot(is.character(sd_name), nchar(sd_name) != 0L)
+# Format a gt table for posterior summary
+gt_posterior <- function(df, var_col = "var",
+                         labs = list(title = "Posterior Summary",
+                                     subtitle = "Practice"),
+                         qtl = NULL, clrs = NULL, digits = 2L) {
   
-  # don't modify this without a good reason and test it
-  # the regex pattern used to find the precision word
-  prec_regex = "precision"
+  # default color values
+  the_colors <- list(data = "mintcream",
+                     heading.background.color = "lavender",
+                     heading.title.font.weight = "bold",
+                     heading.subtitle.font.weight = "bold",
+                     column_labels.background.color = "oldlace",
+                     column_labels.font.weight = "bold",
+                     stub.background.color = "oldlace")
+  if (!is.null(clrs)) {
+    clrs <- invisible(lapply(X = names(the_colors), FUN = function(x) {
+      if (is.null(clrs[[x]])) the_colors[[x]] else clrs[[x]]
+      })
+    )
+    names(clrs) <- names(the_colors)
+  } else {
+    clrs <- the_colors
+  }
   
-  marg_lst <- mapply(
-    FUN = function(marg, nm, imarg) {
-    if(grepl(pattern = prec_regex, x = nm, ignore.case = TRUE)) {
-        # use inverse transformed internal.marginals.hyperpar for precision
-        m <- INLA::inla.tmarginal(fun = function(x) 1 / sqrt(exp(x)), 
-                                  marginal = imarg)
-      } else {
-        # use marginals.hyperpar for other hyperparameters
-        m <- marg
-      }
-    return(m)
-    }, 
-  obj$marginals.hyperpar,
-  names(obj$marginals.hyperpar),
-  obj$internal.marginals.hyperpar,
-  SIMPLIFY = FALSE)
-  
-  # edit the names to replace "precision" by sd_name
-  names(marg_lst) <- sub(pattern = prec_regex, replacement = sd_name,
-                         x = names(marg_lst), ignore.case = TRUE)
-  marg_lst
+  # create the gt table
+  df %>%
+    tibble::rownames_to_column(var = var_col) %>%
+    gt::gt(rowname_col = var_col) %>%
+    tab_header(title = labs$title,
+               subtitle = labs$subtitle) %>%
+    cols_label(.list = qtl) %>%
+    cols_align(align = "center", columns = everything()) %>%
+    fmt_number(columns = everything(), decimals = digits) %>%
+    data_color(columns = everything(), color = clrs$data) %>%
+    tab_options(
+      heading.background.color = clrs$heading.background.color,
+      heading.title.font.weight = clrs$heading.title.font.weight,
+      heading.subtitle.font.weight = clrs$heading.subtitle.font.weight,
+      column_labels.background.color = clrs$column_labels.background.color,
+      column_labels.font.weight = clrs$column_labels.font.weight,
+      stub.background.color = clrs$stub.background.color)
 }
 ```
 
 
-
 ```{r}
-# Create the summary for hyperparameters
-write_hyper_summary <- function(margs, qtl = c(0.025, 0.5, 0.975)) {
-  stopifnot(is.list(margs), length(margs) != 0L)
-  stopifnot(is.numeric(qtl), length(qtl) != 0L)
+# Format a gt table comparing 2 posterior summaries
+# IMPORTANT:
+#   - The named "var_df" in the list will be used to name the rows
+#   - The dataframes' rows must be in the same order
+#   - The columns of each dataframe must have the same name
+gt_posterior_compare <- function(dfs, var_df = names(dfs)[1], var_col = "var",
+                         labs = list(title = "Posterior Summary Comparison",
+                                     subtitle = "Practice"),
+                         clrs = NULL, digits = 2L) {
+  stopifnot(var_df %in% names(dfs))
   
-  # suffix used by INLA, usually not recommended to start the
-  # name of a variable with a number as INLA does.
-  # Done here just to be consistent with INLA.
-  qtl_suffix <- "quant"
   
-  marg_lst <- mapply(
-    FUN = function(mrg, nm) {
-      the_mean <- INLA::inla.emarginal(fun = function(x) x, marginal = mrg)
-      the_sd <- sqrt(max(0, 
-                         INLA::inla.emarginal(fun = function(x) x^2 - the_mean^2, 
-                                              marginal = mrg)
-                         )
-                     )
-    the_qtl <- t(INLA::inla.qmarginal(qtl, marginal = mrg))
-    colnames(the_qtl) <- paste0(qtl, qtl_suffix)
-    the_mode <- INLA::inla.mmarginal(mrg)
-    data.frame(mean = the_mean,
-               sd = the_sd,
-               the_qtl,
-               mode = the_mode,
-               row.names = nm,
-               check.names = FALSE)
-    },
-    margs,
-    names(margs),
-    SIMPLIFY = FALSE
+    # default color values
+  the_colors <- list(data = "mintcream",
+                     heading.background.color = "darkslategray",
+                     heading.title.font.weight = "bold",
+                     heading.subtitle.font.weight = "bold",
+                     column_labels.background.color = "seashell",
+                     column_labels.font.weight = "bold",
+                     stub.background.color = "seashell")
+  if (!is.null(clrs)) {
+    clrs <- invisible(lapply(X = names(the_colors), FUN = function(x) {
+      if (is.null(clrs[[x]])) the_colors[[x]] else clrs[[x]]
+      })
     )
-  do.call(rbind, marg_lst)
+    names(clrs) <- names(the_colors)
+  } else {
+    clrs <- the_colors
   }
+  
+  # combine the dataframes
+  out <- lapply(X = names(dfs), FUN = function(x) {
+    # keep the "var" column only for the first dataframe
+    if (x != var_df) dfs[[x]] <- dfs[[x]][, names(dfs[[x]]) != var_col]
+    # add the name of the method to the variables except for the var_col
+    sel <- names(dfs[[x]]) != var_col
+    names(dfs[[x]])[sel] <- paste(names(dfs[[x]])[sel], x, sep = "_")
+    dfs[[x]]
+  })
+  
+  # create the gt table
+  bind_cols(out) %>%
+    gt::gt(rowname_col = "var") %>%
+    tab_header(title = labs$title,
+               subtitle = labs$subtitle) %>%
+    tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
+        cols_align(align = "center", columns = everything()) %>%
+    fmt_number(columns = everything(), decimals = digits) %>%
+    data_color(columns = everything(), color = clrs$data) %>%
+    tab_options(
+      heading.background.color = clrs$heading.background.color,
+      heading.title.font.weight = clrs$heading.title.font.weight,
+      heading.subtitle.font.weight = clrs$heading.subtitle.font.weight,
+      column_labels.background.color = clrs$column_labels.background.color,
+      column_labels.font.weight = clrs$column_labels.font.weight,
+      stub.background.color = clrs$stub.background.color)
+}
 ```
 
 
@@ -209,10 +243,13 @@ and without remarriage.
 
 ## 5M4 {-}
 
-### Data
+### Data {-}
 
 The number of members of the LDS by state for 2021 was scrapped from 
-[population](https://worldpopulationreview.com/state-rankings/mormon-population-by-state)
+[population](https://worldpopulationreview.com/state-rankings/mormon-population-by-state).
+
+Note: The mormon file has data for Nevada but not District of Columbia. In
+`WaffleDivorce` there is data for District of Columbia but not Nevada.
 
 ```{r}
 lds <- read.csv(here::here("Mormon2021.csv"))
@@ -222,17 +259,22 @@ stopifnot(any(is.finite(lds$mormonPop2021)), any(is.finite(lds$Population2021)))
 ```{r}
 data("WaffleDivorce")
 d <- WaffleDivorce
-rm(WaffleDivorce)
 d <- inner_join(x=d, y=lds, by = "Location") %>%
   mutate(L = mormonPop2021 / Population2021) %>%
   select(Location, L, A = MedianAgeMarriage, M = Marriage, D = Divorce) %>%
   mutate(across(.cols = where(is.numeric), 
                 .fns = function(x) {as.vector(scale(x))}))
-# str(d)
+stopifnot(nrow(d) == 49)
+
+# The mormon file has data for Nevada but not District of Columbia. In
+# `WaffleDivorce` there is data for District of Columbia but not Nevada.
+lds$Location[!(lds$Location %in% WaffleDivorce$Location)]
+WaffleDivorce$Location[!(WaffleDivorce$Location %in% lds$Location)]
+rm(WaffleDivorce)
 ```
 
 
-### Model
+### Model {-}
 
 
 $$
@@ -244,7 +286,8 @@ D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
-### `brm`
+
+### `brm` {-}
 
 
 ```{r}
@@ -264,7 +307,20 @@ b05M04 <- readRDS(file = a_file)
 summary(b05M04)
 ```
 
-### `inla`
+```{r}
+# brm posterior summary formatted with gt
+brms::posterior_summary(b05M04) %>%
+  as.data.frame() %>%
+  filter(row.names(.) != "lp__") %>%
+  gt_posterior(labs = list(title = "Posterior Summary BRMS",
+                           subtitle = "Practice 5M4"),
+               qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
+               clrs = list(heading.background.color = "lightgreen"))
+```
+
+
+
+### `inla` {-}
 
 See section 2.3.1, p. 18 from @gomez2020 for multivarable regression
 with `inla`.
@@ -302,54 +358,43 @@ i05M04$summary.hyperpar
 ```
 
 We need to convert the hyperparameters from inla which are log of precision to
-the original representation of sd
+the original representation of sd.  See the funciton `posterior_summary` from the
+package `eflINLA` for details on how to do it.  The package `brinla` has a
+similar funciton.
 
 ```{r}
-i05M04hmarg <- transform_hyper_marginal(i05M04)
-str(i05M04hmarg)
-```
-and create the summary
-
-```{r}
-i05M04_hsumm <- write_hyper_summary(margs = i05M04hmarg, 
-                                    qtl = i05M04$.args$quantiles)
-i05M04_hsumm
+i05M04_summ <- eflINLA::posterior_summary(i05M04)
+# inla posterior summary formatted with gt
+i05M04_summ %>%
+  gt_posterior(labs = list(title = "Posterior Summary INLA",
+                           subtitle = "Practice 5M4"),
+               qtl = list(`0.025quant` = "2.5%", `0.975quant` = "97.5%"),
+               clrs = list(heading.background.color = "lightcoral"))
 ```
 
-### brm vs inla
+### brm vs inla {-}
 
-create the general summary from inla
+Using the results from the posterior summaries from brm and inla, we can observe
+they give very similar.
 
 ```{r}
 summ <- list()
-summ$inla <- bind_rows(i05M04$summary.fixed[, !(names(i05M04$summary.fixed) %in% c("kld"))],
-                         i05M04_hsumm) %>%
-  tibble::rownames_to_column(var = "var")
-summ$inla
-```
-
-and get the summary from `brm` to compare to inla
-
-```{r}
-summ$brm <- posterior_summary(b05M04) %>%
+summ$brm <- brms::posterior_summary(b05M04) %>%
   as.data.frame() %>%
+  select(mean = Estimate, sd = Est.Error) %>%
   tibble::rownames_to_column(var = "var") %>%
   filter(var != "lp__")
-summ$brm
+summ$inla <- eflINLA::posterior_summary(i05M04) %>%
+  select(mean, sd) %>%
+  tibble::rownames_to_column(var = "var")
+gt_posterior_compare(summ, var_df = "brm",
+                     labs = list(title = "Posterior Summary Comparison",
+                                 subtitle = "Practice 5M4"))
 ```
 
-and comparing brm and inla, we can observe they give very similar.
 
-```{r}
-summ$inla %>%
-  mutate(var = summ$brm$var) %>%
-  select(var, mean, sd) %>%
-  bind_cols(summ$brm %>% select(Estimate, Est.Error)) %>%
-  relocate(Estimate, .after = mean) %>%
-  mutate(across(.cols = where(is.numeric), .fns = round, digits = 4))
-```
 
-### Conclusion
+### Conclusion {-}
 
 For every increase of 1 sd of the mormon population, the divorce
 rate is reduced by about 0.32 which is a significant impact.
@@ -422,15 +467,17 @@ is a *chain*.
 The data does support it as there was no relation between  M and D once we 
 removed the influence of A.  See Figure 5.7 in section 5.1.5.3
 
-### dagitty
+### dagitty {-}
 
 We can also use daggity to reaffirm our conclusion above
 
-```{r}
+```{r out.width="50%", fig.cap="5H1 DAG"}
 dag <- ggdag::dagify(D ~ A, A ~ M)
 ggdag(dag, layout = "auto", seed = 5) +
   ggdag::theme_dag_blank(panel.background = 
-                           element_rect(fill="aliceblue", color="aliceblue"))
+                           element_rect(fill="aliceblue", color="aliceblue")) +
+  geom_dag_point(color = "darksalmon") +
+  geom_dag_text(color = "steelblue4")
 ```
 
 and see what has conditional independence
@@ -442,31 +489,37 @@ impliedConditionalIndependencies(dag)
 and the equivalent ag are
 
 ```{r}
-equivalentDAGs(dag)
+msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
+message(msg)
 ```
 
 
 
 ## 5H2 {-}
 
-### Data and model
+See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
+@kurtz2020b.
+
+### Data and model {-}
+
+See practice 5H1 for the DAG.
 
 
 ```{r}
 data("WaffleDivorce")
-d <- WaffleDivorce
-rm(WaffleDivorce)
-d <- inner_join(x=d, y=lds, by = "Location") %>%
-  mutate(L = mormonPop2021 / Population2021) %>%
-  select(Location, L, A = MedianAgeMarriage, M = Marriage, D = Divorce) %>%
-  mutate(across(.cols = where(is.numeric), 
+d <- WaffleDivorce %>% 
+  select(Location, MedianAgeMarriage, Marriage, Divorce) %>%
+  mutate(A=MedianAgeMarriage, M=Marriage, D=Divorce) %>%
+  mutate(across(.cols = c(A, M, D), 
                 .fns = function(x) {as.vector(scale(x))}))
+rm(WaffleDivorce)
+stopifnot(nrow(d) == 50)
 skimr::skim(d)
 ```
 
 The dag involves 2 models
 
-The *D model* where $D$ is caused by bot $A$ and $M$
+The *D model* where $D$ is caused by $A$ as well as $M$
 
 
 $$
@@ -491,5 +544,210 @@ A_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 $$
 
 
+### `brm` {-}
 
 
+```{r}
+d_model <- bf(D ~ 1 + A + M)
+a_model <- bf(A ~ 1 + M)
+```
+
+and make sure you set `set_rescor(FALSE)` to prevent `brms` from taking
+a residual correlation between the 2 models.
+
+```{r}
+a_file <- here::here("fits", "b05H02.rds")
+b05H02 <- readRDS(file = a_file)
+# b05H02 <- brm(data = d,
+#               family = gaussian,
+#               formula = d_model + a_model + set_rescor(FALSE),
+#               prior = c(prior(normal(0, 0.2), class = Intercept, resp = D),
+#                         prior(normal(0, 0.5), class = b, resp = D),
+#                         prior(exponential(1), class = sigma, resp = D),
+# 
+#                         prior(normal(0, 0.2), class = Intercept, resp = A),
+#                         prior(normal(0, 0.5), class = b, resp = A),
+#                         prior(exponential(1), class = sigma, resp = A)),
+#               cores = detectCores(), seed = 5)
+# saveRDS(b05H02, file = a_file)
+```
+
+```{r}
+summary(b05H02)
+```
+
+and we will manipulate the state marriage rate by halving it so that now
+we use them for $M$ once we set $A=0$ to remove the influence of $A$.
+We then simulate to see what the effect this has on $D$.
+
+```{r}
+sim <- list()
+sim$newdata <- data.frame(
+  M = seq_range(x=d$M / 2, n=30),
+  A = 0)
+sim$D <- predict(b05H02, resp = "D", newdata = sim$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(sim$newdata)
+# str(sim$D)
+sim$A <- predict(b05H02, resp = "A", newdata = sim$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(sim$newdata)
+str(sim$A)
+```
+
+and plot the results
+
+```{r}
+p <- list()
+p$D <- ggplot(sim$D, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_smooth(stat = "identity", fill="palegreen", color="palegreen4") +
+  ggdist::theme_ggdist() +
+  scale_x_continuous(labels = function(x) {
+    y <- x * sd(d$Marriage) + mean(d$Marriage)
+    scales::label_number(accuracy = 1)(y)
+  }) +
+  scale_y_continuous(labels = function(x) {
+    y <- x * sd(d$Divorce) + mean(d$Divorce)
+    scales::label_number(accuracy = 1)(y)
+  }) +
+  labs(title ="Counterfactual effect of M / 2 on D",
+       x="Manipulated Marriage rate", y="Predicted D with 95% CI")
+
+p$A <- ggplot(sim$A, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_smooth(stat = "identity", fill="steelblue1", color="steelblue4") +
+  ggdist::theme_ggdist() +
+  scale_x_continuous(labels = function(x) {
+    y <- x * sd(d$Marriage) + mean(d$Marriage)
+    scales::label_number(accuracy = 1)(y)
+  }) +
+  scale_y_continuous(labels = function(x) {
+    y <- x * sd(d$MedianAgeMarriage) + mean(d$MedianAgeMarriage)
+    scales::label_number(accuracy = 1)(y)
+  }) +
+  labs(title ="Counterfactual effect of M / 2 on A",
+       x="Manipulated Marriage rate", y="Predicted A with 95% CI")
+wrap_plots(p)
+```
+
+which seems to indicate that $M$ has very little influence on $D$ once we control
+$A$. That is $D$ is independent of $M$ conditional on $A$.
+
+
+### `inla` {-}
+
+We don't seem to have the ability with `inla` to run many models at once as
+done just above with `brm`.  Inla  is however so fast we can run 2 models
+separately and still be faster than brm.
+
+For the *D model* we have
+
+```{r}
+i05H02d_args <- list(
+  data = d,
+  formula = D ~ A + M,
+  family = "gaussian",
+  control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
+                       mean = 0, prec = 1 / (0.5^2)),
+  control.family = list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
+  control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
+  quantiles = c(0.025, 0.975)
+)
+
+a_file <- here::here("fits", "i05H02d.rds")
+i05H02d <- readRDS(file = a_file)
+# i05H02d <- do.call(inla, i05H02d_args)
+# saveRDS(i05H02d, file = a_file)
+```
+
+
+and for the *A model* we have
+
+```{r}
+i05H02a_args <- i05H02d_args
+i05H02a_args$formula <- A ~ M
+a_file <- here::here("fits", "i05H02a.rds")
+i05H02a <- readRDS(file = a_file)
+# i05H02a <- do.call(inla, i05H02a_args)
+# saveRDS(i05H02a, file = a_file)
+```
+
+
+### compare brm vs inla {-}
+
+For the model $D$
+
+```{r}
+brms::posterior_summary(b05H02) %>%
+  as.data.frame() %>%
+  filter(grepl(pattern = "^b_D|^sigma_D",x = row.names(.))) %>%
+  bind_cols(eflINLA::posterior_summary(i05H02d)) %>%
+  select(Estimate, mean, Est.Error, sd) %>%
+  round(digits = 4)
+```
+
+and for model $A$
+
+```{r}
+brms::posterior_summary(b05H02) %>%
+  as.data.frame() %>%
+  filter(grepl(pattern = "^b_A|^sigma_A",x = row.names(.))) %>%
+  bind_cols(eflINLA::posterior_summary(i05H02a)) %>%
+  select(Estimate, mean, Est.Error, sd) %>%
+  round(digits = 4)
+```
+
+
+Conclusion: brm and inla give very similar result. inla is certainly faster.
+
+## 5H3 {-}
+
+See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
+@kurtz2020b.
+
+
+### Data, model, DAG {-}
+
+
+```{r fig.cap="5H3 Data"}
+data(milk)
+d <- milk %>%
+  as.data.frame() %>%
+  tidyr::drop_na() %>%
+  mutate(K = as.vector(scale(kcal.per.g)),
+         N = as.vector(scale(neocortex.perc)),
+         M = as.vector(scale(log(mass))))
+rm(milk)
+# skimr::skim(d, kcal.per.g, neocortex.perc, mass, K, N, M)
+# it should give us a dataframe with 17 rows
+stopifnot(nrow(d) == 17)
+d %>%
+  gtsummary::tbl_summary(
+    by = clade,
+    include = c(kcal.per.g, neocortex.perc, mass, K, N, M)) %>%
+  # add_n() %>%
+  add_overall() %>%
+  bold_labels()
+```
+
+The DAG is
+
+```{r echo=TRUE, out.width="50%", fig.cap="5H3 DAG"}
+dag <- ggdag::dagify(N ~ M, K ~ M + N)
+ggdag(dag, layout = "tree", seed = 5) +
+  ggdag::theme_dag_blank(panel.background = 
+                           element_rect(fill="oldlace", color="oldlace")) +
+  geom_dag_point(color = "darkseagreen1") +
+  geom_dag_text(color = "brown1")
+```
+
+
+```{r}
+x <- impliedConditionalIndependencies(dag)
+if(length(x)) x else message("no conditional independence")
+```
+
+```{r}
+msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
+message(msg)
+```

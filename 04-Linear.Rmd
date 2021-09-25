@@ -18,7 +18,9 @@ library(splines)
 
 ## Notes {-}
 
+
 ## Custom functions {-}
+
 
 ### basics {-}
 
@@ -75,122 +77,9 @@ rm(df)
 
 ### With `inla` {-}
 
-In order to compare to `brms` we need to convert the marginals as follows
-* Convert internal scale (log) to natural scale
-* Convert precision (`prec`) to standard deviation (`sd`)
-
-When doing summaries later, we will need to
-use the inverse transformed `internal.marginal.hyperpar` for the precision and
-`marginals.hyperpar` for the other hyperparameters. The `marginals.hyperpar` for
-precision is not used for summaries and plotting.
-
-```{r}
-# Process the hyperparameters' marginals
-#  - use inverse transformed internal.marginals.hyperpar for precision
-#  - marginals.hyperpar for other hyperparameters
-transform_hyper_marginal <- function(obj, sd_name = "sd") {
-  stopifnot(class(obj) == "inla")
-  stopifnot(length(obj$marginals.hyperpar) != 0L)
-  stopifnot(length(obj$internal.marginals.hyperpar) != 0L)
-  stopifnot(is.character(sd_name), nchar(sd_name) != 0L)
-  
-  # don't modify this without a good reason and test it
-  # the regex pattern used to find the precision word
-  prec_regex = "precision"
-  
-  marg_lst <- mapply(
-    FUN = function(marg, nm, imarg) {
-    if(grepl(pattern = prec_regex, x = nm, ignore.case = TRUE)) {
-        # use inverse transformed internal.marginals.hyperpar for precision
-        m <- INLA::inla.tmarginal(fun = function(x) 1 / sqrt(exp(x)), 
-                                  marginal = imarg)
-      } else {
-        # use marginals.hyperpar for other hyperparameters
-        m <- marg
-      }
-    return(m)
-    }, 
-  obj$marginals.hyperpar,
-  names(obj$marginals.hyperpar),
-  obj$internal.marginals.hyperpar,
-  SIMPLIFY = FALSE)
-  
-  # edit the names to replace "precision" by sd_name
-  names(marg_lst) <- sub(pattern = prec_regex, replacement = sd_name,
-                         x = names(marg_lst), ignore.case = TRUE)
-  marg_lst
-}
-```
-
-
-
-```{r}
-# Create the summary for hyperparameters
-write_hyper_summary <- function(margs, qtl = c(0.025, 0.5, 0.975)) {
-  stopifnot(is.list(margs), length(margs) != 0L)
-  stopifnot(is.numeric(qtl), length(qtl) != 0L)
-  
-  # suffix used by INLA, usually not recommended to start the
-  # name of a variable with a number as INLA does.
-  # Done here just to be consistent with INLA.
-  qtl_suffix <- "quant"
-  
-  marg_lst <- mapply(
-    FUN = function(mrg, nm) {
-      the_mean <- INLA::inla.emarginal(fun = function(x) x, marginal = mrg)
-      the_sd <- sqrt(max(0, 
-                         INLA::inla.emarginal(fun = function(x) x^2 - the_mean^2, 
-                                              marginal = mrg)
-                         )
-                     )
-    the_qtl <- t(INLA::inla.qmarginal(qtl, marginal = mrg))
-    colnames(the_qtl) <- paste0(qtl, qtl_suffix)
-    the_mode <- INLA::inla.mmarginal(mrg)
-    data.frame(mean = the_mean,
-               sd = the_sd,
-               the_qtl,
-               mode = the_mode,
-               row.names = nm,
-               check.names = FALSE)
-    },
-    margs,
-    names(margs),
-    SIMPLIFY = FALSE
-    )
-  do.call(rbind, marg_lst)
-  }
-```
-
-The variable names used by INLA are not easy to work with, this function converts
-these variable names to the naming convention used by `brms`
-
-```{r}
-rename_inlavars <- function(x) {
-  stopifnot(is.character(x), length(x) != 0)
-  
-  df <- data.frame(
-    pattern = c("[(]Intercept[)]", "^Beta for ", "sd for .+ observations.*"),
-    replace = c("b_Intercept", "b_", "sigma"))
-  
-  for (i in seq_len(nrow(df))) {
-    x <- sub(pattern = df$pattern[i], replacement = df$replace[i],  x = x)
-    }
-  x
-}
-```
-
-test `rename_inlavars`
-
-```{r}
-vars <- c("(Intercept)", "sd for the Gausssian observations   ",
-          "Beta for weight_c")
-vars <- rename_inlavars(vars)
-# str(out)
-stopifnot(identical(vars, c("b_Intercept", "sigma", "b_weight_c")))
-rm(vars)
-```
-
-
+The `INLA` has its own object and conventions. To enable comparisons with
+`rethinking` and `brms` several funcitons are used that can be found in the
+`eflINLA` package.
 
 ## 4E1 {-#prac4E1}
 
@@ -326,7 +215,7 @@ alist(
 
 Make sure you remember to index the $y$ so that it is $y_i$ as well as $\mu$.
 See section 4.4.2.  The published answer does not put an index on $\mu$ but it
-has one on $\y$ which involves a constant $\mu$ which is normally the intercept!
+has one on $y$ which involves a constant $\mu$ which is normally the intercept!
 This question is confusing, here we assume the same meaning as in section 4.4.2.,
 that is $\mu$ varies for each $x_i$
 
@@ -1007,50 +896,35 @@ use the inversed transformed `internal.marginal.hyperpar` for the precision and
 `marginals.hyperpar` for the other hyperparameters. The `marginals.hyperpar` for
 precision is not used for summaries and plotting.
 
-```{r}
-i04M07hmarg <- transform_hyper_marginal(i04M07ctr)
-stopifnot(length(i04M07hmarg) == 2L)
-```
-
-then create the summary
+This process is automated by `eflINLA::posterior_summary()`
 
 ```{r}
-i04M07_hyper_summ <- write_hyper_summary(margs = i04M07hmarg, 
-                                          qtl = i04M07ctr$.args$quantiles)
-i04M07_hyper_summ <- i04M07_hyper_summ[c(2, 1), ]  # put sd in last row
-stopifnot(all.equal(dim(i04M07_hyper_summ), c(2L, 6L)))
-
-i04M07_hyper_summ
-```
-
-
-so that a summary with all the parameters can be done
-
-```{r}
-i04M07summ <- i04M07ctr$summary.fixed %>%
-  bind_rows(i04M07_hyper_summ) %>%
+summ <- list()
+summ$inla <- eflINLA::posterior_summary(i04M07ctr) %>%
   tibble::rownames_to_column(var = "var")
-i04M07summ
+summ$inla
+# keep the summary for later use, when comparing to quap and brm below
+i04M07summ <- summ$inla
 ```
 
 and we compare `inla` vs `brm`
 
 
 ```{r}
-# rename the variables to compare with brm
-summ <- i04M07summ %>%
-  mutate(var = rename_inlavars(var)) %>%
-  select("var", "mean", "sd")
-# summ
-
-# compare inla and brm
-summ <- posterior_summary(b04M07ctr) %>%
+# get the brm posterior summary
+summ$brm <- brms::posterior_summary(b04M07ctr) %>%
   as.data.frame() %>%
   tibble::rownames_to_column(var = "var") %>%
   filter(var != "lp__") %>%
-  select(var, Estimate, Est.Error) %>%
-  full_join(y = summ[, c("var", "mean", "sd")], by = "var")
-summ
+  select(var, Estimate, Est.Error)
+# summ$brm
+
+# compare inla and brm
+summ$compare <- summ$inla %>%
+  select(mean, sd) %>%
+  bind_cols(summ$brm) %>%
+  relocate(var)
+summ$compare
 ```
 and we can observe that the 2 estimates are very similar.
 
@@ -1066,9 +940,14 @@ So, lets get posterior samples from `inla`
 
 ```{r}
 # sample the inla's posterior distributions
+# samples <- list(n = 2000L,
+#                 fmargs =  i04M07ctr$marginals.fixed,
+#                 hmargs = i04M07hmarg # list of hyperparameter marginals
+#                 )
+
 samples <- list(n = 2000L,
                 fmargs =  i04M07ctr$marginals.fixed,
-                hmargs = i04M07hmarg # list of hyperparameter marginals
+                hmargs = eflINLA::transform_hyper_marginal(i04M07ctr) # list of hyperparameter marginals
                 )
 
 # sample the fixed parameters from the list of fixed marginals
@@ -1095,10 +974,13 @@ samples$hyper <- purrr::map_df(
 
 # put all posteriors together in long format
 samples$inla <- bind_cols(samples$fixed, samples$hyper) %>%
-  setNames(rename_inlavars(names(.))) %>%
+  rename(b_Intercept = `(Intercept)`,
+         b_weight_c = `Beta for weight_c`,
+         sigma = `sd for the Gaussian observations`) %>%
   pivot_longer(cols = everything(), names_to = ".variable",
                values_to = ".value") %>%
   mutate(fit = "inla")
+# samples$inla
 
 # check results
 with(samples, stopifnot(all.equal(dim(inla), c(n * 3, 3))))
@@ -1161,36 +1043,16 @@ Also see [fitted](#app-inla-04M07-fitted) for more details
 on the fitted values.
 
 
-
 ```{r}
-# the new data
-newdata <- list(n = 20L)
-newdata$new <- data.frame(
-  weight_c = seq_range(x = P04M07$data$weight_c, n = newdata$n),
-  height = NA_real_
-)
-# the complete new dataframe with old and new data
-newdata$data <- P04M07$data %>%
+fitted <- list()
+# the data to fit
+fitted$newdata <- data.frame(
+  weight_c = seq_range(x=P04M07$data$weight_c, n=20L),
+  height = NA_real_)
+# append newdata to existing data
+fitted$data <- P04M07$data %>%
   select(height, weight_c) %>%
-  bind_rows(newdata$new)
-```
-
-
-
-```{r}
-# fitted <- list(
-#   weight_c = seq_range(x = P04M07$data$weight_c, n = 20)
-# )
-# # with inla we have to redo the object with new predictor values and
-# # NA for outcome
-# fitted$data <- data.frame(height = NA_real_, weight_c = fitted$weight_c)
-# # add original data with flag for new data
-# fitted$data <- P04M07$data %>%
-#   select(height, weight_c) %>%
-#   bind_rows(fitted$data) %>%
-#   mutate(new = c(rep(FALSE, nrow(P04M07$data)), 
-#                  rep(TRUE, length(fitted$weight_c)))
-#          )
+  bind_rows(fitted$newdata)
 ```
 
 
@@ -1204,7 +1066,7 @@ dependent variable with `NA`
 # the control.predictor
 i04M07ctr_args_new <- i04M07ctr_args
 i04M07ctr_args_new$control.predictor <- list(compute = TRUE)
-i04M07ctr_args_new$data <- newdata$data
+i04M07ctr_args_new$data <- fitted$data
 ```
 
 
@@ -1215,30 +1077,14 @@ i04M07ctr_new <- do.call(inla, args = i04M07ctr_args_new)
 ```
 
 
-
-```{r}
-# use the exact same arguments as the original (except data and control.predictor)
-# i04M07ctr_fit <- with(i04M07ctr$.args, {
-#   inla(
-#     formula = formula,
-#     family = family,
-#     data = fitted$data,
-#     quantiles = quantiles,
-#     control.fixed = control.fixed,
-#     control.family = control.family,
-#     control.compute = control.compute,
-#     control.predictor = list(compute = TRUE))
-# })
-```
-
 get the fitted data in a data.frame with only the new values (`slice_tail`)
 
 ```{r}
-fitted <- list()
+# fitted <- list()
 fitted$inla <- i04M07ctr_new$summary.fitted.values %>%
   select(mean, sd, `0.025quant`, `0.975quant`) %>%
-  slice_tail(n = length(newdata$new$weight_c)) %>%
-  mutate(weight_c = newdata$new$weight_c)
+  slice_tail(n = length(fitted$newdata$weight_c)) %>%
+  mutate(weight_c = fitted$newdata$weight_c)
 # str(fitted$inla)
 ```
 
@@ -1248,39 +1094,37 @@ and we get the fit from `brms` to compare
 
 ```{r}
 fitted$brm <- fitted(b04M07ctr, 
-                     newdata = data.frame(weight_c = newdata$new$weight_c), 
+                     newdata = data.frame(weight_c = fitted$newdata$weight_c), 
                      probs = i04M07ctr_args_new$quantiles) %>%
   as.data.frame() %>%
-  mutate(weight_c = newdata$new$weight_c)
+  mutate(weight_c = fitted$newdata$weight_c)
 ```
 
 
 and we plot the results
 
 ```{r}
-p1 <- ggplot(data = fitted$inla, 
+p <- list()
+p$inla <- ggplot(data = fitted$inla, 
              aes(x = weight_c, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
   geom_lineribbon(size = 1, color = "rosybrown", fill = "rosybrown1") +
   ggdist::theme_ggdist() +
   labs(title = "inla fit", y = "mean")
-# p1
 
-p2 <- ggplot(data = fitted$brm, aes(x = weight_c, y = Estimate, ymin = Q2.5, 
+p$brm <- ggplot(data = fitted$brm, aes(x = weight_c, y = Estimate, ymin = Q2.5, 
                                  ymax = Q97.5)) +
   geom_lineribbon(size = 1, color = "deepskyblue", fill = "lightskyblue1") +
   ggdist::theme_ggdist() +
   labs(title = "brm fit", y = "mean")
-# p2
 
-p3 <- ggplot(data.frame(brm = fitted$brm$Estimate, 
-                        inla = fitted$inla$mean), 
-             aes(x = brm, y = inla)) +
+p$all <- ggplot(data.frame(brm = fitted$brm$Estimate, inla = fitted$inla$mean), 
+                aes(x = brm, y = inla)) +
   geom_point() +
   ggdist::theme_ggdist() +
   labs(title = "inla vs brm")
-# p3
+p$all
 
-p1 + p2 + p3 +
+wrap_plots(p) +
   plot_annotation(title = "Comparing inla and brm fits",
                   theme = theme(title = element_text(color = "midnightblue")))
 ```
@@ -1292,27 +1136,43 @@ See [predictions](#app-inla-04M07-predict) for the details on how to do it. See
 also [predict_inla](#app-inla-04M07-predict_inla) for the function `predict_inla`
 from the `eflINLA` package.
 
+
+
+```{r}
+# create the data used for predicitons
+predict <- list()
+# the data to fit
+predict$newdata <- data.frame(
+  weight_c = seq_range(x=P04M07$data$weight_c, n=20L),
+  height = NA_real_)
+# append newdata to existing data
+predict$data <- P04M07$data %>%
+  select(height, weight_c) %>%
+  bind_rows(predict$newdata)
+```
+
+change the arguments of the inla object and rerun it
+
 ```{r}
 i04M07ctr_args_new <- i04M07ctr_args
 i04M07ctr_args_new$control.predictor <- list(compute = TRUE)
-i04M07ctr_args_new$data <- newdata$data
-preds <- list(n = 1000L)
-preds$inla <- do.call(INLA::inla, i04M07ctr_args_new)
-preds$data <- eflINLA::predict_inla(object = preds$inla,
-                                    pos = which(is.na(newdata$data$height)),
-                                    n = preds$n)
+i04M07ctr_args_new$data <- predict$data
+predict$inla <- do.call(INLA::inla, i04M07ctr_args_new)
+```
 
-# get the intervals
-preds$intervals <- preds$data %>%
-  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
-  mutate(weight_c = newdata$new$weight_c)
-  
+get the predictions, their intervals, and put data in long format
+
+```{r}
+predict$sample <- eflINLA::predict_inla(object = predict$inla,
+                                    pos = which(is.na(predict$data$height)),
+                                    n = 1000)
+# predict$sample
 
 # put data in long format
-preds$lng <- preds$data %>%
+predict$lng <- predict$sample %>%
   pivot_longer(cols = everything(), names_to = "predictor", values_to = "height") %>%
-  mutate(weight_c = rep(newdata$new$weight_c, times = preds$n))
-# str(preds$lng)
+  mutate(weight_c = rep(predict$newdata$weight_c, times = nrow(predict$sample)))
+# str(predict$lng)
 ```
 
 
@@ -1320,7 +1180,7 @@ plot the data
 
 ```{r}
 ggplot(P04M07$data, aes(x = weight_c, y = height)) +
-  stat_lineribbon(preds$lng, mapping = aes(x = weight_c, y = height),
+  stat_lineribbon(predict$lng, mapping = aes(x = weight_c, y = height),
                   color = "slateblue",inherit.aes = FALSE, .width = c(0.50, 0.75, 0.95),
                   show.legend = FALSE) +
   geom_point(color = "indianred") +
@@ -1331,45 +1191,30 @@ ggplot(P04M07$data, aes(x = weight_c, y = height)) +
   theme(title = element_text(color = "midnightblue")) +
   labs(title = "Predictions with INLA", 
        subtitle = sprintf("sample size = %d, nb of predictors = %d", 
-                          preds$n, length(preds$data)),
+                          nrow(predict$sample), length(predict$sample)),
        x = "weight", y = "height")
 ```
 
-0### Compare `quap`, `brm`, `inla`
+### Compare `quap`, `brm`, `inla`
 
 Now we compare the 3 fitting methods.  See above in the section
 about `inla` for `i04M07summ` which needed to be processed
 
 ```{r}
-summ <- list()
-summ$lst <- list(
+summ <- list(
   quap = as.data.frame(unclass(precis(m04M07ctr, prob=0.95)),
                        row.names = row.names(precis(m04M07ctr, prob=0.95))) %>%
-    tibble::rownames_to_column(var = "var"),
-  brm = as.data.frame(posterior_summary(b04M07ctr, probs=c(0.025, 0.975))) %>% 
+    rename(mean_quap = mean, sd_quap = sd),
+  brm = as.data.frame(brms::posterior_summary(b04M07ctr, probs=c(0.025, 0.975))) %>% 
     filter(rownames(.) != "lp__") %>%
-    tibble::rownames_to_column(var = "var"),
-  inla = i04M07summ %>% select(-`0.5quant`,-mode, -kld)
-)
+    rename(mean_brm = Estimate, sd_brm = Est.Error),
+  inla = i04M07summ %>% select(-`0.5quant`,-mode) %>%
+    rename(mean_inla = mean, sd_inla = sd))
 
-
-summ$df <- lapply(X = seq_along(summ$lst), function(x) {
-  d <- summ$lst[[x]]
-  d$var <- summ$lst[["brm"]]$var
-  names(d) <- names(summ$lst[["brm"]])
-  summ$lst[[x]] <- d
-})
-
-# format the data to be able to create a tableau with gt
-# in the next step
-summ$df <- do.call(rbind, summ$df) %>%
-  mutate(method = rep(names(summ$lst), each = 3)) %>%
-  pivot_longer(cols = c("Estimate", "Est.Error", "Q2.5", "Q97.5"), 
-               names_to = "value_id", values_to = "value") %>%
-  unite(col = "value_id", value_id, method, sep = "_") %>%
-  filter(grepl(pattern = "Estimate|Est[.]Error", x = value_id)) %>%
-  pivot_wider(names_from = "value_id", values_from = "value")
-# summ$df
+summ$df <- summ$brm %>%
+  bind_cols(summ$inla, summ$quap) %>%
+  select(matches("^mean|^sd")) %>%
+  tibble::rownames_to_column(var = "var")
 
 # create tableau with gt
 summ$tbl <- summ$df %>%
@@ -1378,28 +1223,27 @@ summ$tbl <- summ$df %>%
              subtitle = "Practice 4M7") %>%
   tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
   tab_footnote(
-    footnote = "mean",
-    locations = cells_column_spanners(spanners = contains("Estimate"))
+    footnote = "estimated mean",
+    locations = cells_column_spanners(spanners = contains("mean"))
   ) %>%
   tab_footnote(
-    footnote = "standard deviation",
-    locations = cells_column_spanners(spanners = contains("Est.Error"))
+    footnote = "estimated standard deviation",
+    locations = cells_column_spanners(spanners = contains("sd"))
   ) %>%
   tab_source_note(
     source_note = "Source: Rethinking, 2nd edition, Richard McElreath"
   ) %>%
   fmt_number(columns = everything(), decimals = 2) %>%
-  tab_style(style = list(cell_fill(color = "mintcream")),
-            locations = cells_body(columns = everything())) %>%
+  data_color(columns = everything(), color = "mintcream") %>%
   tab_style(style = list(cell_fill(color = "ivory")),
             locations = cells_footnotes()) %>%
   tab_style(style = cell_borders(sides = c("left"),
                                  color = "steelblue",
                                  weight = px(1.5),
                                  style = "solid"),
-            locations = list(cells_body(columns = "Est.Error_quap"),
-                             cells_column_labels(columns = "Est.Error_quap"),
-                             cells_column_spanners(spanners = "Est.Error"))
+            locations = list(cells_body(columns = "sd_brm"),
+                             cells_column_labels(columns = "sd_brm"),
+                             cells_column_spanners(spanners = "sd"))
             ) %>%
   tab_options(
     heading.background.color = "slategray2",
@@ -1429,7 +1273,7 @@ data04M08 <- cherry_blossoms %>%
   drop_na(doy)
 rm(cherry_blossoms)
 stopifnot(all.equal(dim(data04M08), c(827L, 5L)))
-skimr::skim(data04M08)
+skimr::skim(data04M08, year, doy, temp)
 ```
 
 This function will be used to create the B matrix. See R code 4.74 in section
