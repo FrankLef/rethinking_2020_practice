@@ -847,6 +847,7 @@ so we add the new variables to the data
 ```{r}
 d <- d %>%
   mutate(AS = South * A, MS = South * M)
+# d
 ```
 
 
@@ -896,5 +897,75 @@ model so that the following DAG is our suggestion
 
 ```{r}
 p$A
+```
+
+and the $South$ effect is obvious we we plot the results
+
+```{r}
+predict <- list(n = 10, a_rng = c(-2, 2), m_rng = c(-2, 2))
+predict$newdata <- data.frame(
+  A = c(seq_range(x=predict$a_rng, n=predict$n), 
+        seq_range(x=predict$a_rng, n=predict$n)),
+  M = c(seq_range(x=predict$m_rng, n=predict$n), 
+        seq_range(x=predict$m_rng, n=predict$n)),
+  South = rep(0:1, each=predict$n)) %>%
+  mutate(
+    AS = South * A,
+    MS = South * M)
+predict$data <- predict(b05H04, newdata=predict$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(predict$newdata) %>%
+  mutate(South = if_else(South != 0, "Not South", "South"),
+         South = factor(South))
+# str(predict$data)
+```
+
+```{r}
+p <- list()
+p$M <- ggplot(predict$data, aes(x = M, y = Estimate, color = South)) +
+  # geom_smooth(stat = "identity", fill="palegreen", color="palegreen4") +
+  geom_line() +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x * sd(d$Marriage) + mean(d$Marriage)
+      scales::label_number(accuracy = 1)(y)
+      },
+    limits = predict$m_rng) +
+  scale_y_continuous(
+    breaks = scales::breaks_extended(n = 5),
+    labels = function(x) {
+      y <- x * sd(d$Divorce) + mean(d$Divorce)
+      scales::label_number(accuracy = 1)(y)
+      }) +
+  ggdist::theme_ggdist() +
+  labs(title ="Divorce vs Marriage Rate",
+       x="Marriage rate", y="Divorce rate",
+       color = NULL)
+# p$M
+p$A <- ggplot(predict$data, aes(x = A, y = Estimate, color = South)) +
+  # geom_smooth(stat = "identity", fill="plum", color="plum4") +
+  geom_line() +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x * sd(d$MedianAgeMarriage) + mean(d$MedianAgeMarriage)
+      scales::label_number(accuracy = 1)(y)
+      },
+    limits = predict$m_rng) +
+  scale_y_continuous(
+    breaks = scales::breaks_extended(n = 5),
+    labels = function(x) {
+      y <- x * sd(d$Divorce) + mean(d$Divorce)
+      scales::label_number(accuracy = 1)(y)
+      }) +
+  ggdist::theme_ggdist() +
+  labs(title ="Divorce vs MedianAgeMarriage",
+       x="MedianAgeMarriage", y="Divorce rate",
+       color = NULL)
+# p$M / p$A
+wrap_plots(p) +
+  plot_annotation(title = "Practice 5H4") &
+  theme(legend.position = "bottom")
 ```
 
