@@ -20,132 +20,22 @@ library(paletteer, quietly = TRUE)
 
 # Multivariate Linear Models {#multivariate}
 
-## `gt, gtsummary` {-}
 
-The `gt` and `gtsummary` will be used in this chapter and subsequent ones
-to illustrate the different tables.
+## Helper functions {-}
 
+Several helper functions are used to simplify the code below.  They are
+not in a packaged and are found in the `helpers` folder.
 
-## Custom functions {-}
+```{r}
+source(here::here("helpers", "gt_posterior.R"))
+```
 
 
 ## inla {-}
 
-The `INLA` has its own object and conventions. To enable comparisons with
+The `INLA` has its own objects and conventions. To enable comparisons with
 `rethinking` and `brms` several functions are used that can be found in the
 `eflINLA` package.
-
-
-## gt {-}
-
-Functions used to format the gt tables.
-
-```{r}
-# Format a gt table for posterior summary
-gt_posterior <- function(df, var_col = "var",
-                         labs = list(title = "Posterior Summary",
-                                     subtitle = "Practice"),
-                         qtl = NULL, clrs = NULL, digits = 2L) {
-  
-  # default color values
-  the_colors <- list(data = "mintcream",
-                     heading.background.color = "lavender",
-                     heading.title.font.weight = "bold",
-                     heading.subtitle.font.weight = "bold",
-                     column_labels.background.color = "oldlace",
-                     column_labels.font.weight = "bold",
-                     stub.background.color = "oldlace")
-  if (!is.null(clrs)) {
-    clrs <- invisible(lapply(X = names(the_colors), FUN = function(x) {
-      if (is.null(clrs[[x]])) the_colors[[x]] else clrs[[x]]
-      })
-    )
-    names(clrs) <- names(the_colors)
-  } else {
-    clrs <- the_colors
-  }
-  
-  # create the gt table
-  df %>%
-    tibble::rownames_to_column(var = var_col) %>%
-    gt::gt(rowname_col = var_col) %>%
-    tab_header(title = labs$title,
-               subtitle = labs$subtitle) %>%
-    cols_label(.list = qtl) %>%
-    cols_align(align = "center", columns = everything()) %>%
-    fmt_number(columns = everything(), decimals = digits) %>%
-    data_color(columns = everything(), color = clrs$data) %>%
-    tab_options(
-      heading.background.color = clrs$heading.background.color,
-      heading.title.font.weight = clrs$heading.title.font.weight,
-      heading.subtitle.font.weight = clrs$heading.subtitle.font.weight,
-      column_labels.background.color = clrs$column_labels.background.color,
-      column_labels.font.weight = clrs$column_labels.font.weight,
-      stub.background.color = clrs$stub.background.color)
-}
-```
-
-
-```{r}
-# Format a gt table comparing 2 posterior summaries
-# IMPORTANT:
-#   - The named "var_df" in the list will be used to name the rows
-#   - The dataframes' rows must be in the same order
-#   - The columns of each dataframe must have the same name
-gt_posterior_compare <- function(dfs, var_df = names(dfs)[1], var_col = "var",
-                         labs = list(title = "Posterior Summary Comparison",
-                                     subtitle = "Practice"),
-                         clrs = NULL, digits = 2L) {
-  stopifnot(var_df %in% names(dfs))
-  
-  
-    # default color values
-  the_colors <- list(data = "mintcream",
-                     heading.background.color = "darkslategray",
-                     heading.title.font.weight = "bold",
-                     heading.subtitle.font.weight = "bold",
-                     column_labels.background.color = "seashell",
-                     column_labels.font.weight = "bold",
-                     stub.background.color = "seashell")
-  if (!is.null(clrs)) {
-    clrs <- invisible(lapply(X = names(the_colors), FUN = function(x) {
-      if (is.null(clrs[[x]])) the_colors[[x]] else clrs[[x]]
-      })
-    )
-    names(clrs) <- names(the_colors)
-  } else {
-    clrs <- the_colors
-  }
-  
-  # combine the dataframes
-  out <- lapply(X = names(dfs), FUN = function(x) {
-    # keep the "var" column only for the first dataframe
-    if (x != var_df) dfs[[x]] <- dfs[[x]][, names(dfs[[x]]) != var_col]
-    # add the name of the method to the variables except for the var_col
-    sel <- names(dfs[[x]]) != var_col
-    names(dfs[[x]])[sel] <- paste(names(dfs[[x]])[sel], x, sep = "_")
-    dfs[[x]]
-  })
-  
-  # create the gt table
-  bind_cols(out) %>%
-    gt::gt(rowname_col = "var") %>%
-    tab_header(title = labs$title,
-               subtitle = labs$subtitle) %>%
-    tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
-        cols_align(align = "center", columns = everything()) %>%
-    fmt_number(columns = everything(), decimals = digits) %>%
-    data_color(columns = everything(), color = clrs$data) %>%
-    tab_options(
-      heading.background.color = clrs$heading.background.color,
-      heading.title.font.weight = clrs$heading.title.font.weight,
-      heading.subtitle.font.weight = clrs$heading.subtitle.font.weight,
-      column_labels.background.color = clrs$column_labels.background.color,
-      column_labels.font.weight = clrs$column_labels.font.weight,
-      stub.background.color = clrs$stub.background.color)
-}
-```
-
 
 
 ## 5E1 {-}
@@ -465,7 +355,7 @@ The conditional independency is *M is independent of D conditional on A* as it
 is a *chain*.
 
 The data does support it as there was no relation between  M and D once we 
-removed the influence of A.  See Figure 5.7 in section 5.1.5.3
+removed the influence of A.  See Figure 5.7 in section 5.1.5.3.
 
 ### dagitty {-}
 
@@ -592,7 +482,7 @@ sim$D <- predict(b05H02, resp = "D", newdata = sim$newdata) %>%
 sim$A <- predict(b05H02, resp = "A", newdata = sim$newdata) %>%
   as.data.frame() %>%
   bind_cols(sim$newdata)
-str(sim$A)
+# str(sim$A)
 ```
 
 and plot the results
@@ -730,6 +620,21 @@ d %>%
   bold_labels()
 ```
 
+The model is the same as model `m5.7` in the textbook.
+
+
+
+$$
+\begin{align*}
+K_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_M log(M_i) + \beta_N  N_i \\
+\alpha &\sim \mathcal{N}(0, 0.2) \\
+\beta_M, \beta_N &\sim \mathcal{N}(0, 0.5) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+
 The DAG is
 
 ```{r echo=TRUE, out.width="50%", fig.cap="5H3 DAG"}
@@ -751,3 +656,245 @@ if(length(x)) x else message("no conditional independence")
 msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
 message(msg)
 ```
+
+See practice 5H2 just above for similar method with `brms`. We have 2 models
+
+```{r}
+k_model <- bf(K ~ 1 + M + N)
+n_model <- bf(N ~ 1 + M)
+```
+
+which gives the following fit
+
+```{r}
+a_file <- here::here("fits", "b05H03.rds")
+b05H03 <- readRDS(file = a_file)
+# b05H03 <- brm(data = d,
+#               family = gaussian,
+#               formula = k_model + n_model + set_rescor(FALSE),
+#               prior = c(prior(normal(0, 0.2), class = Intercept, resp = K),
+#                         prior(normal(0, 0.5), class = b, resp = K),
+#                         prior(exponential(1), class = sigma, resp = K),
+# 
+#                         prior(normal(0, 0.2), class = Intercept, resp = N),
+#                         prior(normal(0, 0.5), class = b, resp = N),
+#                         prior(exponential(1), class = sigma, resp = N)),
+#               cores = detectCores(), seed = 5)
+# saveRDS(b05H03, file = a_file)
+```
+
+
+```{r}
+sim <- list()
+sim$newdata <- data.frame(
+  M = seq_range(x=2 * d$M, n=30),
+  N = 0)
+sim$K <- predict(b05H03, resp = "K", newdata = sim$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(sim$newdata)
+# str(sim$M)
+sim$N <- predict(b05H03, resp = "N", newdata = sim$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(sim$newdata)
+# str(sim$N)
+```
+
+and plot the results
+
+```{r}
+p <- list()
+p$K <- ggplot(sim$K, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_smooth(stat = "identity", fill="tan", color="tan4") +
+  ggdist::theme_ggdist() +
+  scale_x_continuous(labels = function(x) {
+    y <- x * sd(d$M) + mean(d$M)
+    scales::label_number(accuracy = 0.1)(y)
+  }) +
+  scale_y_continuous(labels = function(x) {
+    y <- x * sd(d$K) + mean(d$K)
+    scales::label_number(accuracy = 0.1)(y)
+  }) +
+  labs(title ="Counterfactual effect of 2 x M on K",
+       x="Manipulated M", y="Predicted K with 95% CI")
+
+p$N <- ggplot(sim$N, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
+  geom_smooth(stat = "identity", fill="darkolivegreen1", color="darkolivegreen4") +
+  ggdist::theme_ggdist() +
+  scale_x_continuous(labels = function(x) {
+    y <- x * sd(d$M) + mean(d$M)
+    scales::label_number(accuracy = 0.1)(y)
+  }) +
+  scale_y_continuous(labels = function(x) {
+    y <- x * sd(d$N) + mean(d$N)
+    scales::label_number(accuracy = 0.1)(y)
+  }) +
+  labs(title ="Counterfactual effect of 2 x M on N",
+       x="Manipulated M", y="Predicted N with 95% CI")
+wrap_plots(p)
+```
+
+## 5H4 {-}
+
+### Data {-}
+
+
+```{r}
+data("WaffleDivorce")
+d <- WaffleDivorce %>%
+  select(Location, MedianAgeMarriage, Marriage, Divorce, South) %>%
+  mutate(A=MedianAgeMarriage, M=Marriage, D=Divorce) %>%
+  mutate(across(.cols = c(A, M, D),
+                .fns = function(x) {as.vector(scale(x))}))
+rm(WaffleDivorce)
+stopifnot(nrow(d) == 50)
+d %>%
+  select(-Location) %>%
+  mutate(South = if_else(South==0, "Not South", "South")) %>%
+  gtsummary::tbl_summary(by=South) %>%
+  add_overall() %>%
+  bold_labels()
+```
+### Correlations
+
+We can look at the pairs of variables to see which ones are related
+
+```{r}
+p <- list()
+p$All <- GGally::ggcorr(d[, c("A", "M", "D")], 
+                        label = TRUE) +
+  theme() +
+  labs(title = "All data")
+p$South <- GGally::ggcorr(d[d$South!=0, c("A", "M", "D")], 
+                        label = TRUE) +
+  theme() +
+  labs(title = "SOUTH")
+p$NotSouth <- GGally::ggcorr(d[d$South==0, c("A", "M", "D")], 
+                        label = TRUE) +
+  theme() +
+  labs(title = "NOT SOUTH")
+
+wrap_plots(p) +
+  plot_annotation(title = "Correlations with and without the South effect") &
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "bottom")
+```
+
+
+
+
+### DAG {-}
+
+Based on the correlation plots just above.  When $South = 1$, there seems to 
+be influence on the correlation between $M$ and $D$ and, to a lesser extent,
+between $A$ and $D$ (but still noticeable). No significant change is noted
+between $A$ and $M$.
+
+Otherwise, when $South = 0$, there is no effect on the correlations which are 
+the same as for the data in general.
+
+Therefore we suggest the following DAG's as possible scenarios
+
+```{r out.width="100%", fig.cap="5H4 DAG"}
+dag <- list()
+p <- list()
+dag$A <- ggdag::dagify(D ~ A + M, A ~ S, M ~ A, M ~ S)
+p$A <- ggdag(dag$A, layout = "tree", seed = 5) +
+  ggdag::theme_dag_blank(panel.background =
+                           element_rect(fill="snow", color="snow")) +
+  geom_dag_point(color = "honeydew2") +
+  geom_dag_text(color = "darkgreen") +
+  labs(title = "DAG #1 for Practice 5H4") +
+  theme(title = element_text(color = "midnightblue"))
+
+dag$B <- ggdag::dagify(D ~ A + M, M ~ A, M ~ S)
+p$B <- ggdag(dag$B, layout = "nicely", seed = 5) +
+  ggdag::theme_dag_blank(panel.background =
+                           element_rect(fill="snow", color="snow")) +
+  geom_dag_point(color = "honeydew2") +
+  geom_dag_text(color = "darkgreen") +
+  labs(title = "DAG #2 for Practice 5H4") +
+  theme(title = element_text(color = "midnightblue"))
+# p$B
+wrap_plots(p)
+```
+
+### Model {-}
+
+To evaluate the influence ot $South$ we will add it to the model as well
+as 2 more variables called $AS$ and $MS$. $AS = A$ when $S=1$ and $A = 0$ 
+otherwise. The same will be done for $MS$.
+
+The interpretations of these 3 new variables, $S$, $A$ and $M$ will be that
+the 
+
+* coefficient of $S$ shows the influence of $South$ on the intercept
+* coefficient of $AS$ shows the influence of $South$ on $A$
+* coefficient of $MS$ shows the influence of $South$ on $M$
+
+
+$$
+\begin{align*}
+D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta_A A_i + \beta_M M_i +  
+  \beta_{AS} AS_i + \beta_{MS} MS_i + \beta_S S_i\\
+\alpha &\sim \mathcal{N}(0, 0.2) \\
+\beta_A, \beta_M, \beta_{AS}, \beta_{MS}, \beta_S &\sim \mathcal{N}(0, 0.5) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+so we add the new variables to the data
+
+```{r}
+d <- d %>%
+  mutate(AS = South * A, MS = South * M)
+```
+
+
+
+and make the fit with `brm`
+
+
+```{r}
+a_file <- here::here("fits", "b05H04.rds")
+b05H04 <- readRDS(file = a_file)
+# b05H04 <- brm(data = d,
+#               family = gaussian,
+#               formula = D ~ 1 + A + M + AS + MS + South,
+#               prior = c(prior(normal(0, 0.2), class = Intercept),
+#                         prior(normal(0, 0.5), class = b),
+#                         prior(exponential(1), class = sigma)),
+#               cores = detectCores(), seed = 5)
+# saveRDS(b05H04, file = a_file)
+```
+
+We could  use `summary()` to see the result.  We will create a simple table
+
+```{r}
+# brm posterior summary formatted with gt
+brms::posterior_summary(b05H04) %>%
+  as.data.frame() %>%
+  filter(row.names(.) != "lp__") %>%
+  gt_posterior(labs = list(title = "Posterior Summary BRMS",
+                           subtitle = "Practice 5H4"),
+               qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
+               clrs = list(heading.background.color = "lightgreen"))
+```
+
+### Conclusion {-}
+
+* The south increases the intercept by 0.23, that is, the rate of divorce
+become increase by a factor of 0.23 for every standard deviation of $Divorce$.
+This is very significant considering that for the population in general the
+rate is negative -0.12.
+* The effect of $MedianAgeMarriage$ goes from -0.53 in general to 
+-0.92 = -0.53 + -0.39 when taking into account the $South$ variable.
+* The effect of $Marriage$ goes from -0.08 in general to 
+0.31 = -0.08 + 0.39 when taking into account the $South$ variable.
+
+In conclusion, the $South$ variable seems to have significant effect on the 
+model so that the following DAG is our suggestion
+
+```{r}
+p$A
+```
+
