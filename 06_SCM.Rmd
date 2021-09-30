@@ -17,6 +17,13 @@ library(paletteer, quietly = TRUE)
 
 ## 6E1 {-}
 
+* Multicollinearity, section 6.1
+* Post-treatment bias, section 6.2
+* Collider bias, section 6.3
+
+## 6E2 {-}
+
+
 
 
 ## 6H1 {-}
@@ -70,7 +77,7 @@ b06H02a <- readRDS(file = a_file)
 #   iter = 2000, warmup = 1000, chains = 4, core = detectCores(),
 #   seed = 6
 # )
-# save(b06H02a, file = a_file)
+# saveRDS(b06H02a, file = a_file)
 summary(b06H02a)
 ```
 
