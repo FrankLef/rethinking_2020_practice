@@ -3,6 +3,7 @@ library(rethinking)
 library(brms)
 library(INLA)
 library(eflINLA)
+library(eflRethinking)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
@@ -27,7 +28,7 @@ Several helper functions are used to simplify the code below.  They are
 not in a packaged and are found in the `helpers` folder.
 
 ```{r}
-source(here::here("helpers", "gt_posterior.R"))
+# source(here::here("helpers", "gt_posterior.R"))
 ```
 
 
@@ -202,10 +203,10 @@ summary(b05M04)
 brms::posterior_summary(b05M04) %>%
   as.data.frame() %>%
   filter(row.names(.) != "lp__") %>%
-  gt_posterior(labs = list(title = "Posterior Summary BRMS",
-                           subtitle = "Practice 5M4"),
-               qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
-               clrs = list(heading.background.color = "lightgreen"))
+  eflRethinking::gt_posterior(
+    labs = list(title = "Posterior Summary BRMS", subtitle = "Practice 5M4"),
+    qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
+    .tab_options = list(heading.background.color = "lightgreen"))
 ```
 
 
@@ -256,10 +257,10 @@ similar funciton.
 i05M04_summ <- eflINLA::posterior_summary(i05M04)
 # inla posterior summary formatted with gt
 i05M04_summ %>%
-  gt_posterior(labs = list(title = "Posterior Summary INLA",
-                           subtitle = "Practice 5M4"),
-               qtl = list(`0.025quant` = "2.5%", `0.975quant` = "97.5%"),
-               clrs = list(heading.background.color = "lightcoral"))
+  eflRethinking::gt_posterior(
+    labs = list(title = "Posterior Summary INLA", subtitle = "Practice 5M4"),
+    qtl = list(`0.025quant` = "2.5%", `0.975quant` = "97.5%"),
+    .tab_options = list(heading.background.color = "lightcoral"))
 ```
 
 ### brm vs inla {-}
@@ -277,9 +278,9 @@ summ$brm <- brms::posterior_summary(b05M04) %>%
 summ$inla <- eflINLA::posterior_summary(i05M04) %>%
   select(mean, sd) %>%
   tibble::rownames_to_column(var = "var")
-gt_posterior_compare(summ, var_df = "brm",
-                     labs = list(title = "Posterior Summary Comparison",
-                                 subtitle = "Practice 5M4"))
+eflRethinking::gt_posterior_compare(
+  summ, var_df = "brm",
+  labs = list(title = "Posterior Summary Comparison", subtitle = "Practice 5M4"))
 ```
 
 
@@ -875,10 +876,10 @@ We could  use `summary()` to see the result.  We will create a simple table
 brms::posterior_summary(b05H04) %>%
   as.data.frame() %>%
   filter(row.names(.) != "lp__") %>%
-  gt_posterior(labs = list(title = "Posterior Summary BRMS",
+  eflRethinking::gt_posterior(labs = list(title = "Posterior Summary BRMS",
                            subtitle = "Practice 5H4"),
                qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
-               clrs = list(heading.background.color = "lightgreen"))
+               .tab_options = list(heading.background.color = "lightgreen"))
 ```
 
 ### Conclusion {-}
