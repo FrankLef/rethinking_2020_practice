@@ -84,41 +84,37 @@ summary(b06H02a)
 and create the full data for plotting
 
 ```{r}
-# get the fitted data, i.e. for mu
-b06H02a_fitted <- fitted(b06H02a) %>%
-  as_tibble() %>%
+samples <- list()
+samples$fitted <- fitted(b06H02a) %>%
+  as.data.frame() %>%
   rename(
     fit = Estimate,
     fit_err = Est.Error,
     fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# str(f)
-# get the predicted data, i.e. for y
-b06H02a_predict <- predict(b06H02a) %>%
-  as_tibble() %>%
+    fit_Q97.5 = Q97.5)
+
+samples$predict <- predict(b06H02a) %>%
+  data.frame() %>%
   rename(
     pred = Estimate,
     pred_err = Est.Error,
     pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-# str(p)
-b06H02a_df <- d %>%
-  bind_cols(b06H02a_fitted) %>%
-  bind_cols(b06H02a_predict)
-# glimpse(b06H02a)
+    pred_Q97.5 = Q97.5,)
+
+samples$data <- d %>%
+  bind_cols(samples$fitted) %>%
+  bind_cols(samples$predict)
 ```
 
 
 
 ```{r}
-ggplot(data = b06H02a_df, mapping = aes(x = A, y = W)) +
+ggplot(data = samples$data, mapping = aes(x = A, y = W)) +
   geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
               fill = "olivedrab1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "olivedrab3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "olivedrab4") +
+  geom_smooth(mapping = aes(y = fit, ymin = fit_Q2.5, ymax = fit_Q97.5),
+              stat = "identity",
+              fill = "olivedrab3", color = "olivedrab4", alpha = 0.5) +
   geom_point(aes(color = group)) +
   scale_color_paletteer_c("oompaBase::jetColors") + 
   theme_minimal() +
@@ -166,43 +162,38 @@ summary(b06H02b)
 and create the full data for plotting
 
 ```{r}
-# get the fitted data, i.e. for mu
-b06H02b_fitted <- fitted(b06H02b) %>%
-  as_tibble() %>%
+samples <- list()
+samples$fitted <- fitted(b06H02b) %>%
+  as.data.frame() %>%
   rename(
     fit = Estimate,
     fit_err = Est.Error,
     fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5,
-  )
-# str(f)
-# get the predicted data, i.e. for y
-b06H02b_predict <- predict(b06H02b) %>%
-  as_tibble() %>%
+    fit_Q97.5 = Q97.5)
+
+samples$predict <- predict(b06H02b) %>%
+  data.frame() %>%
   rename(
     pred = Estimate,
     pred_err = Est.Error,
     pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,
-  )
-# str(p)
-b06H02b_df <- d %>%
-  bind_cols(b06H02b_fitted) %>%
-  bind_cols(b06H02b_predict)
-# glimpse(b06H02a)
+    pred_Q97.5 = Q97.5,)
+
+samples$data <- d %>%
+  bind_cols(samples$fitted) %>%
+  bind_cols(samples$predict)
 ```
 
 
 
 ```{r}
-ggplot(data = b06H02b_df, mapping = aes(x = S, y = W)) +
+ggplot(data = samples$data, mapping = aes(x = S, y = W)) +
   geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
               fill = "thistle1", alpha = 0.5) +
-  geom_ribbon(aes(ymin = fit_Q2.5, ymax = fit_Q97.5),
-              fill = "thistle3", alpha = 0.5) +
-  geom_line(aes(y = fit), color = "thistle4") +
+  geom_smooth(mapping = aes(y = fit, ymin = fit_Q2.5, ymax = fit_Q97.5),
+              stat = "identity",
+              fill = "thistle3", color = "thistle4", alpha = 0.5) +
   geom_point(aes(color = group)) +
-  geom_jitter(aes(color = group)) +
   scale_color_paletteer_c("oompaBase::jetColors") + 
   theme_minimal() +
   theme(legend.position = "none") +
