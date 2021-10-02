@@ -25,7 +25,8 @@ The recommended layout is *sugiyama* for DAG. However there are cases where the
 The default dag plot used
 
 ```{r}
-gg_dag <- function(dag, clrs_status = NULL, clrs = NULL, sizes = NULL) {
+gg_dag <- function(dag, layout = "sugiyama", seed = 6,
+                   clrs_status = NULL, clrs = NULL, sizes = NULL) {
   
   # default status colors
   clrs_status_default <- list("latent"="mediumvioletred", 
@@ -45,7 +46,8 @@ gg_dag <- function(dag, clrs_status = NULL, clrs = NULL, sizes = NULL) {
   sizes <- append(x = sizes, values = sizes_default[pos])
   
   
-  dag %>% ggdag_status(color = status, text = TRUE, 
+  dag %>% tidy_dagitty(seed = seed, layout = layout) %>%
+    ggdag_status(color = status, text = TRUE, 
                        node_size = sizes$node, text_size = sizes$text, 
                        text_col = clrs$text) +
     # geom_dag_label_repel(aes(label = name, fill = status), color = "white") +
@@ -76,24 +78,17 @@ $C_1$ and $C_2$, both of which can be substituted for one another depending
 on some unobserved/latent decision $D$.
 
 ```{r}
-coords <- data.frame(
-    name = c("Out", "Var1", "Var2", "U"),
-    x = c(2, 1, 3, 2),
-    y = c(1, 2, 2, 3))
-clrs <- paletteer::paletteer_d("fishualize::Scarus_quoyi")
 dag <- dagify(
   Out ~ Var1 + Var2,
   Var1 ~ U,
   Var2 ~ U,
   outcome = "Out",
-  latent = "U") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  latent = "U")
+  # tidy_dagitty(seed = 6, layout = "sugiyama")
 # dag
 
 p <- list()
 
-clrs <- paletteer::paletteer_d("fishualize::Scarus_quoyi")
-clrs <- c("latent"=clrs[1], "exposure"=clrs[3], "outcome"=clrs[4])
 p$dag <- gg_dag(dag) +
   labs(title = "Multicollinearity", subtitle = "6H1")
 
@@ -134,8 +129,7 @@ dag$d1 <- dagify(
   Out1 ~ Var1,
   Out2 ~ Out1,
   Out2 ~ Var2,
-  outcome = "Out2") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "Out2")
 # dag1
 
 dag$d2 <- dagify(
@@ -144,8 +138,7 @@ dag$d2 <- dagify(
   Out2 ~ Var2,
   Out2 ~ U,
   latent = "U",
-  outcome = "Out2") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "Out2")
 # dag2
 
 p <- list()
@@ -186,8 +179,7 @@ dag <- dagify(
   Var1 ~ Var2,
   Var1 ~ U,
   latent = "U",
-  outcome = "Out") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "Out")
 # dag
 
 p <- list()
@@ -215,33 +207,28 @@ dag <- list()
 dag$fork <- dagify(
   O1 ~ V,
   O2 ~ V,
-  outcome = c("O1", "O2")) %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = c("O1", "O2"))
 
 dag$chain <- dagify(
   V2 ~ V1,
   O ~ V2,
-  outcome = "O") %>%
-  tidy_dagitty(seed = 6, layout = "linear")
+  outcome = "O")
 
 dag$collider <- dagify(
   O ~ V1,
   O ~ V2,
-  outcome = "O") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "O")
 
 dag$collider <- dagify(
   O ~ V1,
   O ~ V2,
-  outcome = "O") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "O")
 
 dag$descendant <- dagify(
   O1 ~ V1,
   O1 ~ V2,
   O2 ~ O1,
-  outcome = "O2") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "O2")
 
 p <- list()
 
@@ -280,8 +267,7 @@ is newsworthy ($NW$) or trustworthy ($TW$) then we have the following DAG
 dag <- dagify(
   S ~ TW,
   S ~ NW,
-  outcome = "S") %>%
-  tidy_dagitty(seed = 6, layout = "sugiyama")
+  outcome = "S")
 
 gg_dag(dag) +
   labs(title = "Scientific studies selection (collider bias)", 
@@ -314,16 +300,13 @@ dag$modified <- dagify(
   latent = c("U", "V"))
 
 p <- list()
-
 p$original <- dag$original %>%
-  tidy_dagitty(seed = 6, layout = "kk") %>%
-  gg_dag() +
-  labs(title = "Two roads (section 6.4.2, p. 186)", 
+  gg_dag(layout = "kk") +
+  labs(title = "Two Roads (section 6.4.2, p. 186)", 
        subtitle = "6M1")
 p$modified <- dag$modified %>%
-  tidy_dagitty(seed = 6, layout = "kk") %>%
-  gg_dag() +
-  labs(title = "Two roads MODIFIED", 
+  gg_dag(layout = "kk") +
+  labs(title = "Two Roads MODIFIED", 
        subtitle = "6M1")
 wrap_plots(p)
 ```
@@ -352,8 +335,6 @@ print(msg)
 msg <- sprintf("The following set of variables must be conditioned on: %s", s)
 print(msg)
 ```
-
-
 
 
 ## 6M2 {-}
