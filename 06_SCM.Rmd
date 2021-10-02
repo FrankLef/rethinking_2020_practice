@@ -46,18 +46,20 @@ gg_dag <- function(dag, layout = "sugiyama", seed = 6,
   sizes <- append(x = sizes, values = sizes_default[pos])
   
   
-  dag %>% tidy_dagitty(seed = seed, layout = layout) %>%
+  dag %>% 
+    tidy_dagitty(seed = seed, layout = layout) %>%
     ggdag_status(color = status, text = TRUE, 
                        node_size = sizes$node, text_size = sizes$text, 
                        text_col = clrs$text) +
     # geom_dag_label_repel(aes(label = name, fill = status), color = "white") +
     scale_color_manual(values = clrs_status, na.value = clrs$na) +
     scale_fill_manual(values = clrs_status, na.value = clrs$na) +
-  # ggraph::geom_node_text(aes(label = name)) +
-  # ggraph::geom_edge_link(aes(start_cap = label_rect(node1.name), end_cap = label_rect(node2.name))) +
-  ggdag::theme_dag_blank(panel.background = element_rect(fill=clrs$bg, color=clrs$bg)) +
-  theme(legend.position = "none",
-        title = element_text(color = "midnightblue"))
+    # ggraph::geom_node_text(aes(label = name)) +
+    # ggraph::geom_edge_link(aes(start_cap = label_rect(node1.name), end_cap =
+    # label_rect(node2.name)))
+    ggdag::theme_dag_blank(panel.background = element_rect(fill=clrs$bg, color=clrs$bg)) +
+    theme(legend.position = "none",
+          title = element_text(color = "midnightblue"))
 }
 ```
 
@@ -339,8 +341,45 @@ print(msg)
 
 ## 6M2 {-}
 
+See code in section 14.1.1, chap. 14, of @elreath2020 on how to create the
+Sigma matrix for the bivariate simulation.
+
 ```{r}
-message("TODO")
+sample <- list(n = 500L)
+sample$mu <- c(1, 2)
+sample$sigma <- c(0.5, 0.75)
+sample$rho <- 0.9
+sample <- within(sample, {
+  Rho <- matrix(c(1, rho, rho, 1), nrow = 2, byrow = FALSE)
+  Sigma <- diag(sigma) %*% Rho %*% diag(sigma)
+  })
+# then sample the bivariate normal distribution
+set.seed(seed = 6)
+sample$data <- MASS::mvrnorm(n = sample$n,
+                             mu = sample$mu,
+                             Sigma = sample$Sigma) %>%
+  as.data.frame() %>%
+  setNames(nm = c("X", "Z"))
+# which gives us the correlation matrix which confirms
+# the correlations from above
+cor(sample$data)
+# and the covariance matrix
+cov(sample$data)
+# which has diagonal values (square root) about the same as sigma above
+sqrt(diag(cov(sample$data)))
+```
+and add $Y$ as a result of $Z$
+
+```{r}
+set.seed(6)
+sample$data <- sample$data %>%
+  mutate(Y = 1 + 2 * Z  +  rnorm(n = nrow(.), sd = 0.25))
+skimr::skim(sample$data)
+```
+
+
+```{r}
+message("TODO: Finish it")
 ```
 
 
