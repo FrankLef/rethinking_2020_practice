@@ -4,6 +4,7 @@ library(brms)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
+library(ggraph)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -14,22 +15,359 @@ library(paletteer, quietly = TRUE)
 
 # Structural Causal Models {#SCM}
 
+The graph layout are available at [layout](https://rdrr.io/cran/ggraph/man/layout_tbl_graph_igraph.html).
+See laso documentaiton og `ggraph::Layouts`.
+
+The recommended layout is *sugiyama* for DAG. However there are cases where the 
+*kk* layout gives a more desirable, i.e. planar, layout.  See 6M1 for example.
+
+
+The default dag plot used
+
+```{r}
+gg_dag <- function(dag, clrs_status = NULL, clrs = NULL, sizes = NULL) {
+  
+  # default status colors
+  clrs_status_default <- list("latent"="mediumvioletred", 
+                                   "exposure"="lightcoral", 
+                                   "outcome"="cornflowerblue")
+  pos <- !(names(clrs_status_default) %in% names(clrs_status))
+  clrs_status <- append(x = clrs_status, values = clrs_status_default[pos])
+  
+  # default colors
+  clrs_default <- list(text ="gold",  na = "mediumseagreen", bg = "snow")
+  pos <- !(names(clrs_default) %in% names(clrs))
+  clrs <- append(x = clrs, values = clrs_default[pos])
+  
+  # default sizes
+  sizes_default <- list(node = 14, text = 3.5)
+  pos <- !(names(sizes_default) %in% names(sizes))
+  sizes <- append(x = sizes, values = sizes_default[pos])
+  
+  
+  dag %>% ggdag_status(color = status, text = TRUE, 
+                       node_size = sizes$node, text_size = sizes$text, 
+                       text_col = clrs$text) +
+    # geom_dag_label_repel(aes(label = name, fill = status), color = "white") +
+    scale_color_manual(values = clrs_status, na.value = clrs$na) +
+    scale_fill_manual(values = clrs_status, na.value = clrs$na) +
+  # ggraph::geom_node_text(aes(label = name)) +
+  # ggraph::geom_edge_link(aes(start_cap = label_rect(node1.name), end_cap = label_rect(node2.name))) +
+  ggdag::theme_dag_blank(panel.background = element_rect(fill=clrs$bg, color=clrs$bg)) +
+  theme(legend.position = "none",
+        title = element_text(color = "midnightblue"))
+}
+```
+
+
 
 ## 6E1 {-}
 
-* Multicollinearity, section 6.1
-* Post-treatment bias, section 6.2
-* Collider bias, section 6.3
+### Multicollinearity {-}
+
+See section 6.1 for all details.
+
+When predictors are closely related to each other when, for example,
+they have a common, unobserved, cause.  In `ggdag` an unmeasured variable
+is called a latent variable.
+
+For example the cost of a product $P$ can be the result of using 2 manufacturing cells
+$C_1$ and $C_2$, both of which can be substituted for one another depending 
+on some unobserved/latent decision $D$.
+
+```{r}
+coords <- data.frame(
+    name = c("Out", "Var1", "Var2", "U"),
+    x = c(2, 1, 3, 2),
+    y = c(1, 2, 2, 3))
+clrs <- paletteer::paletteer_d("fishualize::Scarus_quoyi")
+dag <- dagify(
+  Out ~ Var1 + Var2,
+  Var1 ~ U,
+  Var2 ~ U,
+  outcome = "Out",
+  latent = "U") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+# dag
+
+p <- list()
+
+clrs <- paletteer::paletteer_d("fishualize::Scarus_quoyi")
+clrs <- c("latent"=clrs[1], "exposure"=clrs[3], "outcome"=clrs[4])
+p$dag <- gg_dag(dag) +
+  labs(title = "Multicollinearity", subtitle = "6H1")
+
+
+dag_tbl <- tidygraph::as_tbl_graph(dag)  # cannot use %>% here
+p$arrow <- dag_tbl %>%
+  ggraph::ggraph(layout = "sugiyama") +
+  ggraph::geom_node_text(aes(label = name)) +
+  ggraph::geom_edge_link(aes(start_cap = label_rect(node1.name), 
+                             end_cap = label_rect(node2.name)),
+                         arrow = arrow()) +
+  ggdag::theme_dag_blank(panel.background = 
+                           element_rect(fill="snow", color="snow")) +
+  theme(legend.position = "none") +
+  labs(title = "Multicollinearity", subtitle = "6H1")
+
+wrap_plots(p) +
+  plot_annotation("2 ways to do the DAG")
+```
+
+
+
+### Post-treatment bias {-}
+
+See section 6.2 for all details.
+
+When a predictor $X_1$ included in the model is actually the outcome $Y$ of another 
+predictor $X_2$ and the 2 outcomes are related.
+
+For example the cost of a product $P_1$ is closely related to the cost of 
+another product $P_2$ which is manufactured at the same time or with the same
+process. 
+
+
+```{r}
+dag <- list()
+dag$d1 <- dagify(
+  Out1 ~ Var1,
+  Out2 ~ Out1,
+  Out2 ~ Var2,
+  outcome = "Out2") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+# dag1
+
+dag$d2 <- dagify(
+  Out1 ~ U,
+  Out1 ~ Var1,
+  Out2 ~ Var2,
+  Out2 ~ U,
+  latent = "U",
+  outcome = "Out2") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+# dag2
+
+p <- list()
+
+
+p$dag1 <- gg_dag(dag$d1) +
+  labs(title = "Post-treatment bias", 
+       subtitle = "Out1 and Out2 are not ind. because of Var1")
+
+p$dag2 <- gg_dag(dag$d2) +
+  labs(title = "Post-treatment bias", 
+       subtitle = "Out1 and Out2 are not ind. because of U")
+
+wrap_plots(p) +
+  plot_annotation("2 possible post-treatment biases")
+```
+
+
+
+### Collider bias {-}
+
+See section 6.3 for all details.
+
+
+Collider bias causes a statistical, not necessarily causal, bias.
+
+For example, the quality of a product $Out$ could be influenced by the
+manufacturing process using $Var1$ and $Var2$ but some raw materials affect
+the quality/performance of $Var1$ and $Out$. 
+
+
+
+```{r}
+dag <- dagify(
+  Out ~ U,
+  Out ~ Var1,
+  Out ~ Var2,
+  Var1 ~ Var2,
+  Var1 ~ U,
+  latent = "U",
+  outcome = "Out") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+# dag
+
+p <- list()
+
+p$dag <- gg_dag(dag) +
+  labs(title = "Post-treatment bias", 
+       subtitle = "If we condition on Var2 then Out become dependent of the value of Var2")
+
+wrap_plots(p) +
+  plot_annotation("Post-treatment bias")
+```
+
 
 ## 6E2 {-}
 
+See examples and graphs in 6H1 just above.
+
+
+## 6E3 {-}
+
+See section 6.4.1
+
+```{r}
+dag <- list()
+dag$fork <- dagify(
+  O1 ~ V,
+  O2 ~ V,
+  outcome = c("O1", "O2")) %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+
+dag$chain <- dagify(
+  V2 ~ V1,
+  O ~ V2,
+  outcome = "O") %>%
+  tidy_dagitty(seed = 6, layout = "linear")
+
+dag$collider <- dagify(
+  O ~ V1,
+  O ~ V2,
+  outcome = "O") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+
+dag$collider <- dagify(
+  O ~ V1,
+  O ~ V2,
+  outcome = "O") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+
+dag$descendant <- dagify(
+  O1 ~ V1,
+  O1 ~ V2,
+  O2 ~ O1,
+  outcome = "O2") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+
+p <- list()
+
+p$fork <- gg_dag(dag$fork, sizes = list(node = 8, text = 3)) + 
+  labs(title = "Fork")
+
+p$chain <- gg_dag(dag$chain, sizes = list(node = 8, text = 3)) + 
+  labs(title = "Chain")
+
+p$collider <- gg_dag(dag$collider, sizes = list(node = 8, text = 3)) + 
+  labs(title = "Collider")
+
+p$descendant <- gg_dag(dag$descendant, sizes = list(node = 8, text = 3)) + 
+  labs(title = "Descendant")
+
+
+wrap_plots(p) +
+  plot_annotation("6E3") &
+  theme(title = element_text(color = "midnightblue", size = 8))
+```
+
+## 6E4 {-}
+
+The sample is biased because the selection of the outcome creates a dependency
+between the 2 causal variables.  For example, the sum $z$ of 2 variables $x$ and
+$y$.  $x$ and $y$ are independent but, if we condition on $z$ then $x$ and $y$
+are dependent.  For example, if $z = 5$ then the choice of $x$ will tell us
+what $y$ is, e.g. if $x=3$ then we must have $y=2$.
+
+Using the example at the open of the chapter, since the outcome of being 
+selected ($S$) depends on whether the scientific studies
+is newsworthy ($NW$) or trustworthy ($TW$) then we have the following DAG
+
+
+```{r, out.width="67%"}
+dag <- dagify(
+  S ~ TW,
+  S ~ NW,
+  outcome = "S") %>%
+  tidy_dagitty(seed = 6, layout = "sugiyama")
+
+gg_dag(dag) +
+  labs(title = "Scientific studies selection (collider bias)", 
+       subtitle = "If we condition on S then TW become dependent of the value of NW")
+```
+
+## 6M1 {-}
+
+The DAG on page 186 is
+
+```{r}
+dag <- list()
+# the original DAG on p. 186
+dag$original <- dagify(
+  Y ~ C + X,
+  X ~ U,
+  B ~ U + C,
+  C ~ A,
+  U ~ A,
+  outcome = "Y",
+  latent = "U")
+# the modified DAG
+dag$modified <- dagify(
+  Y ~ C + X + V,
+  X ~ U,
+  B ~ U + C,
+  C ~ A + V,
+  U ~ A,
+  outcome = "Y",
+  latent = c("U", "V"))
+
+p <- list()
+
+p$original <- dag$original %>%
+  tidy_dagitty(seed = 6, layout = "kk") %>%
+  gg_dag() +
+  labs(title = "Two roads (section 6.4.2, p. 186)", 
+       subtitle = "6M1")
+p$modified <- dag$modified %>%
+  tidy_dagitty(seed = 6, layout = "kk") %>%
+  gg_dag() +
+  labs(title = "Two roads MODIFIED", 
+       subtitle = "6M1")
+wrap_plots(p)
+```
+
+The original DAG had the following paths from $X$ to $Y$ with the adjustments set
+
+```{r}
+p <- dagitty::paths(dag$original, from = "X", to = "Y")$paths
+p
+# the adjustments set
+s <- dagitty::adjustmentSets(dag$original, exposure = "X", outcome = "Y")
+s
+```
+
+The modified DAG had the following paths from $X$ to $Y$ with the adjustments set
+
+```{r}
+# the paths
+p <- dagitty::paths(dag$modified, from = "X", to = "Y")$paths
+# p
+# the adjustments set
+s <- dagitty::adjustmentSets(dag$modified, exposure = "X", outcome = "Y")
+# s
+msg <- sprintf("There are %d paths between X and Y.", length(p))
+print(msg)
+msg <- sprintf("The following set of variables must be conditioned on: %s", s)
+print(msg)
+```
+
+
+
+
+## 6M2 {-}
+
+```{r}
+message("TODO")
+```
 
 
 
 ## 6H1 {-}
 
 ```{r}
-message("TODO: 6H1")
+message("TODO")
 ```
 
 
