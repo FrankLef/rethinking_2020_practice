@@ -1,3 +1,96 @@
+--- 
+title: "Statistical Rethinking - Solutions"
+author: "frank"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: [books.bib, packages.bib]
+biblio-style: apalike
+link-citations: yes
+description: "Packages and setup to use this book."
+---
+
+# Introduction {-}
+
+Placeholder
+
+
+## Session info {-}
+## Prerequisites {-}
+### Install `Rtools` {-}
+### Install `rstan` {-}
+### Install `rethinking` {-}
+## References {-}
+
+<!--chapter:end:index.Rmd-->
+
+# The Golem of Prague {#golem}
+
+```{r}
+message("There is no practice for this chapter.")
+```
+
+<!--chapter:end:01_Golem.Rmd-->
+
+
+# Small Worlds and Large Worlds {#worlds}
+
+Placeholder
+
+
+## 2E1 {-#prac2E1}
+## 2E2 {-#prac2E2}
+## 2E3 {-#prac2E3}
+## 2E4 {-#prac2E4}
+## 2M1 {-#prac2M1}
+### 2M1 (1) {-}
+### 2M1 (2) {-}
+### 2M1 (3) {-}
+### plot {-}
+## 2M2 {-#prac2M2}
+### 2M2 (1) {-}
+### 2M2 (2) {-}
+### 2M2 (3) {-}
+### 2M2 plot {-}
+## 2M3 {-#prac2M3}
+## 2M4 {-#prac2M4}
+## 2M5 {-#prac2M5}
+## 2M6 {-#prac2M6}
+## 2M7 {-#prac2M7}
+## 2H1 {-#prac2H1}
+## 2H2 {-#prac2H2}
+## 2H3 {-#prac2H3}
+## 2H4 {-#prac2H4}
+
+<!--chapter:end:02_Worlds.Rmd-->
+
+
+# Sampling the Imaginary {#sampling}
+
+Placeholder
+
+
+## 3E1 {-#prac3E1}
+## 3E2 {-#prac3E2}
+## 3E3 {-#prac3E3}
+## 3E4 {-#prac3E4}
+## 3E5 {-#prac3E5}
+## 3E6 {-#prac3E6}
+## 3E7 {-#prac3E7}
+## 3M1 {-#prac3M1}
+## 3M2 {-#prac3M2}
+## 3M3 {-#prac3M3}
+## 3M4 {-#prac3M4}
+## 3M5 {-#prac3M5}
+## 3M6 {-#prac3M6}
+## 3H1 {-#prac3H1}
+## 3H2 {-#prac3H2}
+## 3H3 {-#prac3H3}
+## 3H4 {-#prac3H4}
+## 3H5 {-#prac3H5}
+
+<!--chapter:end:03_Sampling.Rmd-->
+
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
@@ -304,12 +397,13 @@ See section 4.4.2 for model m4.3.  We add the centered weight to the data
 and call it $weight_c$.
 
 ```{r}
+P04M07 <- list()
 data(Howell1)
-data04M07 <- Howell1 %>%
+P04M07$data <- Howell1 %>%
   filter(age  >= 18) %>%
   mutate(weight_c = as.vector(scale(weight, center = TRUE, scale = FALSE)))
 rm(Howell1)
-skimr::skim(data04M07)
+skimr::skim(P04M07$data)
 ```
 
 ### Model {-#prac4M7-Model}
@@ -326,46 +420,72 @@ $$
 
 ### Priors {-#prac4M7-Priors}
 
-We simulate the priors using the specifications from the model.  The lognormal
-distribution is not available in `simstudy`.  The solution is to create a custom
-(nonrandom) distribution as demonstrated in [lognormal](https://githubmemory.com/repo/kgoldfeld/simstudy/issues/99).
-However this gives me an error message, so instead, beta is exponentiated in 
-`mu`'s formula.
+
+The following priors are evaluated by comparing the prior distribution
+and the prior predictive distribution (also called likelihood).
 
 ```{r}
-sim <- list()
-sim$rng <- paste(round(range(data04M07$weight_c)), collapse = ";")
-sim$xrng
-set.seed(20210810)
-sim <- within(sim, {
-  def <- defData(varname = "x", dist = "uniform", formula = xrng)
-  def <- defData(def, varname = "alpha", formula = 178, variance = 20^2)
-  def <- defData(def, varname = "beta", formula = 0, variance = 1^2)
-  def <- defData(def, varname = "sigma", dist = "exponential", formula = 1)
-  def <- defData(def, varname = "mu", dist = "nonrandom", formula = "alpha + exp(beta) * x")
-  def <- defData(def, varname = "height", formula = "mu", variance = "sigma")
-  data <- genData(n = 1000, dtDefs = def) %>%
-    select(-id) %>%
-    as_draws(data)
-})
-# str(sim$data)
+priors <- list(
+  # nb of predictor's values
+  npreds = 50L,
+  # sample size
+  nsamples = 500L,
+  alpha_mean = 178,
+  alpha_sd = 20,
+  beta_mean = 0,
+  beta_sd = 1,
+  sigma_rate = 1
+)
+# the predictor's values
+priors$preds <- modelr::seq_range(x = P04M07$data$weight_c, n = priors$npreds)
+# the samples of priors
+priors$samples <- with(priors, {
+  data.frame(
+    alpha = rnorm(n = nsamples, mean = alpha_mean, sd = alpha_sd),
+    beta = rlnorm(n = nsamples, meanlog = beta_mean, sdlog = beta_sd),
+    sigma = rexp(n = nsamples, rate = sigma_rate)
+    )
+  })
 ```
 
+The prior predictive distribution is simulated as follows. It is heavily
+inspired by @kurtz2020b. See also [vasishth](https://vasishth.github.io/bayescogsci/book/sec-priorpred.html)
+for a similar way to do it.
+
+**Important:** We could use the prior prediction from the ``brms` fit
+objects.  However then we depend on the `rstan` sampler which is subject
+to possible convergence problems.  This method is independent of the fitting
+methodology.
+
 
 ```{r}
-ggplot(sim$data) +
+set.seed(4)
+# simulate the height using hypothetical weight_c
+priors$sim <- priors$preds %>%
+  purrr::map_dfr(.f = function(x) {
+    mu <- priors$samples$alpha + x * priors$samples$beta
+    y <- rnorm(n = length(mu), mean = mu, sd = priors$samples$sigma)
+    data.frame(weight_c = x, height = y)
+  })
+# str(priors$sim)
+```
+
+and plot the priors vs the observations
+
+```{r}
+ggplot(priors$sim) +
   geom_density(aes(x = height, y = ..scaled.., color = "prior"),
                size = 1, alpha = 0.8) +
-  geom_density(data = data04M07, aes(x = height, y = ..scaled.., color = "observed"),
+  geom_density(data = P04M07$data, aes(x = height, y = ..scaled.., color = "observed"),
                size = 1, alpha = 0.8) +
-  geom_vline(xintercept = c(ggdist::Mode(sim$data$height),
-                            ggdist::Mode(data04M07$height)),
+  geom_vline(xintercept = c(ggdist::Mode(priors$sim$height),
+                            ggdist::Mode(P04M07$data$height)), 
              color = c("mediumvioletred", "mediumseagreen"),
              linetype = "dashed") +
   scale_color_manual(values = c("prior" = "mediumvioletred", 
                                 "observed" = "mediumseagreen")) +
-  scale_x_continuous(breaks = scales::breaks_pretty(n = 7)) +
-  coord_cartesian(xlim = c(50, 300)) +
+  scale_x_continuous(breaks = scales::breaks_pretty(n = 7),
+                     limits = c(50, 300)) +
   ggdist::theme_ggdist() +
   theme(title = element_text(color = "midnightblue"),
         legend.position = c(0.8, 0.8)) +
@@ -375,8 +495,6 @@ ggplot(sim$data) +
     subtitle = "4M7",
     x = "height", y = NULL, color = NULL)
 ```
-
-
 
 The prior is reasonable as it reflects an opinion on the overall general
 population.
@@ -2901,4 +3019,380 @@ plot_04M08(data04H08, knots = splin$knots) +
               inherit.aes = FALSE,
               stat = "identity", color = "blueviolet", fill = "violet")
 ```
+
+
+<!--chapter:end:04-Linear.Rmd-->
+
+
+# Multivariate Linear Models {#multivariate}
+
+Placeholder
+
+
+## inla {-}
+## 5E1 {-}
+## 5E2 {-}
+## 5E3 {-}
+## 5E4 {-}
+## 5M1 {-}
+## 5M2 {-}
+## 5M3 {-}
+## 5M4 {-}
+### Data {-}
+### Model {-}
+### `brm` {-}
+### `inla` {-}
+### brm vs inla {-}
+### Conclusion {-}
+## 5M5 {-}
+## 5H1 {-}
+### dagitty {-}
+## 5H2 {-}
+### Data and model {-}
+### `brm` {-}
+### `inla` {-}
+### compare brm vs inla {-}
+## 5H3 {-}
+### Data, model, DAG {-}
+## 5H4 {-}
+### Data {-}
+### Correlations
+### DAG {-}
+### Model {-}
+### Conclusion {-}
+
+<!--chapter:end:05_Multivariate.Rmd-->
+
+
+# Structural Causal Models {#SCM}
+
+Placeholder
+
+
+## 6E1 {-}
+### Multicollinearity {-}
+### Post-treatment bias {-}
+### Collider bias {-}
+## 6E2 {-}
+## 6E3 {-}
+## 6E4 {-}
+## 6M1 {-}
+## 6M2 {-}
+## 6H1 {-}
+## 6H2 {-}
+### 6H2 a) By territory area size {-}
+### 6H2 b) By group size {-}
+
+<!--chapter:end:06_SCM.Rmd-->
+
+
+# Ulysses' Compass {#information}
+
+Placeholder
+
+
+## 7E1 {-}
+## 7E2 {-}
+## 7E3 {-}
+## 7E4 {-}
+## 7M1 {-}
+### AIC {-}
+### WAIC {-}
+## 7M2 {-}
+### Model selection {-}
+### Model comparison {-}
+## 7M3 {-}
+## 7M4 {-}
+## 7M5 {-}
+## 7M6 {-}
+## 7H1 {-}
+## 7H2 {-}
+### Use WAIC and PSIS to evaluate the outliers {-}
+### Robust regression with t-student distribution {-}
+## 7H3 {-}
+### islands' entropies {-}
+### Kullback-Leiber divergence {-}
+## 7H4 {-}
+## 7H5 {-}
+### 7H5 1) {-}
+### 7H5 2) {-}
+### 7H5 3) {-}
+### 7H5 4) {-}
+### 7H5 5) {-}
+### 7H5 Model comparison {-}
+
+<!--chapter:end:07_Information.Rmd-->
+
+
+# Conditional Manatees {#interactions}
+
+Placeholder
+
+
+## 8E1 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+## 8E2 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+### (4) {-}
+## 8E3 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+### (4) {-}
+## 8M1 {-}
+## 8M2 {-}
+## 8M3 {-}
+## 8M4 {-}
+## 8H1 {-}
+### Model and fit {-}
+## 8H2 {-}
+## 8H3 {-}
+### (a) {-}
+### (b) {-}
+## 8H4 {-}
+### (a) {-}
+#### The priors {-}
+#### The models {-}
+#### The fit {-}
+#### Validate the priors {-}
+#### Compare the models {-}
+#### Plotting the model
+### (b) {-}
+#### The fit {-}
+#### Compare the models {-}
+#### Plotting the model
+### (c) {-}
+#### Compare the models {-}
+#### Plotting
+## 8H5 {-}
+## 8H6 {-}
+## 8H7 {-}
+
+<!--chapter:end:08_Interactions.Rmd-->
+
+
+# Markov Chain Monte Carlo {#MCMC}
+
+Placeholder
+
+
+## 9E1 {-}
+## 9E2 {-}
+## 9E3 {-}
+## 9E4 {-}
+## 9E5 {-}
+## 9E6 {-}
+### Model and fit {-}
+### Trace plot {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9E7 {-}
+## 9M1 {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9M2 {-}
+### Autocorrelations {-}
+## 9M3 {-}
+## 9H1 {-}
+### Trace plot {-}
+### Trank plot {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9H2 {-}
+## 9H3 {-}
+## 9H4 {-}
+## 9H5 {-}
+## 9H6 {-}
+## 9H7 {-}
+
+<!--chapter:end:09_MCMC.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+```
+
+
+
+# Big Entropy and the Generalized Linear Model {#GLM}
+
+```{r echo=FALSE}
+message("No practice in this chapter")
+```
+
+
+<!--chapter:end:10_GLM.Rmd-->
+
+
+# Counting and Classification {#Counting}
+
+Placeholder
+
+
+## 11E1 {-#prac11E1}
+## 11E2 {-#prac11E2}
+## 11E3 {-#prac11E3}
+## 11E4 {-#prac11E4}
+## 11M1 {-#prac11M1}
+## 11M2 {-#prac11M2}
+## 11M3 {-#prac11M3}
+## 11M4 {-#prac11M4}
+## 11M5 {-#prac11M5}
+## 11M6 {-#prac11M6}
+## 11M7 {-#prac11M7}
+### Model with $\mathcal{N}(0, 1.5)$ {-}
+### Model with $\mathcal{N}(0, 10)$ {-}
+## 11M8 {-#prac11M8}
+## 11H1 {-#prac11H1}
+### Null model, general intercept {-}
+### Model with treatment intercepts {-}
+### Model with treatment and actor intercepts {-}
+### Model comparison {-}
+## 11H2 {-#prac11H2}
+### (a) {-}
+#### `quap` fit
+#### `brm` fit
+#### `inla` fit
+
+<!--chapter:end:11_Counting.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Monsters and Mixtures {#Mixed}
+
+
+## 12E1 {-}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+<!--chapter:end:12_Mixed.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Multilevel Models {#MLM}
+
+
+## 13E1 {-#prac13E1}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+<!--chapter:end:13_Multilevel.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(tidybayes)
+```
+
+
+# Adventures in Covariance {#Covariance}
+
+
+## 14E1 {-#prac14E1}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+
+<!--chapter:end:14_Covariances.Rmd-->
+
+# References {-}
+
+<div id="refs"></div>
+
+
+# (APPENDIX) Appendix {-}
+
+
+<!--chapter:end:50_appendix.Rmd-->
+
+
+# `logit()` distribution {-#app-logit}
+
+Placeholder
+
+
+## `logistic()` / `inv_logit()` function
+## `logit()` function
+## `dordlogit()` function
+## `pordlogit()` function
+## `rordlogit()` function
+
+<!--chapter:end:51_logit.Rmd-->
+
+
+# Math notes {-#app-maths}
+
+Placeholder
+
+
+## Mode {-#app-maths-mode}
+## $\Gamma$ distribution {-#app-gammaexp}
+
+<!--chapter:end:52_maths.Rmd-->
+
+
+# `INLA` {-#app-inla}
+
+Placeholder
+
+
+## Note on priors {-}
+## 4M7 {-#app-inla-04M07}
+### Data and model {-}
+### Arguments {-}
+#### `formula` {-}
+#### `family` {-}
+#### `control.fixed` {-}
+#### `control.family` {-}
+#### `control.compute` {-}
+#### `quantiles` {-}
+### Create `inla` {-}
+### Summaries {-}
+### Fitted {-#app-inla-04M07-fitted}
+### Predictions {-#app-inla-04M07-predict}
+#### Predicted `inla` object {-}
+#### Sample the posterior {-}
+#### `predict_inla` {-#app-inla-04M07-predict_inla}
+##### Predictions vs marginal {-}
+
+<!--chapter:end:61_inla.Rmd-->
+
+
+# `eflINLA` {-#eflINLA}
+
+Placeholder
+
+
+## Posterior draws {#eflINLA-posterior}
+
+<!--chapter:end:62_eflINLA.Rmd-->
 

@@ -9,13 +9,13 @@ library(ggdist, quietly = TRUE)
 ```
 
 
-# `INLA` {-#app-maths}
+# Math notes {-#app-maths}
 
 This appendix is covers a sundry list of mathematical questions, issues and
 notations.
 
 
-### Mode {-#app-maths-mode}
+## Mode {-#app-maths-mode}
 
 Technically, the mode is defined as the most likely value.  Usually
 the following function does precisely that.
@@ -61,7 +61,7 @@ is pretty much always off.  Often by a lot.
 The `ggdist::Mode()` is the function used in this project.
 
 
-## \ {-#app-gammaexp}
+## $\Gamma$ distribution {-#app-gammaexp}
 
 See [wkipedia](https://en.wikipedia.org/wiki/Gamma_distribution) for more details
 on the gamma distribution

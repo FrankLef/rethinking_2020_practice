@@ -346,8 +346,8 @@ Sigma matrix for the bivariate simulation.
 
 ```{r}
 sample <- list(n = 500L)
-sample$mu <- c(1, 2)
-sample$sigma <- c(0.5, 0.75)
+sample$mu <- c("X" = 1, "Z" = 2)
+sample$sigma <- c("X" = 0.5, "Z" = 0.75)
 sample$rho <- 0.9
 sample <- within(sample, {
   Rho <- matrix(c(1, rho, rho, 1), nrow = 2, byrow = FALSE)
@@ -359,7 +359,7 @@ sample$data <- MASS::mvrnorm(n = sample$n,
                              mu = sample$mu,
                              Sigma = sample$Sigma) %>%
   as.data.frame() %>%
-  setNames(nm = c("X", "Z"))
+  setNames(nm = names(sample$mu))
 # which gives us the correlation matrix which confirms
 # the correlations from above
 cor(sample$data)
@@ -373,13 +373,15 @@ and add $Y$ as a result of $Z$
 ```{r}
 set.seed(6)
 sample$data <- sample$data %>%
-  mutate(Y = 1 + 2 * Z  +  rnorm(n = nrow(.), sd = 0.25))
-skimr::skim(sample$data)
+  mutate(Y = rnorm(n = nrow(.), mean = 1 + 2 * Z, sd = 5))
+GGally::ggpairs(sample$data)
 ```
 
 
+
+
 ```{r}
-message("TODO: Finish it")
+message("TODO: Do it with simsstudy and compare results")
 ```
 
 

@@ -93,7 +93,7 @@ ensure consistency when creating different inla model objects. For example
 for fitted and predicted values computations as done below.
 
 ```{r}
-app_i04M07args <- list()
+i04M07args <- list()
 ```
 
 
@@ -130,7 +130,7 @@ which gives the formula of the linear predictor
 
 ```{r}
 # linear predictor
-app_i04M07args$formula <- height ~ f(weight_c, model = "clinear", range = c(0, Inf),
+i04M07args$formula <- height ~ f(weight_c, model = "clinear", range = c(0, Inf),
                          prior = "logtnormal", param = c(0, 1))
 # the available latent models are in names(inla.models()$latent)
 stopifnot("clinear" %in% names(inla.models()$latent))
@@ -143,8 +143,8 @@ For this case the family of the likelihood is
 
 ```{r}
 # likelihood family
-app_i04M07args$family <- "gaussian"
-stopifnot(app_i04M07args$family %in% names(inla.models()$likelihood))
+i04M07args$family <- "gaussian"
+stopifnot(i04M07args$family %in% names(inla.models()$likelihood))
 ```
 
 
@@ -164,7 +164,7 @@ Therefore the intercept prior for the  is $\alpha \sim \mathcal{N}(178, 20)$ whe
 precision is $\tau = \frac{1}{sd^2} = \frac{1}{20^2} = 0.0025$
 
 ```{r}
-app_i04M07args$control.fixed <- list(mean.intercept = 178, prec.intercept = 1 / (20^2))
+i04M07args$control.fixed <- list(mean.intercept = 178, prec.intercept = 1 / (20^2))
 ```
 
 #### `control.family` {-}
@@ -215,7 +215,7 @@ if (FALSE) inla.doc("gamma", section = "prior")
 Therefore we use
 
 ```{r}
-app_i04M07args$control.family <- list(
+i04M07args$control.family <- list(
     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005))))
 ```
 
@@ -235,7 +235,7 @@ This arguments, in the form of a list, is as follows
 which gives
 
 ```{r}
-app_i04M07args$control.compute <- list(config = TRUE, dic = TRUE, waic = TRUE)
+i04M07args$control.compute <- list(config = TRUE, dic = TRUE, waic = TRUE)
 ```
 
 #### `quantiles` {-}
@@ -244,7 +244,7 @@ the quantiles for credibility intervals.  `inla` uses credibility intervals rath
 than confidence intervals, usually similar when data has a centralized distribution.
 
 ```{r}
-app_i04M07args$quantiles <- c(0.025, 0.5, 0.975)
+i04M07args$quantiles <- c(0.025, 0.5, 0.975)
 ```
 
 
@@ -256,9 +256,9 @@ fitted and predict.
 
 ```{r}
 # the data
-app_i04M07args$data <- data04M07
+i04M07args$data <- data04M07
 # we use do.call to be able to use the list of parameters
-app_i04M07 <- do.call(inla, args = app_i04M07args)
+i04M07 <- do.call(inla, args = i04M07args)
 ```
 
 
@@ -267,7 +267,7 @@ Note that all the arguments of the `inla` object can be accessed through
 the `.args` item as follows
 
 ```{r}
-names(app_i04M07$.args)
+names(i04M07$.args)
 ```
 
 ### Summaries {-}
@@ -275,14 +275,14 @@ names(app_i04M07$.args)
 which gives the summary for fixed parameters
 
 ```{r}
-app_i04M07$summary.fixed
+i04M07$summary.fixed
 ```
 
 and hyperparameters which are shown on the *internal scale* which is the *log*
 and this case.
 
 ```{r}
-app_i04M07$summary.hyperpar
+i04M07$summary.hyperpar
 ```
 
 
@@ -315,21 +315,25 @@ sequence with `NA`
 ```{r}
 # use the same arguments as the original and add the new data and
 # the control.predictor
-app_i04M07args$data <- newdata$data
-app_i04M07args$control.predictor <- list(compute = TRUE)
-app_i04M07 <- do.call(inla, args = app_i04M07args)
+i04M07args$data <- newdata$data
+i04M07args$control.predictor <- list(compute = TRUE)
+i04M07 <- do.call(inla, args = i04M07args)
 ```
 
-get the fitted data in a data.frame with only the new values and plot the results
+get the fitted data in a data.frame with only the new values
 
 ```{r}
-# get the fited data 
+# get the fitted data 
 p <- list()
-p$fitted <- app_i04M07$summary.fitted.values %>%
+p$fitted <- i04M07$summary.fitted.values %>%
   select(mean, sd, `0.025quant`, `0.975quant`) %>%
   slice_tail(n = newdata$n) %>%
   bind_cols(weight_c = newdata$new$weight_c)
+```
 
+and plot the results
+
+```{r}
 # plot the fitted values against the raw data
 ggplot(p$fitted, 
        aes(x = weight_c, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
@@ -349,13 +353,16 @@ ggplot(p$fitted,
 ### Predictions {-#app-inla-04M07-predict}
 
 When it comes to making predictions, we encounter many different ways to do
-it.  The recommended way from inla org is [inla](https://www.r-inla.org/faq#h.821k2r53fvx3).
+it.  The recommended way from inla org is [inla](https://www.r-inla.org/faq#h.821k2r53fvx3)
+with `i04M07$summary.random`. Thsi however returns a number of predictions
+not equal to the number of predictions requested.  It is impossible to see
+which predictions matches with which prediction.
+
 Also see an example of another way in section 7.2.3, p.184 of @wang2018.
 
 The method below was found on the internet.  Unfortunately I do not remember
-the address.  My apologies.
-
-The method seems to work for any model which is why it is the chosen method.
+the address.  My apologies. The method seems to work for any model which 
+is why it is the chosen method.
 
 The process is in 3 steps, the first 2 seps are the same as for the fitted
 values (see just above)
@@ -391,9 +398,9 @@ the posterior mean of the linear predictors with the new data.
 ```{r}
 # use the same arguments as the original and add the new data and
 # the control.predictor
-app_i04M07args$data <- newdata$data
-app_i04M07args$control.predictor <- list(compute = TRUE)
-app_i04M07 <- do.call(inla, args = app_i04M07args)
+i04M07args$data <- newdata$data
+i04M07args$control.predictor <- list(compute = TRUE)
+i04M07 <- do.call(inla, args = i04M07args)
 ```
 
 
@@ -401,7 +408,7 @@ For every lines we can obtain the summary. For example for the new 20
 predictions
 
 ```{r}
-app_i04M07$summary.linear.predictor %>%
+i04M07$summary.linear.predictor %>%
   filter(is.na(newdata$data$height))
 ```
 and the marginal which was used to compute the line summary is available,
@@ -409,7 +416,7 @@ for example for $predictor.353$ which is the first new
 
 ```{r}
 p <- list()
-p$df <- app_i04M07$marginals.linear.predictor[["Predictor.353"]] %>%
+p$df <- i04M07$marginals.linear.predictor[["Predictor.353"]] %>%
   as.data.frame()
 ggplot(p$df, aes(x = x, y = y)) +
   geom_line(color = "rosybrown", size = 1) +
@@ -421,6 +428,7 @@ ggplot(p$df, aes(x = x, y = y)) +
 above is only the linear predictor itself.  When the link function is the
 identify, the linear predictor is the fitted value. Therefore to get the predictions
 we need to sample the posterior as follows.
+
 
 #### Sample the posterior {-}
 

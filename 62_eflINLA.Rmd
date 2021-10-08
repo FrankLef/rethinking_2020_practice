@@ -1,0 +1,60 @@
+```{r include=FALSE}
+library(rethinking)
+library(INLA)
+library(brms)
+library(eflINLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+```
+
+
+
+# `eflINLA` {-#eflINLA}
+
+This appendix explains the `eflINLA` package.  It is the vignette project
+for that package.
+
+The main use `eflINLA` is to obtain the posterior samples that are converted
+to `draws` and `rvar` objects as implemented by the `posterior` package. Once
+this is done, the entire toolkit offered by `posterior` greatly simplifies the
+data wrangling chores.
+
+We will use the data from the `Howell1` data set from the `rethinking` package.
+The way it is used here is largely inspired from Practice 4M7 of chapter 4 from
+@elreath2020.
+
+```{r}
+data(Howell1)
+data04M07 <- Howell1 %>%
+  filter(age  >= 18) %>%
+  mutate(weight_c = as.vector(scale(weight, center = TRUE, scale = FALSE)))
+rm(Howell1)
+# skimr::skim(data04M07)
+```
+
+## Posterior draws {#eflINLA-posterior}
+
+There are at least 2 ways to extract the posterior distributions from an `inla`
+object:
+1. From the marginal distribution found in `marginals.fixed` and `marginals.hyperpar`
+of an `inla` object or
+2. using the function `INLA::inla.posterior.sample`.
+
+To distinguish between the 2, `eflINLA` has 2 functions
+
+1. `draw_marginals`: Draw samples using the `marginals.*` of an `inla` object.
+2. `draw_posterior`: Draw samples using `INLA::INLA::inla.posterior.sample()`.
+
+Both of these functions return a `draw_rvars` object which can then be used 
+with the `posterior package`.
+
+Note that, technically, a marginal distribution such as `marginals.fixed` is *not* a posterior
+distribution.  However, in the case of `INLA` the 2 are extremely close. This is
+possible by the `INLA` assumption that the model is part of the class of 
+*latent Gaussian Markov random field* (section 1.6, p. 4 of @gomez2020).
+
