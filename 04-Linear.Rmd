@@ -25,63 +25,80 @@ library(splines)
 ## Custom functions {-}
 
 
-### basics {-}
+### `gather_inters` {-}
 
 ```{r}
-# A function to inverse transform the data to natural scale
-# will be used in plots below. Normally used with `base::scale()`.
-# If the base::scale function was used originally, the attributes contain 
-# the center and scale values.
-# inv.scale <- function(x, 
-#                       center = attr(x, which = "scaled:center"),
-#                       scale = attr(x, which = "scaled:scale"),
-#                       digits = 0L) {
-#   if(!is.finite(center)) center <- 0L
-#   if(!is.finite(scale)) scale <- 1L
-#   round(center + x * scale, digits = digits)
-# }
+# Pivot a dataframe from ggdist::point_interval to longer format, excluding
+# grouping variables. Its uses tidybayes::gather_variables()
+gather_intervals <- function(df, incl = c(".width", ".point", ".interval"),
+                             fun=ggdist::median_qi, ...) {
+  # This function is largely inspired by tidybayes::gather_variables()
+  # for the trick on getting grouped variables.
+  # NOTE: tidybayes::gather_variables uses group_by_at which is superseded by
+  #       group(by(across(...)))
+  
+  out <- tryCatch({
+    fun(df, ...)
+    },
+    error = function(err) {
+      msg <- sprintf("Error with %s. Did you give a character variable as input?",
+                     deparse1(substitute(fun)))
+      msg <- paste(errorCondition(err), msg)
+      stop(msg)
+    })
+  
+  # the grouping variables see code of tidybayes::gather_variables()
+  groups_ = group_vars(df)
+  all_groups <- incl
+  if (length(groups_) != 0) all_groups <- c(groups_, all_groups)
+  
+  out %>%
+    group_by(across(all_groups)) %>%
+    tidybayes::gather_variables()
+}
 ```
 
-
-
-### With `ggdist` {-}
+test `gather_intervals`
 
 ```{r}
-# Pivot a dataframe from ggdist::point_interval to longer format.
-# It removes the duplicate point valaue that repeat itself when putting
-# intervals in long format.
-# This is a useful function when plotting with ggrepel, for example
-# gather_interval <- function(df, value_var, fun=ggdist::median_qi, 
-#                             width = c(2/3, 0.89),
-#                             names_to="stat", values_to="value") {
-#   val_col <- deparse1(substitute(value_var))
-#   df %>%
-#     fun({{value_var}}, .width = width) %>%
-#     select(-.interval) %>%
-#     pivot_longer(cols = all_of(c(val_col, ".lower", ".upper")), 
-#                  names_to = names_to, 
-#                  values_to = values_to) %>%
-#     filter(!(stat == val_col & .width != .width[1]))  ## remove repeated "value"
-# }
+the_width <- c(0.25, 0.5, 0.75)
+df <- rbind(
+  data.frame(model = "alpha", a = runif(5), b = rnorm(5), c = rexp(5)),
+  data.frame(model = "beta", a = runif(5), b = rnorm(5), c = rexp(5))
+  )
+df
+
+# summ <- df %>%
+#   group_by(model) %>%
+#   ggdist::mode_qi(.width = the_width)
+# summ
+
+summ <- df %>% 
+  group_by(model) %>%
+  gather_intervals(fun = ggdist::mode_qi, .width = the_width)
+  # group_by(.variable) %>%
+  # tally()
+summ
+cnt <- length(unique(df$model)) * (length(df) - 1) *
+  length(c("", "lower", "upper")) * length(the_width)
+stopifnot(nrow(summ) == cnt)
+
+
+summ <- df %>% 
+  select(-model) %>%
+  gather_intervals(fun = ggdist::mode_qi, .width = the_width)
+  # group_by(.variable) %>%
+  # tally()
+summ
+cnt <- (length(df) - 1) * length(c("", "lower", "upper")) * length(the_width)
+stopifnot(nrow(summ) == cnt)
 ```
-
-test `gather_interval`
-
-```{r}
-# df <- modelr::sim2 %>%
-#   group_by(x) %>%
-#   gather_interval(value_var = y, fun = median_qi, width = c(2/3, 0.89))
-# # every line must be uniquely identified
-# stopifnot(any(!duplicated(paste(df$x, df$stat, df$.width))))
-# rm(df)
-```
-
 
 
 ### `inla` {-}
 
 The `INLA` has its own object and conventions. To enable comparisons with
-`rethinking` and `brms` several funcitons are used that can be found in the
+`rethinking` and `brms` some functions are used that can be found in the
 `eflINLA` package.
 
 ## 4E1 {-#prac4E1}
@@ -176,11 +193,9 @@ sim <- within(sim, {
   def <- defData(def, varname = "sigma", dist = "exponential", formula = 1)
   def <- defData(def, varname = "height", dist = "normal", formula = "mu", 
                variance = "sigma")
-  data <- genData(n = 5000, dtDefs = def) %>%
-    select(-id)
-  data <- as_draws(data)
+  data <- genData(n = 5000, dtDefs = def)
 })
-sim$intr <- quantile2(sim$data$height, probs = sim$probs)
+sim$intr <- quantile(sim$data$height, probs = sim$probs)
 # sim$intr
 ```
 
@@ -334,8 +349,7 @@ However this gives me an error message, so instead, beta is exponentiated in
 
 ```{r}
 sim <- list()
-sim$rng <- paste(round(range(data04M07$weight_c)), collapse = ";")
-sim$xrng
+sim$xrng <- paste(round(range(data04M07$weight_c)), collapse = ";")
 set.seed(20210810)
 sim <- within(sim, {
   def <- defData(varname = "x", dist = "uniform", formula = xrng)
@@ -344,9 +358,7 @@ sim <- within(sim, {
   def <- defData(def, varname = "sigma", dist = "exponential", formula = 1)
   def <- defData(def, varname = "mu", dist = "nonrandom", formula = "alpha + exp(beta) * x")
   def <- defData(def, varname = "height", formula = "mu", variance = "sigma")
-  data <- genData(n = 1000, dtDefs = def) %>%
-    select(-id) %>%
-    as_draws(data)
+  data <- genData(n = 1000, dtDefs = def)
 })
 # str(sim$data)
 ```
@@ -463,101 +475,58 @@ the correlation coefficient when *distant data points from the origin* are obser
 
 #### Posteriors {-}
 
-Get the samples from the posteriors of the 2 models (centered and natural scales)
+Get the samples from the posteriors of the 2 models (centered and natural scales).
 
 ```{r}
-samples <- list(n = 1000L, width = 0.50, fun = ggdist::median_qi)
+samples <- list(n = 100)
+samples$ctr <- extract.samples(m04M07ctr, n=samples$n) %>%
+  pivot_longer(cols = everything(), names_to = "var") %>%
+  mutate(model = "ctr")
 
-# get the samples from centered and natural scale models
-samples$ctr <- extract.samples(m04M07ctr, n = samples$n)
-samples$nat <- extract.samples(m04M07nat, n = samples$n)
-samples$data <- samples$ctr %>%
-  bind_rows(samples$nat) %>%
-  mutate(model = factor(
-    c(rep("center", nrow(samples$ctr)), rep("natural", nrow(samples$nat)))
-    )) %>%
-  pivot_longer(cols = c("a", "b", "sigma"), names_to = "vars")
+samples$nat <- extract.samples(m04M07nat, n=samples$n) %>%
+  pivot_longer(cols = everything(), names_to = "var") %>%
+  mutate(model = "nat")
 
-# compute the intervals
-samples$intervals <- samples$data %>%
-  select(model, vars, value) %>%
-  group_by(model, vars) %>%
-  gather_interval(value_var = value, fun = samples$fun, width = samples$width)
+samples$all <- samples$ctr %>%
+  bind_rows(samples$nat)
 
+# plot the variables by model
+ggplot(samples$all, aes(x = value, color = model)) +
+  # geom_density(aes(y = ..scaled..),
+  #              size = 1, alpha = 0.8) +
+  stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
+               color = "purple", alpha = 0.5) +
+  # scale_fill_paletteer_d("ggsci::default_nejm") +
+  scale_color_manual(values = c("ctr" = "turquoise4", "nat" = "violetred")) +
+  facet_grid(model ~ var, scales = "free") +
+  theme_ggdist() +
+  theme(legend.position = "none") +
+  labs(title = "Posterior comparisons by model")
 ```
 
-the function to plot the posteriors
+or it could also be done this way
 
 ```{r}
-# Function to create the plot of posterior with halfeye geom and
-# varying fill
-plot_post <- function(df, df1, x_var = "value", y_var = "model", 
-                     fill_var = "model", x1_var = "value", y1_var = "model",
-                     func, width = c(0.89), round = 0, text_size = 3,
-                     the_labs = NULL,
-                     clrs = list(color = "yellowgreen", 
-                                 fill = "ggsci::default_nejm",
-                                 title = "midnightblue")) {
-  ggplot(df, 
-         aes(x = .data[[x_var]], y = .data[[y_var]], fill = .data[[fill_var]])) +
-  stat_halfeye(point_interval = func, .width = width,
-               color = clrs$color) +
-  scale_fill_paletteer_d(clrs$fill) +
-  ggrepel::geom_text_repel(data = df1, 
-                           aes(label = c(round(.data[[x1_var]], round)), 
-                               y = .data[[y1_var]]),
-                           color = "black", size = text_size) +
-  ggthemes::theme_tufte() +
-  theme(legend.position = "none",
-        title = element_text(color = clrs$title),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank()) +
-    the_labs
-}
+# plot the variables by model
+samples$all %>% {
+ggplot(., aes(x = value, color = model)) +
+  geom_density(aes(y = ..scaled..), size = 1, alpha = 0.8) +
+  # stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
+  #              color = "purple", alpha = 0.5) +
+  # scale_fill_paletteer_d("ggsci::default_nejm") +
+  scale_color_manual(values = c("ctr" = "turquoise4", "nat" = "violetred")) +
+  facet_wrap(. ~ var, ncol = 1, scales = "free") +
+  theme_ggdist() +
+  theme(legend.position = "none") +
+  labs(title = "Posterior comparisons by model", x= NULL, y = NULL)
+} 
 ```
 
-
-
-```{r}
-p <- list()
-p$A <- plot_post(df = filter(samples$data, vars == "a"), 
-                df1 = filter(samples$intervals, vars == "a"), 
-                x_var = "value", y_var = "model", fill_var = "model", 
-                x1_var = "value", y1_var = "model",
-                fun = samples$fun, width = samples$width, round = 0, 
-                the_labs = labs(title = "Intercept", x = NULL, y = NULL)) +
-  theme(legend.position = "right")
-# p$A
-
-p$B <- plot_post(df = filter(samples$data, vars == "b"), 
-                df1 = filter(samples$intervals, vars == "b"), 
-                x_var = "value", y_var = "model", fill_var = "model", 
-                x1_var = "value", y1_var = "model",
-                fun = samples$fun, width = samples$width, round = 2, 
-                the_labs = labs(title = "b slope", x = NULL, y = NULL)) +
-  theme(legend.position = "right")
-# p$B
-
-
-p$sigma <- plot_post(df = filter(samples$data, vars == "sigma"), 
-                df1 = filter(samples$intervals, vars == "sigma"), 
-                x_var = "value", y_var = "model", fill_var = "model", 
-                x1_var = "value", y1_var = "model",
-                fun = samples$fun, width = samples$width, round = 1, 
-                the_labs = labs(title = "Sigma", x = NULL, y = NULL)) +
-  theme(legend.position = "right")
-# p$sigma
-
-
-p$A / (p$B | p$sigma) +
-  plot_annotation(title = "Posterior comparisons by model",
-                  theme = theme(title = element_text(color = "darkblue")))
-```
 
 Conclusion: The main difference is with respect to the intercept which is 
 different for uncentered and centered weight.  The difference is not only
-in the location but also in the scale.  The uncentered weight  is much
-more inaccurate as its variance is large compared to the centered weight.
+in the location but also in the scale.  The uncentered weight is less
+accurate as its variance is large compared to the centered weight.
 
 #### Predictions {-}
 
@@ -567,6 +536,7 @@ predicted heights with the models.
 The functions and variables used
 
 ```{r}
+stop("TODO")
 # get the interval from the quap object
 get_intervl <- function(df, x_pred, fun = ggdist::mean_qi, width = c(0.89)) {
   # must be exactly of length 1, do not use multiple intervals
