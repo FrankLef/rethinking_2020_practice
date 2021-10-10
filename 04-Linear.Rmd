@@ -330,7 +330,7 @@ population.
 
 ### Using `quap` {-}
 
-#### Centered scale {-}
+#### Fits {-}
 
 The fit using the centered, model m4.3 in textbook.
 
@@ -357,9 +357,6 @@ and the summary is
 precis(m04M07ctr)[, 1:2]
 class(m04M07ctr)
 ```
-
-
-#### Natural scale {-}
 
 The fit using the predictor on the natural scale
 
@@ -412,7 +409,7 @@ the correlation coefficient when *distant data points from the origin* are obser
 Get the samples from the posteriors of the 2 models (centered and natural scales).
 
 ```{r}
-samples <- list(n = 500, models = c("ctr", "nat"))
+samples <- list(n = 500)
 samples <- within(samples, {
   ctr <- tidy_draws(m04M07ctr, n = n)
   nat <- tidy_draws(m04M07nat, n = n)
@@ -421,7 +418,7 @@ samples <- within(samples, {
 # put samples together with an identifier for the model
 samples$all <- bind_rows(samples$ctr, samples$nat) %>%
   mutate(model = rep(c("ctr", "nat"), 
-                     each = c(nrow(samples$ctr), nrow(samples$nat))))
+                     times = c(nrow(samples$ctr), nrow(samples$nat))))
 # samples$all
 
 samples$stats <- samples$all %>%
@@ -441,7 +438,7 @@ and plot them by variable
 ```{r}
 clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
 ggplot(samples$lng, aes(x = .value, color = model)) +
-  geom_density(geom = "line", aes(y = ..scaled..), size = 1, alpha = 0.8) +
+  geom_density(aes(y = ..scaled..), size = 1, alpha = 0.8) +
   # stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
   #              color = "purple", alpha = 0.5) +
   geom_vline(samples$stats, mapping = aes(xintercept = .value, color = model),
@@ -505,7 +502,7 @@ ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
 
 ### Using `brm` {-}
 
-#### Centered scale {-}
+#### Fits {-}
 
 
 ```{r}
@@ -527,7 +524,7 @@ b04M07ctr <- readRDS(file = a_file)
 summary(b04M07ctr)
 ```
 
-#### Natural scale {-}
+
 
 ```{r}
 a_file <- here::here("fits", "b04M07nat.rds")
@@ -550,11 +547,13 @@ b04M07nat <- readRDS(file = a_file)
 summary(b04M07nat)
 ```
 
-and we extract the samples using `tidybayes` which gives the exact same
+#### Posteriors {-}
+
+We extract the samples using `tidybayes` which gives the exact same
 commands as for `rethinking::quap` above.
 
 ```{r}
-samples <- list(n = 500, models = c("ctr", "nat"))
+samples <- list(n = 500)
 samples <- within(samples, {
   ctr <- tidy_draws(b04M07ctr, n = n)
   nat <- tidy_draws(b04M07nat, n = n)
@@ -563,7 +562,7 @@ samples <- within(samples, {
 # put samples together with an identifier for the model
 samples$all <- bind_rows(samples$ctr, samples$nat) %>%
   mutate(model = rep(c("ctr", "nat"), 
-                     each = c(nrow(samples$ctr), nrow(samples$nat))))
+                     times = c(nrow(samples$ctr), nrow(samples$nat))))
 samples$all
 
 samples$stats <- samples$all %>%
@@ -578,23 +577,6 @@ samples$lng <- samples$all %>%
 # samples$lng
 ```
 
-
-which gives the following correlations which are the same as with `quap` above
-
-```{r}
-samples$ctr %>%
-  select(b_Intercept, b_weight_c, sigma) %>%
-  cor() %>%
-  round(digits=2)
-```
-
-
-```{r}
-samples$nat %>%
-  select(b_Intercept, b_weight, sigma) %>%
-  cor() %>%
-  round(digits=2)
-```
 
 #### Predictions {-}
 
@@ -620,15 +602,11 @@ nat$newdata <- data.frame(
 nat$predict <- predicted_draws(b04M07nat, newdata = nat$newdata, ndraws = 500)
 nat$intr <- median_qi(nat$predict)
 
-
-
 p <- list()
 p$clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
 p$df <- bind_rows(ctr$intr, nat$intr) %>%
   mutate(model = rep(c("ctr", "nat"), 
                      times = c(nrow(ctr$intr), nrow(nat$intr))))
-  
-p$df 
 
 ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
                  color = model)) +
@@ -643,8 +621,12 @@ ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
 
 ### Using `inla` {-}
 
+#### Fits {-}
+
 The fit with `inla` will only be done for the data with the centered predictor
-$weight_c$.
+$weight_c$ to demonstrate the same type of `tidybayes` functions.  The functions
+follows the `tidybayes` paradigm and are identified with the suffix `inla` as
+they are experimental.  They are yet to be implemented as method.
 
 Please see [details](#app-inla-04M07) for more details on the arguments of
 the function `inla`.
@@ -691,158 +673,46 @@ i04M07ctr$summary.hyperpar
 ```
 
 
+#### Posteriors {-}
+
+Pretty much the same kind of command as for `quap` and `brms` above. Except
+these are functions, not method, as they are experimental.
+
 ```{r}
-stop("TODO: draw sample and do summary")
+# samples <- list(n = 500)
+# samples$data <- eflINLA::tidy_draws_inla(i04M07ctr, n = samples$n)
 ```
 
+with the summary
+
+```{r}
+# samples$data %>%
+#   summarise_draws()
+```
+
+which are about the same results as with `brm` and `quap`.
 
 
 #### Marginals {-}
+
+Marginals are also available in `INLA`.  They are actually one of the important
+aspect of `INLA`.  The result are most of the time very similar to the posterior.
+
+See the example at the end of section 2.7 of chapter 2 in @gomez2020.
 
 In order to compare to `brms` we need to convert the marginals as follows
 * Convert internal scale (log) to natural scale
 * Convert precision (`prec`) to standard deviation (`sd`)
 
-When doing summaries later, we will need to
-use the inversed transformed `internal.marginal.hyperpar` for the precision and
-`marginals.hyperpar` for the other hyperparameters. The `marginals.hyperpar` for
-precision is not used for summaries and plotting.
+This process is automated by `eflINLA::marginal_draws_inla()` which returns
+the posterior as a `draws_rvars` object from the `posterior` that can be easily 
+converted to pretty any format, e.g. by using `posterior::as_draws_df`.
 
-This process is automated by `eflINLA::posterior_summary()`
-
-```{r}
-stop("CHECK")
-summ <- list()
-summ$inla <- eflINLA::posterior_summary(i04M07ctr)
-  # tibble::rownames_to_column(var = "var")
-summ$inla
-# keep the summary for later use, when comparing to quap and brm below
-i04M07summ <- summ$inla
-```
-
-and we compare `inla` vs `brm`
 
 
 ```{r}
-# get the brm posterior summary
-summ$brm <- brms::posterior_summary(b04M07ctr) %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column(var = "var") %>%
-  filter(var != "lp__") %>%
-  select(var, Estimate, Est.Error)
-# summ$brm
-
-# compare inla and brm
-summ$compare <- summ$inla %>%
-  select(mean, sd) %>%
-  bind_cols(summ$brm) %>%
-  relocate(var)
-summ$compare
-```
-and we can observe that the 2 estimates are very similar.
-
-#### Posteriors {-}
-
-See section 2.7 in @gomez2020 which explains well the posterior marginals. We
-extract these marginals using `eflINLA::posterior_marginals`. You can see the
-details of that function by selecting it and pressing `F2`.
-
-
-```{r}
-samples <- list()
-samples$inla <- eflINLA::posterior_marginals(i04M07ctr)
-samples$inla
-# sample the inla's posterior distributions
-# samples <- list(n = 2000L,
-#                 fmargs =  i04M07ctr$marginals.fixed,
-#                 hmargs = i04M07hmarg # list of hyperparameter marginals
-#                 )
-
-# samples <- list(n = 2000L,
-#                 fmargs =  i04M07ctr$marginals.fixed,
-#                 hmargs = eflINLA::transform_hyper_marginal(i04M07ctr) # list of hyperparameter marginals
-#                 )
-
-# sample the fixed parameters from the list of fixed marginals
-samples$fixed <- purrr::map_dfc(
-  .x = samples$fmargs,
-  .f = function(d) {
-    sample(x = d[, "x"],
-           size = samples$n,
-           prob = d[, "y"],
-           replace = TRUE)
-  }
-)
-
-# sample the hyperparameters
-samples$hyper <- purrr::map_df(
-  .x = samples$hmargs,
-  .f = function(d) {
-    sample(x = d[, "x"],
-           size = samples$n,
-           prob = d[, "y"],
-           replace = TRUE)
-  }
-)
-
-# put all posteriors together in long format
-samples$inla <- bind_cols(samples$fixed, samples$hyper) %>%
-  rename(b_Intercept = `(Intercept)`,
-         b_weight_c = `Beta for weight_c`,
-         sigma = `sd for the Gaussian observations`) %>%
-  pivot_longer(cols = everything(), names_to = ".variable",
-               values_to = ".value") %>%
-  mutate(fit = "inla")
-# samples$inla
-
-# check results
-with(samples, stopifnot(all.equal(dim(inla), c(n * 3, 3))))
-```
-
-and, as recommended section 2.7, p.37, of @gomez2020 we will compare
-the posteriors to the `brm` posteriors which are obtained as follows
-
-```{r}
-get_variables(b04M07ctr)
-```
-Get the posterior from `brm` in long format with `gather_draws`
-
-```{r}
-samples$brm <- gather_draws(b04M07ctr, b_Intercept, b_weight_c, sigma) %>%
-  select(.variable, .value) %>%
-  mutate(fit = "brm")
-# str(samples$brm)
-```
-
-and plot the posterior densities and modes
-
-```{r}
-p <- list()
-# all data together
-p$df <- rbind(samples$inla, samples$brm) %>%
-  mutate(.variable = factor(.variable, 
-                            levels = c("b_Intercept", "b_weight_c", "sigma"),
-                            ordered = TRUE))
-# the mode by variable and fit
-p$mode <- p$df %>%
-  group_by(.variable, fit) %>%
-  summarize(mode = ggdist::Mode(.value))
-# pdf_mode
-
-ggplot(data = p$df, aes(x = .value, color = fit)) +
-  geom_density(aes(y = ..scaled..)) +
-  geom_vline(data = p$mode, aes(xintercept = mode, color = fit),
-             linetype = "dashed") +
-  scale_color_manual(values = c("brm" = "mediumvioletred", 
-                                "inla" = "mediumseagreen")) +
-  theme_ggdist() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "bottom",
-        strip.background = element_rect(fill = "moccasin")) +
-  labs(title = "brm vs inla posterior densities with mode (vertical line)",
-       subtitle = "4M7",
-       x = NULL, y = NULL, color = NULL) + 
-  facet_wrap(. ~ .variable, scales = "free")
+margs <- eflINLA::marginal_draws_inla(i04M07ctr)
+margs %>% summarize_draws()
 ```
 
 
@@ -857,6 +727,7 @@ on the fitted values.
 
 
 ```{r}
+stop("TODO: build linpred_draws_inla()")
 fitted <- list()
 # the data to fit
 fitted$newdata <- data.frame(
