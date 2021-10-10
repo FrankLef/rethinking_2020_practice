@@ -2,12 +2,14 @@
 library(rethinking)
 library(brms)
 library(INLA)
-library(eflINLA)
-library(eflRethinking)
+library(eflStats)  # FL tools for statistical analysis
+library(eflINLA)  # FL helpers with INLA
+library(eflRethinking)  # fl tools to works with rethinking
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(modelr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
+library(tidybayes.rethinking, quietly = TRUE)
 library(posterior, quietly = TRUE)
 library(simstudy, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -22,84 +24,14 @@ library(splines)
 ## Notes {-}
 
 
-## Custom functions {-}
+### `eflINLA` {-}
 
+The `INLA` has its own object and conventions. The `eflINLA` is a prject
+to develop functions mimicking `tidybayes` with `inla` objects.  These are 
+**not S3 methods** and they will be identified with the suffix `inla`, for
+example the `tidy_draws` equivalent is `tidy_draws_inla`.
 
-### `gather_inters` {-}
-
-```{r}
-# Pivot a dataframe from ggdist::point_interval to longer format, excluding
-# grouping variables. Its uses tidybayes::gather_variables()
-gather_intervals <- function(df, incl = c(".width", ".point", ".interval"),
-                             fun=ggdist::median_qi, ...) {
-  # This function is largely inspired by tidybayes::gather_variables()
-  # for the trick on getting grouped variables.
-  # NOTE: tidybayes::gather_variables uses group_by_at which is superseded by
-  #       group(by(across(...)))
-  
-  out <- tryCatch({
-    fun(df, ...)
-    },
-    error = function(err) {
-      msg <- sprintf("Error with %s. Did you give a character variable as input?",
-                     deparse1(substitute(fun)))
-      msg <- paste(errorCondition(err), msg)
-      stop(msg)
-    })
-  
-  # the grouping variables see code of tidybayes::gather_variables()
-  groups_ = group_vars(df)
-  all_groups <- incl
-  if (length(groups_) != 0) all_groups <- c(groups_, all_groups)
-  
-  out %>%
-    group_by(across(all_groups)) %>%
-    tidybayes::gather_variables()
-}
-```
-
-test `gather_intervals`
-
-```{r}
-the_width <- c(0.25, 0.5, 0.75)
-df <- rbind(
-  data.frame(model = "alpha", a = runif(5), b = rnorm(5), c = rexp(5)),
-  data.frame(model = "beta", a = runif(5), b = rnorm(5), c = rexp(5))
-  )
-df
-
-# summ <- df %>%
-#   group_by(model) %>%
-#   ggdist::mode_qi(.width = the_width)
-# summ
-
-summ <- df %>% 
-  group_by(model) %>%
-  gather_intervals(fun = ggdist::mode_qi, .width = the_width)
-  # group_by(.variable) %>%
-  # tally()
-summ
-cnt <- length(unique(df$model)) * (length(df) - 1) *
-  length(c("", "lower", "upper")) * length(the_width)
-stopifnot(nrow(summ) == cnt)
-
-
-summ <- df %>% 
-  select(-model) %>%
-  gather_intervals(fun = ggdist::mode_qi, .width = the_width)
-  # group_by(.variable) %>%
-  # tally()
-summ
-cnt <- (length(df) - 1) * length(c("", "lower", "upper")) * length(the_width)
-stopifnot(nrow(summ) == cnt)
-```
-
-
-### `inla` {-}
-
-The `INLA` has its own object and conventions. To enable comparisons with
-`rethinking` and `brms` some functions are used that can be found in the
-`eflINLA` package.
+You can see the code behind each function by selecting it and pressing `F2`.
 
 ## 4E1 {-#prac4E1}
 
@@ -361,6 +293,10 @@ sim <- within(sim, {
   data <- genData(n = 1000, dtDefs = def)
 })
 # str(sim$data)
+sim$stats <- data.frame(
+  model = c("prior", "observed"),
+  mode = c(ggdist::Mode(sim$data$height), ggdist::Mode(data04M07$height))
+)
 ```
 
 
@@ -370,9 +306,7 @@ ggplot(sim$data) +
                size = 1, alpha = 0.8) +
   geom_density(data = data04M07, aes(x = height, y = ..scaled.., color = "observed"),
                size = 1, alpha = 0.8) +
-  geom_vline(xintercept = c(ggdist::Mode(sim$data$height),
-                            ggdist::Mode(data04M07$height)),
-             color = c("mediumvioletred", "mediumseagreen"),
+  geom_vline(data = sim$stats, mapping = aes(xintercept = mode, color = model),
              linetype = "dashed") +
   scale_color_manual(values = c("prior" = "mediumvioletred", 
                                 "observed" = "mediumseagreen")) +
@@ -478,48 +412,47 @@ the correlation coefficient when *distant data points from the origin* are obser
 Get the samples from the posteriors of the 2 models (centered and natural scales).
 
 ```{r}
-samples <- list(n = 100)
-samples$ctr <- extract.samples(m04M07ctr, n=samples$n) %>%
-  pivot_longer(cols = everything(), names_to = "var") %>%
-  mutate(model = "ctr")
+samples <- list(n = 500, models = c("ctr", "nat"))
+samples <- within(samples, {
+  ctr <- tidy_draws(m04M07ctr, n = n)
+  nat <- tidy_draws(m04M07nat, n = n)
+})
 
-samples$nat <- extract.samples(m04M07nat, n=samples$n) %>%
-  pivot_longer(cols = everything(), names_to = "var") %>%
-  mutate(model = "nat")
+# put samples together with an identifier for the model
+samples$all <- bind_rows(samples$ctr, samples$nat) %>%
+  mutate(model = rep(c("ctr", "nat"), 
+                     each = c(nrow(samples$ctr), nrow(samples$nat))))
+# samples$all
 
-samples$all <- samples$ctr %>%
-  bind_rows(samples$nat)
+samples$stats <- samples$all %>%
+  group_by(model) %>%
+  eflStats::gather_intervals() %>%
+  filter(!grepl(pattern = "lower$|upper$", x = .variable))
 
-# plot the variables by model
-ggplot(samples$all, aes(x = value, color = model)) +
-  # geom_density(aes(y = ..scaled..),
-  #              size = 1, alpha = 0.8) +
-  stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
-               color = "purple", alpha = 0.5) +
-  # scale_fill_paletteer_d("ggsci::default_nejm") +
-  scale_color_manual(values = c("ctr" = "turquoise4", "nat" = "violetred")) +
-  facet_grid(model ~ var, scales = "free") +
-  theme_ggdist() +
-  theme(legend.position = "none") +
-  labs(title = "Posterior comparisons by model")
+# long format used for plotting
+samples$lng <- samples$all %>%
+  group_by(model) %>%
+  tidybayes::gather_variables()
+# samples$lng
 ```
 
-or it could also be done this way
+and plot them by variable
 
 ```{r}
-# plot the variables by model
-samples$all %>% {
-ggplot(., aes(x = value, color = model)) +
-  geom_density(aes(y = ..scaled..), size = 1, alpha = 0.8) +
+clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
+ggplot(samples$lng, aes(x = .value, color = model)) +
+  geom_density(geom = "line", aes(y = ..scaled..), size = 1, alpha = 0.8) +
   # stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
   #              color = "purple", alpha = 0.5) +
-  # scale_fill_paletteer_d("ggsci::default_nejm") +
-  scale_color_manual(values = c("ctr" = "turquoise4", "nat" = "violetred")) +
-  facet_wrap(. ~ var, ncol = 1, scales = "free") +
+  geom_vline(samples$stats, mapping = aes(xintercept = .value, color = model),
+             linetype = "dashed", size = 0.5) +
+  scale_color_manual(values = clrs) +
+  # scale_fill_manual(values = clrs) +
+  facet_wrap(. ~ .variable, scales = "free", ncol = 1) +
   theme_ggdist() +
-  theme(legend.position = "none") +
-  labs(title = "Posterior comparisons by model", x= NULL, y = NULL)
-} 
+  theme(legend.position = "right") +
+  labs(title = "Posterior comparisons by model",
+       subtitle = sprintf("sample size = %d", samples$n))
 ```
 
 
@@ -530,133 +463,44 @@ accurate as its variance is large compared to the centered weight.
 
 #### Predictions {-}
 
-First we extract the simulated data for the mu values (the fit) and for the 
-predicted heights with the models.
-
-The functions and variables used
-
 ```{r}
-stop("TODO")
-# get the interval from the quap object
-get_intervl <- function(df, x_pred, fun = ggdist::mean_qi, width = c(0.89)) {
-  # must be exactly of length 1, do not use multiple intervals
-  stopifnot(length(width) == 1)
+# the predictions form the centered model
+ctr <- list()
+ctr$newdata <- data.frame(
+  weight_c = seq_range(data04M07$weight_c, n = 30L))
+ctr$predict <- predicted_draws(m04M07ctr, newdata = ctr$newdata, ndraws = 500)
+
+ctr$intr <- median_qi(ctr$predict) %>%
+  # put weight on natural scale to enable comparisons
+  mutate(weight_c = weight_c + mean(data04M07$weight)) %>%
+  rename(weight = weight_c)
+
+# the predictions form the natural-scaled model
+nat <- list()
+nat$newdata <- data.frame(
+  weight = seq_range(data04M07$weight, n = 30L))
+nat$predict <- predicted_draws(m04M07nat, newdata = nat$newdata, ndraws = 500)
+nat$intr <- median_qi(nat$predict)
+
+p <- list()
+p$clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
+p$df <- bind_rows(ctr$intr, nat$intr) %>%
+  mutate(model = rep(c("ctr", "nat"), 
+                     times = c(nrow(ctr$intr), nrow(nat$intr))))
   
-  df %>%
-    as.data.frame() %>%
-    purrr::map_dfr(.f = fun, .width = width) %>%
-    mutate(x = x_pred) %>%
-    relocate(x)
-}
+# p$df
 
-# plot the predictions and the fit against the raw data
-plot_fitpred <- function(df, df_fitted, df_predict, x_var, y_var, color_var,
-                     colrs = list(
-                       pred_fill = "lightgoldenrod1",
-                       fit_fill = "palegreen1",
-                       fit_color = "palegreen4",
-                       raw_pal = "scico::lapaz"),
-                     the_labs) {
-  ggplot(df, aes(x = .data[[x_var]], 
-                                      y = .data[[y_var]], 
-                                      color = .data[[color_var]])) +
-  geom_ribbon(data = df_predict,
-              aes(x = x, ymin = ymin, ymax = ymax),
-              inherit.aes = FALSE, fill = colrs$pred_fill) +
-  geom_lineribbon(data = df_fitted,
-                  aes(x = x, y = y, ymin = ymin, ymax = ymax),
-                  inherit.aes = FALSE, fill = colrs$fit_fill,
-                  color = colrs$fit_color) +
-  geom_point() +
-  scale_color_paletteer_c(colrs$raw_pal) +
-  theme_ggdist() +
-  theme(legend.position = "none",
-        title = element_text(size = 10)) +
-  the_labs
-}
+ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
+                 color = model)) +
+  geom_pointinterval(position = position_dodge(width = 0.5),
+                     fatten_point = 2, size = 1) +
+  scale_color_manual(values = p$clrs) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(title = "Centered vs Natural Predictions",
+       subtitle = "4M7 using quap")
 ```
 
-The constants used to extract the samples (for fitted values and predictions)
-
-```{r}
-samples <- list(
-  n = 1000L,  # sample size
-  width = 2/3,  # default width used
-  fun = ggdist::mean_qi  # function used for intervals
-  )
-```
-
-
-The model on the centered scale
-
-```{r}
-samples$obj <- m04M07ctr  # the fit object
-samples$weight_c <- seq_range(P04M07$data$weight_c, n = 30L)
-
-# the posterior predictions with intervals
-samples$preds <- with(samples,{
-  out <- rethinking::sim(obj, data = list(weight_c = weight_c), n = n)
-  get_intervl(out, x_pred = weight_c, fun = fun, width = width)
-})
-
-# the fitted values with intervals
-samples$fitted <- with(samples, {
-  out <- rethinking::link(obj, data = list(weight_c = weight_c), n = n)
-  get_intervl(out, x_pred = weight_c, fun = fun, width = width)
-})
-
-# plot the centered model
-p_ctr <- plot_fitpred(df = P04M07$data, 
-                      df_fitted = samples$fitted, 
-                      df_predict = samples$preds,
-                      x_var = "weight_c", y_var = "height", color_var = "age",
-                      the_labs = labs(title = "Model on centered scale",
-                                     subtitle = sprintf("%.0f%% interval", 100 * samples$width))) +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
-                     labels = function(x) round(x + mean(P04M07$data$weight), 0))
-# p_ctr
-```
-
-The model on the natural scale
-
-```{r}
-samples$obj <- m04M07nat
-samples$weight <- seq_range(P04M07$data$weight, n = 30L)
-
-# the posterior predictions with intervals
-samples$preds <- with(samples,{
-  out <- rethinking::sim(obj, data = list(weight = weight), n = n)
-  get_intervl(out, x_pred = weight, fun = fun, width = width)
-})
-
-# the fitted values with intervals
-samples$fitted <- with(samples, {
-  out <- rethinking::link(obj, data = list(weight = weight), n = n)
-  get_intervl(out, x_pred = weight, fun = fun, width = width)
-})
-
-
-# plot natural-scale model
-p_nat <- plot_fitpred(df =  P04M07$data, 
-                     df_fitted = samples$fitted, df_predict = samples$preds,
-                     x_var = "weight", y_var = "height", color_var = "age",
-                     colrs = list(
-                       pred_fill = "palegreen1",
-                       fit_fill = "lightgoldenrod1",
-                       fit_color = "lightgoldenrod4",
-                       raw_pal = "scico::lapaz"),
-                     the_labs = labs(title = "Model on natural scale",
-                                     subtitle = sprintf("%.0f%% interval", 100 * samples$width))) +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7))
-# p_nat
-```
-
-with the 2 plots
-
-```{r}
-p_ctr + p_nat +
-  plot_annotation(title = "Both model give the same predictions.")
-```
 
 
 ### Using `brm` {-}
@@ -701,95 +545,100 @@ b04M07nat <- readRDS(file = a_file)
 ```
 
 
+
 ```{r}
 summary(b04M07nat)
 ```
 
-and to calculate the correlations and visualize we sample the posterior
-
+and we extract the samples using `tidybayes` which gives the exact same
+commands as for `rethinking::quap` above.
 
 ```{r}
-b04M07ctr_post <- brms::posterior_samples(b04M07ctr)
-b04M07nat_post <- brms::posterior_samples(b04M07nat)
-?as_draws
+samples <- list(n = 500, models = c("ctr", "nat"))
+samples <- within(samples, {
+  ctr <- tidy_draws(b04M07ctr, n = n)
+  nat <- tidy_draws(b04M07nat, n = n)
+})
+
+# put samples together with an identifier for the model
+samples$all <- bind_rows(samples$ctr, samples$nat) %>%
+  mutate(model = rep(c("ctr", "nat"), 
+                     each = c(nrow(samples$ctr), nrow(samples$nat))))
+samples$all
+
+samples$stats <- samples$all %>%
+  group_by(model) %>%
+  eflStats::gather_intervals() %>%
+  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+
+# long format used for plotting
+samples$lng <- samples$all %>%
+  group_by(model) %>%
+  tidybayes::gather_variables()
+# samples$lng
 ```
+
 
 which gives the following correlations which are the same as with `quap` above
 
 ```{r}
-b04M07ctr_post %>%
-  select(-lp__) %>%
+samples$ctr %>%
+  select(b_Intercept, b_weight_c, sigma) %>%
   cor() %>%
   round(digits=2)
 ```
 
 
 ```{r}
-b04M07nat_post %>%
-  select(-lp__) %>%
+samples$nat %>%
+  select(b_Intercept, b_weight, sigma) %>%
   cor() %>%
   round(digits=2)
 ```
 
 #### Predictions {-}
 
-and we plot the posterior predictions which is easier with `brms` because
-we can use the `ggdist` and `tidybayes` packages.
+And, again, we can use the exact same command using `tidybayes` with `brms` as
+we used with `rethinking`.
 
 ```{r}
-samples <- list(
-  weight_c = seq_range(x = P04M07$data$weight_c, n = 30L),
-  weight = seq_range(x = P04M07$data$weight, n = 30L),
-  n = 1000L,  # sample size
-  width = c(0.5, 0.75, 0.95),  # default width used
-  fun = ggdist::mean_qi  # function used for intervals
-  )
-```
+# the predictions form the centered model
+ctr <- list()
+ctr$newdata <- data.frame(
+  weight_c = seq_range(data04M07$weight_c, n = 30L))
+ctr$predict <- predicted_draws(b04M07ctr, newdata = ctr$newdata, ndraws = 500)
+
+ctr$intr <- median_qi(ctr$predict) %>%
+  # put weight on natural scale to enable comparisons
+  mutate(weight_c = weight_c + mean(data04M07$weight)) %>%
+  rename(weight = weight_c)
+
+# the predictions form the natural-scaled model
+nat <- list()
+nat$newdata <- data.frame(
+  weight = seq_range(data04M07$weight, n = 30L))
+nat$predict <- predicted_draws(b04M07nat, newdata = nat$newdata, ndraws = 500)
+nat$intr <- median_qi(nat$predict)
 
 
-```{r}
+
 p <- list()
-p$df <- data.frame(weight_c = samples$weight_c) %>%
-  tidybayes::add_predicted_draws(object = b04M07ctr, ndraws = samples$n)
+p$clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
+p$df <- bind_rows(ctr$intr, nat$intr) %>%
+  mutate(model = rep(c("ctr", "nat"), 
+                     times = c(nrow(ctr$intr), nrow(nat$intr))))
+  
+p$df 
 
-p$ctr <- ggplot(P04M07$data, aes(x = weight_c, y = height, color = age)) +
-  stat_lineribbon(p$df, mapping = aes(x = weight_c, y = .prediction), 
-                  .width = samples$width, inherit.aes = FALSE,
-                  show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
-                     labels = function(x) {round(x + mean(P04M07$data$weight), 1)}) +
-  scale_fill_paletteer_d("ggsci::deep_purple_material") +
-  scale_color_paletteer_c("scico::lapaz") +
-  theme_ggdist() +
-  theme(title = element_text(color = "midnightblue")) +
-  labs(title = "Predictions with model on centered scale",
-       x = "centered weight + mean(weight)", y = "height")
-# p$ctr
-
-# this plot is used later when comparing to inla
-b04M07ctr_pred_plot <- p$ctr
-
-
-p$df <- data.frame(weight = samples$weight) %>%
-  tidybayes::add_predicted_draws(object = b04M07nat, ndraws = samples$n)
-p$nat <- ggplot(P04M07$data, aes(x = weight, y = height, color = age)) +
-  stat_lineribbon(p$df, mapping = aes(x = weight, y = .prediction), 
-                  .width = samples$width, inherit.aes = FALSE,
-                  show.legend = FALSE) +
-  geom_point(show.legend = FALSE) +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
-  scale_fill_paletteer_d("ggsci::deep_orange_material") +
-  scale_color_paletteer_c("scico::lapaz") +
-  theme_ggdist() +
-  theme(title = element_text(color = "midnightblue")) +
-  labs(title = "Predictions with model on natural scale",
-       x = "weight", y = "height")
-# p$nat
-
-
-p$ctr / p$nat +
-  plot_annotation(title = "Comparing 2 models (same results)", subtitle = "04M07")
+ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
+                 color = model)) +
+  geom_pointinterval(position = position_dodge(width = 0.5),
+                     fatten_point = 2, size = 1) +
+  scale_color_manual(values = p$clrs) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(title = "Centered vs Natural Predictions",
+       subtitle = "4M7 using brms")
 ```
 
 ### Using `inla` {-}
@@ -810,7 +659,7 @@ i04M07ctr_args <- list(
     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
   control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
   quantiles = c(0.025, 0.5, 0.975),
-  data = P04M07$data
+  data = data04M07
   )
 ```
 
@@ -827,22 +676,6 @@ i04M07ctr <- readRDS(file = a_file)
 ```
 
 
-```{r}
-# stop("Here: remove when not used anymore")
-# TEMP
-# str(i04M07ctr$misc$theta.tags)
-# i04M07ctr$misc$configs$contents$tag
-# names(i04M07ctr$misc)
-# INLA::inla.posterior.sample(n = 1, result = i04M07ctr,
-#                             selection = list("Predictor" = 1))
-# INLA::inla.show.hyperspec(i04M07ctr)
-# i04M07ctr$nhyper
-# i04M07ctr$all.hyper$random
-# i04M07ctr$names.fixed
-# names(i04M07ctr$marginals.hyperpar)
-# str(i04M07ctr$.args$data)
-```
-
 
 which gives the summary for fixed parameters
 
@@ -856,6 +689,12 @@ and this case.
 ```{r}
 i04M07ctr$summary.hyperpar
 ```
+
+
+```{r}
+stop("TODO: draw sample and do summary")
+```
+
 
 
 #### Marginals {-}
