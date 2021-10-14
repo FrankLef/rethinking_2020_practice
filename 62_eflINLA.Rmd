@@ -37,24 +37,133 @@ rm(Howell1)
 # skimr::skim(data04M07)
 ```
 
-## Posterior draws {#eflINLA-posterior}
+```{r}
+# the model from practice 4M7 using quap
+a_file <- here::here("fits", "m04M07ctr.rds")
+m04M07ctr <- readRDS(file = a_file)
+# the model from practice 4M7 using inla
+a_file <- here::here("fits", "i04M07ctr.rds")
+i04M07ctr <- readRDS(file = a_file)
+```
 
-There are at least 2 ways to extract the posterior distributions from an `inla`
-object:
-1. From the marginal distribution found in `marginals.fixed` and `marginals.hyperpar`
-of an `inla` object or
-2. using the function `INLA::inla.posterior.sample`.
 
-To distinguish between the 2, `eflINLA` has 2 functions
 
-1. `draw_marginals`: Draw samples using the `marginals.*` of an `inla` object.
-2. `draw_posterior`: Draw samples using `INLA::INLA::inla.posterior.sample()`.
+## Introduction {-#eflINLA-intro}
 
-Both of these functions return a `draw_rvars` object which can then be used 
-with the `posterior package`.
+`eflINLA` has the following functions which follows the `tidybayes` paradigm
+as close as possible. There is 2 groups of functions as a result:
+
+* Marginals: Use the *marginals.x* properties of the `inla` object, e.g.
+`x$marginals.fixed`. They give the **marginal** distributions.
+* Posterior: Extract the relevant data from the list of posterior samples
+obtained by the `INLA::inla.posterior.sample()` function of `INLA`.
+
+```{r echo=FALSE}
+data.frame(
+  "type" = c("samples", "linear predictor (fitted)", "expected predictor", "prediction"),
+  "marginal" = c("tidy_marg_draws_inla", "linpred_marg_draws_inla", "epred_marg_draws_inla", "predict_marg_draws_inla"),
+  "posterior" = c("tidy_draws_inla", "linpred_draws_inla", "epred_draws_inla", "predict_draws_inla")
+)
+```
+
+
+All of these functions return a `draw_rvars` object which can then be used 
+with the wonderful posterior package, see @R-posterior.
 
 Note that, technically, a marginal distribution such as `marginals.fixed` is *not* a posterior
 distribution.  However, in the case of `INLA` the 2 are extremely close. This is
 possible by the `INLA` assumption that the model is part of the class of 
 *latent Gaussian Markov random field* (section 1.6, p. 4 of @gomez2020).
+
+See also section 2.7 of @gomez2020 on an example using the posterior sample.
+
+Also, see chapter 4 of @moraga2019. In particular, the section 4.4.3 shows 
+how to use the different marginals. It indicates that, with `INLA`, 
+
+1. *marginal.linear.predictor* represents the posterior marginals of the 
+linear predictors.
+2. *marginals.fitted.values* represents the *fitted
+values obtained by transforming the linear predictors by the inverse of the
+link function*.
+
+The terms *fitted* can be really confusing, hence the use of the `tidyverse`
+naming convention which addresses this confusion problem.
+
+
+## Marginal draws {-#eflINLA-marg}
+
+### Sample posterior: `tidy_marg_draws_inla`
+
+We get can a sample using the marginal probabilities
+
+```{r}
+samples <- tidy_marg_draws_inla(i04M07ctr, n = 100)
+samples
+```
+
+### Linear predictors: `linpred_marg_draws_inla`
+
+We predict linear predictors by creating a new data. With `INLA` the original
+data will be included with the new data set to `NA`.  A function called
+`augment_inla` in the `eflINLA` has been created to simplify the result.  See
+more details in the documentation of `eflINLA::augment_inla`.
+
+```{r}
+newdata <- data.frame(
+  height = NA_real_,
+  weight_c = modelr::seq_range(i04M07ctr$.args$data$weight_c, n = 10))
+i04M07ctr_aug <- eflINLA::augment_inla(i04M07ctr, newdata = newdata)
+# str(i04M07ctr_aug)
+```
+
+which allow us to predict with a syntx that is very close to `tidyvayes`
+
+```{r}
+preds <- linpred_marg_draws_inla(i04M07ctr_aug$inla, i04M07ctr_aug$new_pos,
+                                 n = 100)
+preds
+```
+
+If one wishes to use the existing data without actual newdata, then the original
+`inla` object can be used as follows
+
+```{r}
+preds <- linpred_marg_draws_inla(i04M07ctr, n = 50)
+preds
+```
+
+
+### Fitted predictors: `epred_marg_draws_inla`
+
+For fitted predictors, the exact same process is used as for linear predictors
+just above.
+
+
+```{r}
+preds <- epred_marg_draws_inla(i04M07ctr_aug$inla, i04M07ctr_aug$new_pos,
+                                 n = 100)
+preds
+```
+
+### Posterior predictions: `linpred_draws_inla`
+
+The posterior predictions can be obtained using the `INLA::inla.posterior.sample()`
+function as described in section 2.7 of @gomez2020. However this will only
+gives linear predictors. Therefore we must extract the standard deviation
+for each fitted predictor and simulate using the standard deviation for each
+predictor.
+
+This process is done by the `eflINLA::linpred_draws_inla` function.
+
+See section 3.3 in @wang2018.
+
+> **Warnings**: This is a work in progress. I think the predictors from
+`INLA::inla.posterior.sample` are linear, we should use fitted predictors.
+Also, please obtain better references.
+
+```{r}
+preds <- linpred_draws_inla(i04M07ctr, n = 100)
+preds
+```
+
 

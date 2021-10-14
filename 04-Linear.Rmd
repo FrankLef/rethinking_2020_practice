@@ -673,25 +673,6 @@ i04M07ctr$summary.hyperpar
 ```
 
 
-#### Posteriors {-}
-
-Pretty much the same kind of command as for `quap` and `brms` above. Except
-these are functions, not method, as they are experimental.
-
-```{r}
-# samples <- list(n = 500)
-# samples$data <- eflINLA::tidy_draws_inla(i04M07ctr, n = samples$n)
-```
-
-with the summary
-
-```{r}
-# samples$data %>%
-#   summarise_draws()
-```
-
-which are about the same results as with `brm` and `quap`.
-
 
 #### Marginals {-}
 
@@ -711,7 +692,8 @@ converted to pretty any format, e.g. by using `posterior::as_draws_df`.
 
 
 ```{r}
-margs <- eflINLA::marginal_draws_inla(i04M07ctr)
+stop("TODO: Use tidy_marg_draws_inla")
+margs <- eflINLA::tidy_marg_draws_inla(i04M07ctr)
 margs %>% summarize_draws()
 ```
 
