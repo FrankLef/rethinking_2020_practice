@@ -271,6 +271,21 @@ height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \end{align*}
 $$
 
+### Fitting strategies {-}
+
+This practice is used to illustrate 3 different methods that can be used to
+fit the model to the data.  They are from the package `rethinking` (of course),
+the very well-known package `brms` that is used in @kurtz2020a and the
+package `INLA` which state of the art and is explained, for example, by
+@gomez2020 and @wang2018.
+
+The package `tidybayes` is used to harmonize the different commands and 
+demonstrate that the process is the same. Since there is no tidybayes command
+for `INLA`, similar functions are coded in the `eflINLA` package.
+
+The package `posterior` is used to harmonize the results from these 3 types of 
+fit.
+
 ### Priors {-#prac4M7-Priors}
 
 We simulate the priors using the specifications from the model.  The lognormal
@@ -409,47 +424,47 @@ the correlation coefficient when *distant data points from the origin* are obser
 Get the samples from the posteriors of the 2 models (centered and natural scales).
 
 ```{r}
-samples <- list(n = 500)
-samples <- within(samples, {
-  ctr <- tidy_draws(m04M07ctr, n = n)
-  nat <- tidy_draws(m04M07nat, n = n)
+postQuap <- list(ctr = list(), nat = list())
+
+# get the posterior samples for both models (centered and natural scale)
+postQuap <- within(postQuap, {
+  nsamples <- 500L
+  ctr$samples <- tidy_draws(m04M07ctr, n = nsamples)
+  nat$samples <- tidy_draws(m04M07nat, n = nsamples)
 })
 
 # put samples together with an identifier for the model
-samples$all <- bind_rows(samples$ctr, samples$nat) %>%
-  mutate(model = rep(c("ctr", "nat"), 
-                     times = c(nrow(samples$ctr), nrow(samples$nat))))
-# samples$all
+postQuap <- within(postQuap, {
+  all <- purrr::map_dfr(.x = list("ctr" = ctr$samples, "nat" = nat$samples),
+                        .f = ~ data.frame(.x), .id = "model")
+})
 
-samples$stats <- samples$all %>%
+# get the stats for each model in a long form (see eflStats::gather_intervals)
+postQuap$stats <- postQuap$all %>%
   group_by(model) %>%
   eflStats::gather_intervals() %>%
   filter(!grepl(pattern = "lower$|upper$", x = .variable))
 
 # long format used for plotting
-samples$lng <- samples$all %>%
+postQuap$lng <- postQuap$all %>%
   group_by(model) %>%
   tidybayes::gather_variables()
-# samples$lng
 ```
 
 and plot them by variable
 
 ```{r}
 clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
-ggplot(samples$lng, aes(x = .value, color = model)) +
+ggplot(postQuap$lng, aes(x = .value, color = model)) +
   geom_density(aes(y = ..scaled..), size = 1, alpha = 0.8) +
-  # stat_halfeye(aes(fill = model), .width = c(0.5, 0.75),
-  #              color = "purple", alpha = 0.5) +
-  geom_vline(samples$stats, mapping = aes(xintercept = .value, color = model),
+  geom_vline(postQuap$stats, mapping = aes(xintercept = .value, color = model),
              linetype = "dashed", size = 0.5) +
   scale_color_manual(values = clrs) +
-  # scale_fill_manual(values = clrs) +
   facet_wrap(. ~ .variable, scales = "free", ncol = 1) +
   theme_ggdist() +
   theme(legend.position = "right") +
   labs(title = "Posterior comparisons by model",
-       subtitle = sprintf("sample size = %d", samples$n))
+       subtitle = sprintf("sample size = %d", postQuap$nsamples))
 ```
 
 
@@ -461,31 +476,34 @@ accurate as its variance is large compared to the centered weight.
 #### Predictions {-}
 
 ```{r}
-# the predictions form the centered model
-ctr <- list()
-ctr$newdata <- data.frame(
+# the predictions for the centered model
+postQuap$ctr$newdata <- data.frame(
   weight_c = seq_range(data04M07$weight_c, n = 30L))
-ctr$predict <- predicted_draws(m04M07ctr, newdata = ctr$newdata, ndraws = 500)
-
-ctr$intr <- median_qi(ctr$predict) %>%
+postQuap$ctr$predict <- predicted_draws(m04M07ctr, 
+                                        newdata = postQuap$ctr$newdata, 
+                                        ndraws = postQuap$nsamples)
+# get the intervals
+postQuap$ctr$intr <- median_qi(postQuap$ctr$predict) %>%
   # put weight on natural scale to enable comparisons
   mutate(weight_c = weight_c + mean(data04M07$weight)) %>%
   rename(weight = weight_c)
 
 # the predictions form the natural-scaled model
-nat <- list()
-nat$newdata <- data.frame(
+postQuap$nat$newdata <- data.frame(
   weight = seq_range(data04M07$weight, n = 30L))
-nat$predict <- predicted_draws(m04M07nat, newdata = nat$newdata, ndraws = 500)
-nat$intr <- median_qi(nat$predict)
+postQuap$nat$predict <- predicted_draws(m04M07nat, 
+                                        newdata = postQuap$nat$newdata, 
+                                        ndraws = postQuap$nsamples)
+# get the intervals
+postQuap$nat$intr <- median_qi(postQuap$nat$predict)
 
+# create plot
 p <- list()
 p$clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
-p$df <- bind_rows(ctr$intr, nat$intr) %>%
-  mutate(model = rep(c("ctr", "nat"), 
-                     times = c(nrow(ctr$intr), nrow(nat$intr))))
-  
-# p$df
+
+p$df <- purrr::map_dfr(.x = list("ctr" = postQuap$ctr$intr, 
+                                 "nat" = postQuap$nat$intr),
+                       .f = ~ data.frame(.x), .id = "model")  
 
 ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
                  color = model)) +
@@ -501,6 +519,9 @@ ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
 
 
 ### Using `brm` {-}
+
+We will use `brm` only for the centered model since this is only to compare
+with `quap` and `inla`.
 
 #### Fits {-}
 
@@ -553,28 +574,53 @@ We extract the samples using `tidybayes` which gives the exact same
 commands as for `rethinking::quap` above.
 
 ```{r}
-samples <- list(n = 500)
-samples <- within(samples, {
-  ctr <- tidy_draws(b04M07ctr, n = n)
-  nat <- tidy_draws(b04M07nat, n = n)
+postBrm <- list(ctr = list(), nat = list())
+
+# get the posterior samples for both models (centered and natural scale)
+postBrm <- within(postBrm, {
+  nsamples <- 500L
+  ctr$samples <- tidy_draws(b04M07ctr, n = nsamples)
+  nat$samples <- tidy_draws(b04M07nat, n = nsamples)
 })
 
 # put samples together with an identifier for the model
-samples$all <- bind_rows(samples$ctr, samples$nat) %>%
-  mutate(model = rep(c("ctr", "nat"), 
-                     times = c(nrow(samples$ctr), nrow(samples$nat))))
-samples$all
+postBrm <- within(postBrm, {
+  all <- purrr::map_dfr(.x = list("ctr" = ctr$samples, "nat" = nat$samples),
+                        .f = ~ data.frame(.x), .id = "model")
+})
 
-samples$stats <- samples$all %>%
+# get the stats for each model in a long form (see eflStats::gather_intervals)
+postBrm$stats <- postBrm$all %>%
   group_by(model) %>%
   eflStats::gather_intervals() %>%
-  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+  filter(!grepl(pattern = "lower$|upper$", x = .variable)) %>%
+  filter(.variable %in% c("b_Intercept", "b_weight", "b_weight_c", "sigma")) %>%
+  mutate(.variable = if_else(.variable == "b_weight_c", "b_weight", .variable))
+# postBrm$stats
 
 # long format used for plotting
-samples$lng <- samples$all %>%
+postBrm$lng <- postBrm$all %>%
   group_by(model) %>%
-  tidybayes::gather_variables()
-# samples$lng
+  tidybayes::gather_variables() %>%
+  filter(.variable %in% c("b_Intercept", "b_weight", "b_weight_c", "sigma")) %>%
+  mutate(.variable = if_else(.variable == "b_weight_c", "b_weight", .variable))
+# unique(postBrm$lng$.variable)
+```
+
+and plot them by variable
+
+```{r}
+clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
+ggplot(postBrm$lng, aes(x = .value, color = model)) +
+  geom_density(aes(y = ..scaled..), size = 1, alpha = 0.8) +
+  geom_vline(postBrm$stats, mapping = aes(xintercept = .value, color = model),
+             linetype = "dashed", size = 0.5) +
+  scale_color_manual(values = clrs) +
+  facet_wrap(. ~ .variable, scales = "free", ncol = 1) +
+  theme_ggdist() +
+  theme(legend.position = "right") +
+  labs(title = "Posterior comparisons by model",
+       subtitle = sprintf("sample size = %d", postBrm$nsamples))
 ```
 
 
@@ -583,30 +629,36 @@ samples$lng <- samples$all %>%
 And, again, we can use the exact same command using `tidybayes` with `brms` as
 we used with `rethinking`.
 
-```{r}
-# the predictions form the centered model
-ctr <- list()
-ctr$newdata <- data.frame(
-  weight_c = seq_range(data04M07$weight_c, n = 30L))
-ctr$predict <- predicted_draws(b04M07ctr, newdata = ctr$newdata, ndraws = 500)
 
-ctr$intr <- median_qi(ctr$predict) %>%
+```{r}
+# the predictions for the centered model
+postBrm$ctr$newdata <- data.frame(
+  weight_c = seq_range(data04M07$weight_c, n = 30L))
+postBrm$ctr$predict <- predicted_draws(m04M07ctr, 
+                                        newdata = postBrm$ctr$newdata, 
+                                        ndraws = postBrm$nsamples)
+# get the intervals
+postBrm$ctr$intr <- median_qi(postBrm$ctr$predict) %>%
   # put weight on natural scale to enable comparisons
   mutate(weight_c = weight_c + mean(data04M07$weight)) %>%
   rename(weight = weight_c)
 
 # the predictions form the natural-scaled model
-nat <- list()
-nat$newdata <- data.frame(
+postBrm$nat$newdata <- data.frame(
   weight = seq_range(data04M07$weight, n = 30L))
-nat$predict <- predicted_draws(b04M07nat, newdata = nat$newdata, ndraws = 500)
-nat$intr <- median_qi(nat$predict)
+postBrm$nat$predict <- predicted_draws(m04M07nat, 
+                                        newdata = postBrm$nat$newdata, 
+                                        ndraws = postBrm$nsamples)
+# get the intervals
+postBrm$nat$intr <- median_qi(postBrm$nat$predict)
 
+# create plot
 p <- list()
 p$clrs <- c("ctr" = "turquoise4", "nat" = "violetred")
-p$df <- bind_rows(ctr$intr, nat$intr) %>%
-  mutate(model = rep(c("ctr", "nat"), 
-                     times = c(nrow(ctr$intr), nrow(nat$intr))))
+
+p$df <- purrr::map_dfr(.x = list("ctr" = postBrm$ctr$intr, 
+                                 "nat" = postBrm$nat$intr),
+                       .f = ~ data.frame(.x), .id = "model")  
 
 ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
                  color = model)) +
@@ -616,8 +668,9 @@ ggplot(p$df, aes(x = weight, y = .prediction, ymin = .lower, ymax = .upper,
   theme_minimal() +
   theme(legend.position = "bottom") +
   labs(title = "Centered vs Natural Predictions",
-       subtitle = "4M7 using brms")
+       subtitle = "4M7 using brm")
 ```
+
 
 ### Using `inla` {-}
 
@@ -676,8 +729,8 @@ i04M07ctr$summary.hyperpar
 
 #### Marginals {-}
 
-Marginals are also available in `INLA`.  They are actually one of the important
-aspect of `INLA`.  The result are most of the time very similar to the posterior.
+Marginals are also available in `INLA`.  They are an important
+result of `INLA`.  They are usually very similar to the posterior.
 
 See the example at the end of section 2.7 of chapter 2 in @gomez2020.
 
@@ -685,115 +738,78 @@ In order to compare to `brms` we need to convert the marginals as follows
 * Convert internal scale (log) to natural scale
 * Convert precision (`prec`) to standard deviation (`sd`)
 
-This process is automated by `eflINLA::marginal_draws_inla()` which returns
-the posterior as a `draws_rvars` object from the `posterior` that can be easily 
-converted to pretty any format, e.g. by using `posterior::as_draws_df`.
+This process is automated by `eflINLA::tidy_draws_inla()` which returns
+the posterior as a `draws_rvars` object from the `posterior` package that can 
+be easily converted to pretty any format, e.g. by using `posterior::as_draws_df`.
 
 
 
 ```{r}
-stop("TODO: Use tidy_marg_draws_inla")
-margs <- eflINLA::tidy_marg_draws_inla(i04M07ctr)
-margs %>% summarize_draws()
+postInla <- list(nsamples = 500L)
+postInla$samples <- eflINLA::tidy_marg_draws_inla(i04M07ctr,
+                                                  n = postInla$nsamples)
+postInla$samples %>% posterior::summarize_draws()
 ```
-
 
 
 #### Fitted {-}
 
-See [brinla](http://julianfaraway.github.io/brinla/examples/chicago.html)
-on how to find the fit.
-
-Also see [fitted](#app-inla-04M07-fitted) for more details
-on the fitted values.
+See [fitted](-#eflINLA-marg-linpred) for more details
+on obtaining fitted values from `INLA`.  In this exercise, the link function
+is the identity function, therefore `efliNLA::linpred_marg_draws_inla` and
+`eflINLA::epred_marg_draws_inla` give the same result and can be used
+interchangeably.
 
 
 ```{r}
-stop("TODO: build linpred_draws_inla()")
-fitted <- list()
+postInla$fitted <- list()
 # the data to fit
-fitted$newdata <- data.frame(
-  weight_c = seq_range(x=P04M07$data$weight_c, n=20L),
+postInla$fitted$newdata <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = 20L),
   height = NA_real_)
-# append newdata to existing data
-fitted$data <- P04M07$data %>%
-  select(height, weight_c) %>%
-  bind_rows(fitted$newdata)
+# create an augmented inla object to be used by efliNLA::linpred_marg_draws_inla
+postInla$fitted$inla_aug <- eflINLA::augment_inla(i04M07ctr, 
+                                                  newdata = postInla$fitted$newdata)
+
+# an get the marginal from inla for every predictor
+postInla$fitted$data <- linpred_marg_draws_inla(postInla$fitted$inla_aug$inla, 
+                                       new_pos = postInla$fitted$inla_aug$new_pos)
+# str(postInla$fitted$data)
+# and every predictor has its own marginal distribution
+stopifnot(nvariables(postInla$fitted$data) == nrow(postInla$fitted$newdata))
 ```
 
-
-We need to add `control.predictor=list(compute=TRUE)` to compute
-the posterior mean of the linear predictors and use the new data with the
-dependent variable with `NA`
-
-
-```{r}
-# use the same arguments as the original and add the new data and
-# the control.predictor
-i04M07ctr_args_new <- i04M07ctr_args
-i04M07ctr_args_new$control.predictor <- list(compute = TRUE)
-i04M07ctr_args_new$data <- fitted$data
-```
-
-
-then rerun the inla model object
-
-```{r}
-i04M07ctr_new <- do.call(inla, args = i04M07ctr_args_new)
-```
-
-
-get the fitted data in a data.frame with only the new values (`slice_tail`)
-
-```{r}
-# fitted <- list()
-fitted$inla <- i04M07ctr_new$summary.fitted.values %>%
-  select(mean, sd, `0.025quant`, `0.975quant`) %>%
-  slice_tail(n = length(fitted$newdata$weight_c)) %>%
-  mutate(weight_c = fitted$newdata$weight_c)
-# str(fitted$inla)
-```
-
-
-
-and we get the fit from `brms` to compare
-
-```{r}
-fitted$brm <- fitted(b04M07ctr, 
-                     newdata = data.frame(weight_c = fitted$newdata$weight_c), 
-                     probs = i04M07ctr_args_new$quantiles) %>%
-  as.data.frame() %>%
-  mutate(weight_c = fitted$newdata$weight_c)
-```
-
-
-and we plot the results
+and plot the fitted values
 
 ```{r}
 p <- list()
-p$inla <- ggplot(data = fitted$inla, 
-             aes(x = weight_c, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
-  geom_lineribbon(size = 1, color = "rosybrown", fill = "rosybrown1") +
-  ggdist::theme_ggdist() +
-  labs(title = "inla fit", y = "mean")
 
-p$brm <- ggplot(data = fitted$brm, aes(x = weight_c, y = Estimate, ymin = Q2.5, 
-                                 ymax = Q97.5)) +
-  geom_lineribbon(size = 1, color = "deepskyblue", fill = "lightskyblue1") +
-  ggdist::theme_ggdist() +
-  labs(title = "brm fit", y = "mean")
+p$df <- postInla$fitted$data %>%
+  posterior::as_draws_df() %>%
+  pivot_longer(cols = starts_with("Predictor")) %>%
+  # add the original newdata as a separate column
+  mutate(weight_c = rep(postInla$fitted$newdata$weight_c, 
+                        times = niterations(postInla$fitted$data)))
 
-p$all <- ggplot(data.frame(brm = fitted$brm$Estimate, inla = fitted$inla$mean), 
-                aes(x = brm, y = inla)) +
-  geom_point() +
-  ggdist::theme_ggdist() +
-  labs(title = "inla vs brm")
-p$all
 
-wrap_plots(p) +
-  plot_annotation(title = "Comparing inla and brm fits",
-                  theme = theme(title = element_text(color = "midnightblue")))
+ggplot(data04M07, aes(x = weight_c, y = height)) +
+  stat_lineribbon(p$df, mapping = aes(x = weight_c, y = value),
+                  color = "darkgreen", size = 1, inherit.aes = FALSE, .width = c(0.75, 0.95),
+                  show.legend = FALSE) +
+  geom_point(color = "brown", size = 1) +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x + mean(data04M07$weight)
+      scales::label_number(accuracy = 1)(y)
+  }) +
+  scale_fill_paletteer_d("ggsci::green_material") +
+  theme_ggdist() +
+  theme(title = element_text(color = "midnightblue")) +
+  labs(title = "Fitted values with INLA", subtitle = "4M7", x = "weight")
 ```
+
+
 
 
 #### Predictions {-}
@@ -805,61 +821,56 @@ from the `eflINLA` package.
 
 
 ```{r}
-# create the data used for predicitons
-predict <- list()
+# create the data used for predictions
+postInla$predict <- list(nsamples = 100L)
 # the data to fit
-predict$newdata <- data.frame(
-  weight_c = seq_range(x=P04M07$data$weight_c, n=20L),
+postInla$predict$newdata <- data.frame(
+  weight_c = seq_range(x=data04M07$weight_c, n=20L),
   height = NA_real_)
-# append newdata to existing data
-predict$data <- P04M07$data %>%
-  select(height, weight_c) %>%
-  bind_rows(predict$newdata)
+
+# create an augmented inla object to be used by efliNLA::linpred_marg_draws_inla
+postInla$predict$inla_aug <- eflINLA::augment_inla(i04M07ctr, 
+                                                  newdata = postInla$predict$newdata)
+
+# an get the marginal from inla for every predictor
+postInla$predict$data <- predict_inla(postInla$fitted$inla_aug$inla, 
+                                      new_pos = postInla$fitted$inla_aug$new_pos,
+                                      n = postInla$predict$nsamples)
+# str(postInla$predict$data)
+# and every predictor has its own marginal distribution
+stopifnot(nvariables(postInla$predict$data) == nrow(postInla$predict$newdata))
 ```
 
-change the arguments of the inla object and rerun it
+and we plot the data. Note that that it is almost the exact same code
+as for fitted values above.
 
 ```{r}
-i04M07ctr_args_new <- i04M07ctr_args
-i04M07ctr_args_new$control.predictor <- list(compute = TRUE)
-i04M07ctr_args_new$data <- predict$data
-predict$inla <- do.call(INLA::inla, i04M07ctr_args_new)
-```
-
-get the predictions, their intervals, and put data in long format
-
-```{r}
-predict$sample <- eflINLA::predict_inla(object = predict$inla,
-                                    pos = which(is.na(predict$data$height)),
-                                    n = 1000)
-# predict$sample
-
-# put data in long format
-predict$lng <- predict$sample %>%
-  pivot_longer(cols = everything(), names_to = "predictor", values_to = "height") %>%
-  mutate(weight_c = rep(predict$newdata$weight_c, times = nrow(predict$sample)))
-# str(predict$lng)
-```
+p <- list()
+p$df <- postInla$predict$data %>%
+  posterior::as_draws_df() %>%
+  pivot_longer(cols = starts_with("Predictor")) %>%
+  # add the original newdata as a separate column
+  mutate(weight_c = rep(postInla$predict$newdata$weight_c, 
+                        times = niterations(postInla$predict$data)))
 
 
-plot the data
-
-```{r}
-ggplot(P04M07$data, aes(x = weight_c, y = height)) +
-  stat_lineribbon(predict$lng, mapping = aes(x = weight_c, y = height),
+ggplot(data04M07, aes(x = weight_c, y = height)) +
+  stat_lineribbon(p$df, mapping = aes(x = weight_c, y = value),
                   color = "slateblue",inherit.aes = FALSE, .width = c(0.50, 0.75, 0.95),
                   show.legend = FALSE) +
-  geom_point(color = "indianred") +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
-                     labels = function(x) round(x + mean(P04M07$data$weight))) +
+  geom_point(color = "brown", size = 1) +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x + mean(data04M07$weight)
+      scales::label_number(accuracy = 1)(y)
+  }) +
   scale_fill_paletteer_d("ggsci::indigo_material") +
-  ggdist::theme_ggdist() +
+  theme_ggdist() +
   theme(title = element_text(color = "midnightblue")) +
-  labs(title = "Predictions with INLA", 
-       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
-                          nrow(predict$sample), length(predict$sample)),
-       x = "weight", y = "height")
+  labs(title = "Predictions with INLA", subtitle = "4M7", x = "weight")
 ```
+
 
 ### Compare `quap`, `brm`, `inla`
 
@@ -867,6 +878,7 @@ Now we compare the 3 fitting methods.  See above in the section
 about `inla` for `i04M07summ` which needed to be processed
 
 ```{r}
+stop("TODO")
 summ <- list(
   quap = as.data.frame(unclass(precis(m04M07ctr, prob=0.95)),
                        row.names = row.names(precis(m04M07ctr, prob=0.95))) %>%
