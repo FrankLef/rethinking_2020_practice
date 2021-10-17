@@ -433,17 +433,29 @@ postQuap <- within(postQuap, {
   nat$samples <- tidy_draws(m04M07nat, n = nsamples)
 })
 
+
+
+# the stats in log form for the centered model
+postQuap$ctr$stats <- postQuap$ctr$samples %>%
+  eflStats::gather_intervals(fun = ggdist::mode_qi) %>%
+  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+
+# the stats in log form for the natural model
+postQuap$nat$stats <- postQuap$nat$samples %>%
+  eflStats::gather_intervals(fun = ggdist::mode_qi) %>%
+  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+
 # put samples together with an identifier for the model
 postQuap <- within(postQuap, {
   all <- purrr::map_dfr(.x = list("ctr" = ctr$samples, "nat" = nat$samples),
                         .f = ~ data.frame(.x), .id = "model")
 })
 
-# get the stats for each model in a long form (see eflStats::gather_intervals)
-postQuap$stats <- postQuap$all %>%
-  group_by(model) %>%
-  eflStats::gather_intervals() %>%
-  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+# get the stats for all model in a long form (see eflStats::gather_intervals)
+postQuap <- within(postQuap, {
+  stats <- purrr::map_dfr(.x = list("ctr" = ctr$stats, "nat" = nat$stats),
+                        .f = ~ data.frame(.x), .id = "model")
+})
 
 # long format used for plotting
 postQuap$lng <- postQuap$all %>%
@@ -589,22 +601,25 @@ postBrm <- within(postBrm, {
                         .f = ~ data.frame(.x), .id = "model")
 })
 
-# get the stats for each model in a long form (see eflStats::gather_intervals)
-postBrm$stats <- postBrm$all %>%
-  group_by(model) %>%
-  eflStats::gather_intervals() %>%
+# the stats in log form for the centered model
+postBrm$ctr$stats <- postBrm$ctr$samples %>%
+  eflStats::gather_intervals(fun = ggdist::mode_qi) %>%
   filter(!grepl(pattern = "lower$|upper$", x = .variable)) %>%
-  filter(.variable %in% c("b_Intercept", "b_weight", "b_weight_c", "sigma")) %>%
-  mutate(.variable = if_else(.variable == "b_weight_c", "b_weight", .variable))
-# postBrm$stats
+  filter(!grepl(pattern = "^.+__", x = .variable))
+
+
+postBrm <- within(postBrm, {
+  stats <- purrr::map_dfr(.x = list("ctr" = ctr$stats, "nat" = nat$stats),
+                        .f = ~ data.frame(.x), .id = "model")
+})
 
 # long format used for plotting
 postBrm$lng <- postBrm$all %>%
+  select(!matches("^.+__")) %>%
   group_by(model) %>%
   tidybayes::gather_variables() %>%
-  filter(.variable %in% c("b_Intercept", "b_weight", "b_weight_c", "sigma")) %>%
   mutate(.variable = if_else(.variable == "b_weight_c", "b_weight", .variable))
-# unique(postBrm$lng$.variable)
+unique(postBrm$lng$.variable)
 ```
 
 and plot them by variable
@@ -749,6 +764,13 @@ postInla <- list(nsamples = 500L)
 postInla$samples <- eflINLA::tidy_marg_draws_inla(i04M07ctr,
                                                   n = postInla$nsamples)
 postInla$samples %>% posterior::summarize_draws()
+
+# and we get the point interval stats in long form
+postInla$stats <- postInla$samples %>%
+  as_draws_df() %>%
+  eflStats::gather_intervals(fun = ggdist::mode_qi) %>%
+  filter(!grepl(pattern = "lower$|upper$", x = .variable))
+# postInla$stats
 ```
 
 
@@ -765,7 +787,7 @@ interchangeably.
 postInla$fitted <- list()
 # the data to fit
 postInla$fitted$newdata <- data.frame(
-  weight_c = seq_range(x = data04M07$weight_c, n = 20L),
+  weight_c = seq_range(x = data04M07$weight_c, n = 30L),
   height = NA_real_)
 # create an augmented inla object to be used by efliNLA::linpred_marg_draws_inla
 postInla$fitted$inla_aug <- eflINLA::augment_inla(i04M07ctr, 
@@ -825,7 +847,7 @@ from the `eflINLA` package.
 postInla$predict <- list(nsamples = 100L)
 # the data to fit
 postInla$predict$newdata <- data.frame(
-  weight_c = seq_range(x=data04M07$weight_c, n=20L),
+  weight_c = seq_range(x=data04M07$weight_c, n = 30L),
   height = NA_real_)
 
 # create an augmented inla object to be used by efliNLA::linpred_marg_draws_inla
@@ -835,10 +857,11 @@ postInla$predict$inla_aug <- eflINLA::augment_inla(i04M07ctr,
 # an get the marginal from inla for every predictor
 postInla$predict$data <- predict_inla(postInla$fitted$inla_aug$inla, 
                                       new_pos = postInla$fitted$inla_aug$new_pos,
-                                      n = postInla$predict$nsamples)
+                                      n = postInla$predict$nsamples) %>%
+  as_draws_df() %>%
+  select(-.chain, -.iteration, -.draw)
+
 # str(postInla$predict$data)
-# and every predictor has its own marginal distribution
-stopifnot(nvariables(postInla$predict$data) == nrow(postInla$predict$newdata))
 ```
 
 and we plot the data. Note that that it is almost the exact same code
@@ -847,11 +870,10 @@ as for fitted values above.
 ```{r}
 p <- list()
 p$df <- postInla$predict$data %>%
-  posterior::as_draws_df() %>%
   pivot_longer(cols = starts_with("Predictor")) %>%
   # add the original newdata as a separate column
   mutate(weight_c = rep(postInla$predict$newdata$weight_c, 
-                        times = niterations(postInla$predict$data)))
+                        times = nrow(postInla$predict$data)))
 
 
 ggplot(data04M07, aes(x = weight_c, y = height)) +
@@ -874,67 +896,108 @@ ggplot(data04M07, aes(x = weight_c, y = height)) +
 
 ### Compare `quap`, `brm`, `inla`
 
-Now we compare the 3 fitting methods.  See above in the section
-about `inla` for `i04M07summ` which needed to be processed
+Now we compare the 3 fitting methods which is easy since all sampled data
+are harmonized by ``tidybayes
+
 
 ```{r}
-stop("TODO")
-summ <- list(
-  quap = as.data.frame(unclass(precis(m04M07ctr, prob=0.95)),
-                       row.names = row.names(precis(m04M07ctr, prob=0.95))) %>%
-    rename(mean_quap = mean, sd_quap = sd),
-  brm = as.data.frame(brms::posterior_summary(b04M07ctr, probs=c(0.025, 0.975))) %>% 
-    filter(rownames(.) != "lp__") %>%
-    rename(mean_brm = Estimate, sd_brm = Est.Error),
-  inla = i04M07summ %>% select(-`0.5quant`,-mode) %>%
-    rename(mean_inla = mean, sd_inla = sd))
+p <- list()
+p$quap <- postQuap$ctr$samples %>%
+  select(-c(.chain, .iteration, .draw)) %>%
+  eflStats::gather_intervals_rng() %>%
+  mutate(.variable = case_when(.variable == "a" ~ "b_Intercept",
+                               .variable == "b" ~ "b_weight_c",
+                               TRUE ~ .variable))
+# p$quap
+p$brm <- postBrm$ctr$samples %>%
+  select(-c(.chain, .iteration, .draw)) %>%
+  eflStats::gather_intervals_rng()
+  # mutate(.variable = case_when(.variable == "a" ~ "b_Intercept",
+  #                              .variable == "b" ~ "b_weight_c",
+  #                              TRUE ~ .variable))
 
-summ$df <- summ$brm %>%
-  bind_cols(summ$inla, summ$quap) %>%
-  select(matches("^mean|^sd")) %>%
-  tibble::rownames_to_column(var = "var")
+p$inla <- postInla$samples %>%
+  as_draws_df() %>%
+  eflStats::gather_intervals_rng()
+# p$inla
 
-# create tableau with gt
-summ$tbl <- summ$df %>%
-  gt::gt(rowname_col = "var") %>%
-  tab_header(title = md("**Comparing quap, brm and inla**"),
-             subtitle = "Practice 4M7") %>%
-  tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
-  tab_footnote(
-    footnote = "estimated mean",
-    locations = cells_column_spanners(spanners = contains("mean"))
-  ) %>%
-  tab_footnote(
-    footnote = "estimated standard deviation",
-    locations = cells_column_spanners(spanners = contains("sd"))
-  ) %>%
-  tab_source_note(
-    source_note = "Source: Rethinking, 2nd edition, Richard McElreath"
-  ) %>%
-  fmt_number(columns = everything(), decimals = 2) %>%
-  data_color(columns = everything(), color = "mintcream") %>%
-  tab_style(style = list(cell_fill(color = "ivory")),
-            locations = cells_footnotes()) %>%
-  tab_style(style = cell_borders(sides = c("left"),
-                                 color = "steelblue",
-                                 weight = px(1.5),
-                                 style = "solid"),
-            locations = list(cells_body(columns = "sd_brm"),
-                             cells_column_labels(columns = "sd_brm"),
-                             cells_column_spanners(spanners = "sd"))
-            ) %>%
-  tab_options(
-    heading.background.color = "slategray2",
-    heading.title.font.weight = "bold",
-    heading.subtitle.font.weight = "bold",
-    column_labels.background.color = "slategray1",
-    column_labels.font.weight = "bold",
-    stub.background.color = "slategray1",
-    source_notes.font.size = pct(50)
-  )
-summ$tbl
+
+p$df <- purrr::map_dfr(.x = list("quap" = p$quap, 
+                                 "brm" = p$brm, 
+                                 "inla" = p$inla),
+                       .f = ~ data.frame(.x), .id = "model")
+  # mutate(model = factor(model))
+
+ggplot(p$df, aes(x = .value, xmin = .lower, xmax = .upper, y = model, color = model)) +
+  geom_pointinterval(fatten_point = 3, size = 2) +
+  geom_vline(aes(xintercept = .value, color = model), linetype = "dashed") +
+  # geom_pointinterval(position = position_dodge(width = 0.5)) +
+  scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
+  scale_color_paletteer_d("ggthemes::calc", direction = -1) +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = "bottom",
+        strip.text = element_text(face = "bold", size = rel(1)),
+        strip.background = element_rect(fill = "lightgoldenrod")) + 
+  labs(title = "Compare quap, brm and inla",
+       subtitle = "4M7", x = NULL) +
+  facet_wrap(. ~ .variable, scales = "free_x")
 ```
 
+In general, inla seems to be less variable and it's sigma is much lower
+than the other model.
+
+We also compare the predictions. The results are very similar for all 3 methods.
+
+```{r}
+
+p <- list()
+
+p$quap <- postQuap$ctr$predict %>%
+  group_by(weight_c) %>%
+  gather_intervals_rng()
+# str(p$quap)
+
+
+p$brm <- postBrm$ctr$predict %>%
+  group_by(weight_c) %>%
+  gather_intervals_rng()
+# str(p$brm)
+
+
+p$inla <- postInla$predict$data %>%
+  pivot_longer(cols = starts_with("Predictor")) %>%
+  # add the original newdata as a separate column
+  mutate(weight_c = rep(postInla$predict$newdata$weight_c, 
+                        times = nrow(postInla$predict$data))) %>%
+  select(-name) %>%
+  rename(prediction = value) %>%
+  group_by(weight_c) %>%
+  gather_intervals_rng()
+# str(p$inla)
+
+p$df <- purrr::map_dfr(.x = list("quap" = p$quap, "brm" = p$brm, "inla" = p$inla),
+                       .f = ~ data.frame(.x), .id = "model")
+# glimpse(p$df)
+
+ggplot(p$df, aes(x = weight_c, y = .value, ymin = .lower, ymax = .upper,
+                 color = model)) +
+  geom_pointinterval(position = position_dodge(width = 0.5),
+                     fatten_point = 2, size = 1) +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x + mean(data04M07$weight)
+      scales::label_number(accuracy = 1)(y)
+  }) +
+  scale_color_paletteer_d("ggthemes::calc", direction = -1) +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        title = element_text(color = "midnightblue")) +
+  labs(title = "Predictions: quap, brm, inla",
+       subtitle = "4M7", x = "weight", y = NULL)
+
+```
 
 
 ## 4M8 {-#prac4M8}
