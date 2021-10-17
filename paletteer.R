@@ -1,7 +1,7 @@
 
 # declarations ------------------------------------------------------------
 
-tmp <- new.env()
+tmp <- list()
 
 # khroma
 # color that are distinct for all people, including color-blind readers

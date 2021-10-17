@@ -7,10 +7,10 @@ library(eflINLA)  # FL helpers with INLA
 library(eflRethinking)  # fl tools to works with rethinking
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
-library(modelr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
 library(tidybayes.rethinking, quietly = TRUE)
 library(posterior, quietly = TRUE)
+library(modelr, quietly = TRUE)
 library(simstudy, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
@@ -26,7 +26,7 @@ library(splines)
 
 ### `eflINLA` {-}
 
-The `INLA` has its own object and conventions. The `eflINLA` is a prject
+The `INLA` has its own object and conventions. The `eflINLA` is a project
 to develop functions mimicking `tidybayes` with `inla` objects.  These are 
 **not S3 methods** and they will be identified with the suffix `inla`, for
 example the `tidy_draws` equivalent is `tidy_draws_inla`.
@@ -894,7 +894,7 @@ ggplot(data04M07, aes(x = weight_c, y = height)) +
 ```
 
 
-### Compare `quap`, `brm`, `inla`
+### Compare `quap`, `brm`, `inla` {-}
 
 Now we compare the 3 fitting methods which is easy since all sampled data
 are harmonized by ``tidybayes
@@ -931,7 +931,6 @@ p$df <- purrr::map_dfr(.x = list("quap" = p$quap,
 ggplot(p$df, aes(x = .value, xmin = .lower, xmax = .upper, y = model, color = model)) +
   geom_pointinterval(fatten_point = 3, size = 2) +
   geom_vline(aes(xintercept = .value, color = model), linetype = "dashed") +
-  # geom_pointinterval(position = position_dodge(width = 0.5)) +
   scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
   scale_color_paletteer_d("ggthemes::calc", direction = -1) +
   ggdist::theme_ggdist() +
@@ -939,7 +938,7 @@ ggplot(p$df, aes(x = .value, xmin = .lower, xmax = .upper, y = model, color = mo
         legend.position = "bottom",
         strip.text = element_text(face = "bold", size = rel(1)),
         strip.background = element_rect(fill = "lightgoldenrod")) + 
-  labs(title = "Compare quap, brm and inla",
+  labs(title = "Posterior mode and 95% interval with quap, brm and inla",
        subtitle = "4M7", x = NULL) +
   facet_wrap(. ~ .variable, scales = "free_x")
 ```
@@ -950,7 +949,6 @@ than the other model.
 We also compare the predictions. The results are very similar for all 3 methods.
 
 ```{r}
-
 p <- list()
 
 p$quap <- postQuap$ctr$predict %>%
@@ -994,7 +992,7 @@ ggplot(p$df, aes(x = weight_c, y = .value, ymin = .lower, ymax = .upper,
   theme_minimal() +
   theme(legend.position = "bottom",
         title = element_text(color = "midnightblue")) +
-  labs(title = "Predictions: quap, brm, inla",
+  labs(title = "Predictions mode and 95% interval with quap, brm, inla",
        subtitle = "4M7", x = "weight", y = NULL)
 
 ```

@@ -1,3 +1,182 @@
+--- 
+title: "Statistical Rethinking - Solutions"
+author: "frank"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: [books.bib, packages.bib]
+biblio-style: apalike
+link-citations: yes
+description: "Packages and setup to use this book."
+---
+
+# Introduction {-}
+
+Placeholder
+
+
+## Session info {-}
+## Prerequisites {-}
+### Install `Rtools` {-}
+### Install `rstan` {-}
+### Install `rethinking` {-}
+## References {-}
+
+<!--chapter:end:index.Rmd-->
+
+# The Golem of Prague {#golem}
+
+```{r}
+message("There is no practice for this chapter.")
+```
+
+<!--chapter:end:01_Golem.Rmd-->
+
+
+# Small Worlds and Large Worlds {#worlds}
+
+Placeholder
+
+
+## 2E1 {-#prac2E1}
+## 2E2 {-#prac2E2}
+## 2E3 {-#prac2E3}
+## 2E4 {-#prac2E4}
+## 2M1 {-#prac2M1}
+### 2M1 (1) {-}
+### 2M1 (2) {-}
+### 2M1 (3) {-}
+### plot {-}
+## 2M2 {-#prac2M2}
+### 2M2 (1) {-}
+### 2M2 (2) {-}
+### 2M2 (3) {-}
+### 2M2 plot {-}
+## 2M3 {-#prac2M3}
+## 2M4 {-#prac2M4}
+## 2M5 {-#prac2M5}
+## 2M6 {-#prac2M6}
+## 2M7 {-#prac2M7}
+## 2H1 {-#prac2H1}
+## 2H2 {-#prac2H2}
+## 2H3 {-#prac2H3}
+## 2H4 {-#prac2H4}
+
+<!--chapter:end:02_Worlds.Rmd-->
+
+
+# Sampling the Imaginary {#sampling}
+
+Placeholder
+
+
+## 3E1 {-#prac3E1}
+## 3E2 {-#prac3E2}
+## 3E3 {-#prac3E3}
+## 3E4 {-#prac3E4}
+## 3E5 {-#prac3E5}
+## 3E6 {-#prac3E6}
+## 3E7 {-#prac3E7}
+## 3M1 {-#prac3M1}
+## 3M2 {-#prac3M2}
+## 3M3 {-#prac3M3}
+## 3M4 {-#prac3M4}
+## 3M5 {-#prac3M5}
+## 3M6 {-#prac3M6}
+## 3H1 {-#prac3H1}
+## 3H2 {-#prac3H2}
+## 3H3 {-#prac3H3}
+## 3H4 {-#prac3H4}
+## 3H5 {-#prac3H5}
+
+<!--chapter:end:03_Sampling.Rmd-->
+
+
+# Linear Models {#linear}
+
+Placeholder
+
+
+## Notes {-}
+### `eflINLA` {-}
+## 4E1 {-#prac4E1}
+## 4E2 {-#prac4E2}
+## 4E3 {-#prac4E3}
+## 4E4 {-#prac4E4}
+## 4E5 {-#prac4E5}
+## 4M1 {-#prac4M1}
+## 4M2 {-#prac4M2}
+## 4M3 {-#prac4M3}
+## 4M4 {-#prac4M4}
+## 4M5 {-#prac4M5}
+## 4M6 {-#prac4M6}
+## 4M7 {-#prac4M7}
+### Model {-#prac4M7-Model}
+### Fitting strategies {-}
+### Priors {-#prac4M7-Priors}
+### Using `quap` {-}
+#### Fits {-}
+#### Covariances {-}
+#### Posteriors {-}
+#### Predictions {-}
+### Using `brm` {-}
+#### Fits {-}
+#### Posteriors {-}
+#### Predictions {-}
+### Using `inla` {-}
+#### Fits {-}
+#### Marginals {-}
+#### Fitted {-}
+#### Predictions {-}
+### Compare `quap`, `brm`, `inla` {-}
+## 4M8 {-#prac4M8}
+### Model {-}
+### Functions {-}
+### a) Knots = 15, $w_j \sim \mathcal{N}(0, 10)$
+### b) Knots = 25, $w_j \sim \mathcal{N}(0, 10)$ {-}
+### c) Knots = 25, $w_j \sim \mathcal{N}(0, 20)$ {-}
+### Conclusion {-}
+#### Plots {-}
+#### Summaries {-}
+### Using `inla`
+## 4H1 {-#prac4H1}
+### Data and model {-}
+### Using `rethinking::link()` {-}
+### Using `tidyverse` {-}
+## 4H2 {-#prac4H2}
+### Model {-}
+### 4H2 a) with `quap` {-}
+### 4H2 b) with `quap` {-}
+#### Get the fitted values with `quap` {-}
+### 4H2 a) with `brm` {-}
+### 4H2 b) with `brm` {-}
+### 4H2 c) {-}
+## 4H3 {-#prac4H3}
+### 4H3 a) using `quap` {-}
+### 4H3 b) using `quap` {-}
+### 4H3 a) using `brm` {-}
+### 4H3 b) using `brm` {-}
+## 4H4 {-#prac4H4}
+### 4H4 using `quap` {-}
+### 4H4 using `brm` {-}
+## 4H5 {-#prac4H5}
+### The data
+### The model
+### Functions used {-}
+### The splines {-}
+### With `quap` {-}
+### With `brm` {-}
+#### Fitted {-}
+## 4H6 {-#prac4H6}
+### Data {-}
+### Model {-}
+### Functions {-}
+### Prior distribution simulation {-}
+## 4H7 {-#prac4H7}
+## 4H8 {-#prac4H8}
+
+<!--chapter:end:04-Linear.Rmd-->
+
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
@@ -25,12 +204,6 @@ library(paletteer, quietly = TRUE)
 # Multivariate Linear Models {#multivariate}
 
 ## Notes {-}
-
-### Aknowledments {-}
-
-Many thanks to [Jake Thompson](https://sr2-solutions.wjakethompson.com/more-linear-models.html)
-who provided nice, clean solutions using `brms` which inspired to solve
-these practices.
 
 ### Packages {-}
 
@@ -103,7 +276,7 @@ a re-parametrization which was explained in the first edition, edition of 2016.
 ## 5M1 {-}
 
 A spurious correlation where an outcome is correlated with 2 predictors and
-and when one predictor is manipulated the correlation between
+both predictors and when one predictor is manipulated the correlation between
 the outcome and another predictor vanishes.
 
 For example the performance of a manufacturing plant increases when you buy
@@ -113,29 +286,23 @@ then the effect on productivity $P$ can be a spurious relationship.
 
 Lets do a simulation to illustrate
 
-
 ```{r}
-set.seed(as.integer(as.Date("2021-10-17")))
-sim <- list()
-sim <- within(sim, {
-  def <- defData(varname = "C", dist = "normal", formula = 0, variance = 1)
-  def <- defData(def, varname = "L", dist = "normal", formula = "C", variance = 1)
-  def <- defData(def, varname = "P", dist = "normal", formula = "C", variance = 1)
-  data <- genData(n = 100L, dtDefs = def)
-})
-# output must e standardized
-sim$data <- sim$data %>%
+sim <- list(n = 100L)
+sim$data <- data.frame(
+  C = rnorm(n = sim$n)) %>%
+  mutate(L = rnorm(n = nrow(.), mean = C),
+         P = rnorm(n = nrow(.), mean = C)) %>%
   mutate(across(.fns = scale))
 # str(sim$data)
 ```
 
-we use `INLA` to fit the model to the data since it is faster.
+we use `INLA` which is faster
 
 ```{r}
 # univariate regression of P on C
-a_file <- here::here("fits", "i05M01_capital.rds")
-i05M01_capital <- readRDS(file = a_file)
-# i05M01_capital <- inla(
+a_file <- here::here("fits", "i05M02c.rds")
+i05M02c <- readRDS(file = a_file)
+# i05M02c <- inla(
 #   data = sim$data,
 #   formula = P ~ C,
 #   family = "gaussian",
@@ -146,12 +313,12 @@ i05M01_capital <- readRDS(file = a_file)
 #   control.compute = list(config = TRUE),
 #   quantiles = c(0.025, 0.975)
 #   )
-saveRDS(i05M01_capital, file = a_file)
+# saveRDS(i05M02c, file = a_file)
 
 # univariate regression of P on L
-a_file <- here::here("fits", "i05M01_labor.rds")
-i05M02_labor <- readRDS(file = a_file)
-# i05M01_labor <- inla(
+a_file <- here::here("fits", "i05M02l.rds")
+i05M02l <- readRDS(file = a_file)
+# i05M02l <- inla(
 #   data = sim$data,
 #   formula = P ~ L,
 #   family = "gaussian",
@@ -162,12 +329,12 @@ i05M02_labor <- readRDS(file = a_file)
 #   control.compute = list(config = TRUE),
 #   quantiles = c(0.025, 0.975)
 #   )
-# saveRDS(i05M01_labor, file = a_file)
+# saveRDS(i05M02l, file = a_file)
 
 # univariate regression of P on C and L
-a_file <- here::here("fits", "i05M01_all.rds")
-i05M01_all <- readRDS(file = a_file)
-# i05M01_all <- inla(
+a_file <- here::here("fits", "i05M02.rds")
+i05M02 <- readRDS(file = a_file)
+# i05M02 <- inla(
 #   data = sim$data,
 #   formula = P ~ C + L,
 #   family = "gaussian",
@@ -178,164 +345,39 @@ i05M01_all <- readRDS(file = a_file)
 #   control.compute = list(config = TRUE),
 #   quantiles = c(0.025, 0.975)
 #   )
-# saveRDS(i05M01_all, file = a_file)
+# saveRDS(i05M02, file = a_file)
+
+s <- INLA::inla.posterior.sample(n = 3, result = i05M02)
+row.names(s[[1]]$latent)
+
+t <- inla(
+  data = sim$data,
+  formula = P ~ C + L,
+  family = "gaussian",
+  control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
+                       mean = 0, prec = 1 / (0.5^2)),
+  control.family = list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
+  quantiles = c(0.025, 0.975)
+  )
+t$.args$control.compute$config
+
+
 ```
 
-and looking at the marginal distribution (very close to posterior distributions
-in a simple case like this one).
-
-We can observe that the labor $L$ influence is greatly reduced when using the
-full model (i.e. with all variables). Its coefficient goes to 0.2 from 0.6 when
-using all variables.
+and looking at the posterior distributions
 
 ```{r}
-p <- list()
-p$capital <- eflINLA::tidy_marg_draws_inla(i05M01_capital) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$labor <- eflINLA::tidy_marg_draws_inla(i05M01_labor) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$all <- eflINLA::tidy_marg_draws_inla(i05M01_all) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$df <- purrr::map_dfr(.x = list("capital" = p$capital, 
-                                 "labor" = p$labor, 
-                                 "all" = p$all),
-                       .f = ~ data.frame(.x), .id = "model")
-
-ggplot(p$df %>% filter(!(.variable %in% c("b_Intercept", "sigma"))), 
-       aes(x = .value, xmin = .lower, xmax = .upper, y = model, color = model)) +
-  geom_pointinterval(fatten_point = 3, size = 2) +
-  geom_vline(aes(xintercept = .value, color = model), linetype = "dashed") +
-  scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
-  scale_color_paletteer_d("fishualize::Scarus_quoyi") +
-  ggdist::theme_ggdist() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "bottom",
-        strip.text = element_text(face = "bold", size = rel(1)),
-        strip.background = element_rect(fill = "darkslategray1")) + 
-  labs(title = "Mode and 95% interval of marginal distributions",
-       subtitle = "5M1", x = NULL) +
-  facet_wrap(. ~ .variable)
+sample <- list(n = 100L)
+sample$C <- INLA::inla.posterior.sample(n = sample$n, result = i05M02c)
+str(sample$C)
 ```
 
 
 ## 5M2 {-}
 
-The productivity $P$ of an enterprise will increase depending on how much material
-$M$ it can process but will be affected inversely depending on how much waste $W$ 
-is  generated. 
-
-There could be a scenario where the pressure to process more
-material $M$ increases the waste $W$ which is counterproductive (literally).
-
-
-
-```{r}
-set.seed(as.integer(as.Date("2021-10-17")))
-sim <- list()
-sim <- within(sim, {
-  def <- defData(varname = "M", dist = "normal", formula = 0, variance = 1)
-  def <- defData(def, varname = "W", dist = "normal", formula = "M", variance = 1)
-  def <- defData(def, varname = "P", dist = "normal", formula = "M - W", variance = 1)
-  data <- genData(n = 500L, dtDefs = def)
-})
-# output must e standardized
-sim$data <- sim$data %>%
-  mutate(across(.fns = scale))
-# str(sim$data)
-```
-
-we use `INLA` to fit the model to the data since it is faster.
-
-```{r}
-# univariate regression of P on M
-a_file <- here::here("fits", "i05M02_material.rds")
-i05M02_material <- readRDS(file = a_file)
-# i05M02_material <- inla(
-#   data = sim$data,
-#   formula = P ~ M,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02_material, file = a_file)
-
-# univariate regression of P on W
-a_file <- here::here("fits", "i05M02_waste.rds")
-i05M02_waste <- readRDS(file = a_file)
-# i05M02_waste <- inla(
-#   data = sim$data,
-#   formula = P ~ W,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02_waste, file = a_file)
-
-# univariate regression of P on M and W
-a_file <- here::here("fits", "i05M02_all.rds")
-i05M02_all <- readRDS(file = a_file)
-# i05M02_all <- inla(
-#   data = sim$data,
-#   formula = P ~ M + W,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02_all, file = a_file)
-```
-
-and we plot the results which are similar to what we have in R code 5.40, p.150
-of @elreath2020. That is, the effect of either $M$ or $W$ alone is much less than
-when they considered together.  That is, for example, the coefficient of $M$ 
-alone is 0 but, when considering $W$ also it's coefficient is above 0.5.
-
-
-```{r}
-p <- list()
-p$material <- eflINLA::tidy_marg_draws_inla(i05M02_material) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$waste <- eflINLA::tidy_marg_draws_inla(i05M02_waste) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$all <- eflINLA::tidy_marg_draws_inla(i05M02_all) %>%
-  as_draws_df() %>%
-  eflStats::gather_intervals_rng()
-p$df <- purrr::map_dfr(.x = list("material" = p$material, 
-                                 "waste" = p$waste, 
-                                 "all" = p$all),
-                       .f = ~ data.frame(.x), .id = "model")
-
-ggplot(p$df %>% filter(!(.variable %in% c("b_Intercept", "sigma"))), 
-       aes(x = .value, xmin = .lower, xmax = .upper, y = model, color = model)) +
-  geom_pointinterval(fatten_point = 3, size = 2) +
-  geom_vline(aes(xintercept = .value, color = model), linetype = "dashed") +
-  scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
-  scale_color_paletteer_d("fishualize::Scarus_quoyi") +
-  ggdist::theme_ggdist() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "bottom",
-        strip.text = element_text(face = "bold", size = rel(1)),
-        strip.background = element_rect(fill = "darkslategray1")) + 
-  labs(title = "Mode and 95% interval of marginal distributions",
-       subtitle = "5M2", x = NULL) +
-  facet_wrap(. ~ .variable)
-```
+The profitability of an enterprise will increase depending on how much raw material
+it can process but inversely depending on how much waste is generated.
 
 
 ## 5M3 {-}
@@ -344,7 +386,7 @@ More divorces could lead to more remarriage and therefore contribute to an incre
 in marriage rate.
 
 This could be evaluated with mutliple regression if a flag is created to
-identify which marriage is a remarriage.  We could then compare the models with
+identify wich marriage is a remarriage.  We could then compare the models with
 and without remarriage.
 
 ## 5M4 {-}
@@ -413,11 +455,6 @@ b05M04 <- readRDS(file = a_file)
 summary(b05M04)
 ```
 
-We observe that the addition of the mormon percentage $L$ add significant
-information and does not affect age $A$ and marriage $M$ which are similar
-to what we obtained without $L$.
-increase significantly
-
 ```{r}
 # brm posterior summary formatted with gt
 brms::posterior_summary(b05M04) %>%
@@ -471,10 +508,9 @@ i05M04$summary.hyperpar
 We need to convert the hyperparameters from inla which are log of precision to
 the original representation of sd.  See the funciton `posterior_summary` from the
 package `eflINLA` for details on how to do it.  The package `brinla` has a
-similar function.
+similar funciton.
 
 ```{r}
-stop("TODO")
 i05M04_summ <- eflINLA::posterior_summary(i05M04)
 # inla posterior summary formatted with gt
 i05M04_summ %>%
@@ -1190,4 +1226,345 @@ wrap_plots(p) +
   plot_annotation(title = "Practice 5H4") &
   theme(legend.position = "bottom")
 ```
+
+
+<!--chapter:end:05_Multivariate.Rmd-->
+
+
+# Structural Causal Models {#SCM}
+
+Placeholder
+
+
+## 6E1 {-}
+### Multicollinearity {-}
+### Post-treatment bias {-}
+### Collider bias {-}
+## 6E2 {-}
+## 6E3 {-}
+## 6E4 {-}
+## 6M1 {-}
+## 6M2 {-}
+## 6H1 {-}
+## 6H2 {-}
+### 6H2 a) By territory area size {-}
+### 6H2 b) By group size {-}
+
+<!--chapter:end:06_SCM.Rmd-->
+
+
+# Ulysses' Compass {#information}
+
+Placeholder
+
+
+## 7E1 {-}
+## 7E2 {-}
+## 7E3 {-}
+## 7E4 {-}
+## 7M1 {-}
+### AIC {-}
+### WAIC {-}
+## 7M2 {-}
+### Model selection {-}
+### Model comparison {-}
+## 7M3 {-}
+## 7M4 {-}
+## 7M5 {-}
+## 7M6 {-}
+## 7H1 {-}
+## 7H2 {-}
+### Use WAIC and PSIS to evaluate the outliers {-}
+### Robust regression with t-student distribution {-}
+## 7H3 {-}
+### islands' entropies {-}
+### Kullback-Leiber divergence {-}
+## 7H4 {-}
+## 7H5 {-}
+### 7H5 1) {-}
+### 7H5 2) {-}
+### 7H5 3) {-}
+### 7H5 4) {-}
+### 7H5 5) {-}
+### 7H5 Model comparison {-}
+
+<!--chapter:end:07_Information.Rmd-->
+
+
+# Conditional Manatees {#interactions}
+
+Placeholder
+
+
+## 8E1 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+## 8E2 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+### (4) {-}
+## 8E3 {-}
+### (1) {-}
+### (2) {-}
+### (3) {-}
+### (4) {-}
+## 8M1 {-}
+## 8M2 {-}
+## 8M3 {-}
+## 8M4 {-}
+## 8H1 {-}
+### Model and fit {-}
+## 8H2 {-}
+## 8H3 {-}
+### (a) {-}
+### (b) {-}
+## 8H4 {-}
+### (a) {-}
+#### The priors {-}
+#### The models {-}
+#### The fit {-}
+#### Validate the priors {-}
+#### Compare the models {-}
+#### Plotting the model
+### (b) {-}
+#### The fit {-}
+#### Compare the models {-}
+#### Plotting the model
+### (c) {-}
+#### Compare the models {-}
+#### Plotting
+## 8H5 {-}
+## 8H6 {-}
+## 8H7 {-}
+
+<!--chapter:end:08_Interactions.Rmd-->
+
+
+# Markov Chain Monte Carlo {#MCMC}
+
+Placeholder
+
+
+## 9E1 {-}
+## 9E2 {-}
+## 9E3 {-}
+## 9E4 {-}
+## 9E5 {-}
+## 9E6 {-}
+### Model and fit {-}
+### Trace plot {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9E7 {-}
+## 9M1 {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9M2 {-}
+### Autocorrelations {-}
+## 9M3 {-}
+## 9H1 {-}
+### Trace plot {-}
+### Trank plot {-}
+### Running means {-}
+### Autocorrelations {-}
+## 9H2 {-}
+## 9H3 {-}
+## 9H4 {-}
+## 9H5 {-}
+## 9H6 {-}
+## 9H7 {-}
+
+<!--chapter:end:09_MCMC.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+```
+
+
+
+# Big Entropy and the Generalized Linear Model {#GLM}
+
+```{r echo=FALSE}
+message("No practice in this chapter")
+```
+
+
+<!--chapter:end:10_GLM.Rmd-->
+
+
+# Counting and Classification {#Counting}
+
+Placeholder
+
+
+## 11E1 {-#prac11E1}
+## 11E2 {-#prac11E2}
+## 11E3 {-#prac11E3}
+## 11E4 {-#prac11E4}
+## 11M1 {-#prac11M1}
+## 11M2 {-#prac11M2}
+## 11M3 {-#prac11M3}
+## 11M4 {-#prac11M4}
+## 11M5 {-#prac11M5}
+## 11M6 {-#prac11M6}
+## 11M7 {-#prac11M7}
+### Model with $\mathcal{N}(0, 1.5)$ {-}
+### Model with $\mathcal{N}(0, 10)$ {-}
+## 11M8 {-#prac11M8}
+## 11H1 {-#prac11H1}
+### Null model, general intercept {-}
+### Model with treatment intercepts {-}
+### Model with treatment and actor intercepts {-}
+### Model comparison {-}
+## 11H2 {-#prac11H2}
+### (a) {-}
+#### `quap` fit
+#### `brm` fit
+#### `inla` fit
+
+<!--chapter:end:11_Counting.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Monsters and Mixtures {#Mixed}
+
+
+## 12E1 {-}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+<!--chapter:end:12_Mixed.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(bayesplot)
+```
+
+
+# Multilevel Models {#MLM}
+
+
+## 13E1 {-#prac13E1}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+<!--chapter:end:13_Multilevel.Rmd-->
+
+```{r include=FALSE}
+library(rethinking)
+library(brms)
+library(tidyr)
+library(dplyr)
+library(tidybayes)
+```
+
+
+# Adventures in Covariance {#Covariance}
+
+
+## 14E1 {-#prac14E1}
+
+```{r echo=FALSE}
+message("TODO")
+```
+
+
+<!--chapter:end:14_Covariances.Rmd-->
+
+# References {-}
+
+<div id="refs"></div>
+
+
+# (APPENDIX) Appendix {-}
+
+
+<!--chapter:end:50_appendix.Rmd-->
+
+
+# `logit()` distribution {-#app-logit}
+
+Placeholder
+
+
+## `logistic()` / `inv_logit()` function
+## `logit()` function
+## `dordlogit()` function
+## `pordlogit()` function
+## `rordlogit()` function
+
+<!--chapter:end:51_logit.Rmd-->
+
+
+# Math notes {-#app-maths}
+
+Placeholder
+
+
+## Mode {-#app-maths-mode}
+## $\Gamma$ distribution {-#app-gammaexp}
+
+<!--chapter:end:52_maths.Rmd-->
+
+
+# `INLA` {-#app-inla}
+
+Placeholder
+
+
+## Note on priors {-}
+## 4M7 {-#app-inla-04M07}
+### Data and model {-}
+### Arguments {-}
+#### `formula` {-}
+#### `family` {-}
+#### `control.fixed` {-}
+#### `control.family` {-}
+#### `control.compute` {-}
+#### `quantiles` {-}
+### Create `inla` {-}
+### Summaries {-}
+### Fitted {-#app-inla-04M07-fitted}
+### Predictions {-#app-inla-04M07-predict}
+#### Predicted `inla` object {-}
+#### Sample the posterior {-}
+#### `predict_inla` {-#app-inla-04M07-predict_inla}
+##### Predictions vs marginal {-}
+
+<!--chapter:end:61_inla.Rmd-->
+
+
+# `eflINLA` {-#eflINLA}
+
+Placeholder
+
+
+## Introduction {-#eflINLA-intro}
+## Marginal draws {-#eflINLA-marg}
+### Sample posterior: `tidy_marg_draws_inla`
+### Linear predictors: `linpred_marg_draws_inla` {-#eflINLA-marg-linpred}
+### Fitted predictors: `epred_marg_draws_inla` {-#eflINLA-marg-epred}
+### Posterior predictions: `predict_inla` {-#eflINLA-marg-predict}
+
+<!--chapter:end:62_eflINLA.Rmd-->
 
