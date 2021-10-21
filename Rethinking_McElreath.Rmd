@@ -177,1056 +177,45 @@ Placeholder
 
 <!--chapter:end:04-Linear.Rmd-->
 
-```{r include=FALSE}
-library(rethinking)
-library(brms)
-library(INLA)
-library(eflINLA)
-library(eflRethinking)
-library(dplyr, quietly = TRUE)
-library(tidyr, quietly = TRUE)
-library(tidybayes, quietly = TRUE)
-library(tidybayes.rethinking, quietly = TRUE)
-library(posterior, quietly = TRUE)
-library(modelr, quietly = TRUE)
-library(simstudy, quietly = TRUE)
-library(gt)
-library(gtsummary)
-library(scales)
-library(dagitty, quietly = TRUE)
-library(ggdag, quietly = TRUE)
-library(ggdist, quietly = TRUE)
-library(patchwork, quietly = TRUE)
-library(paletteer, quietly = TRUE)
-```
-
 
 # Multivariate Linear Models {#multivariate}
 
+Placeholder
+
+
 ## Notes {-}
-
+### Aknowledments {-}
 ### Packages {-}
-
-The `simstudy` is used to generate data under different scenarios to study DAG.
-
-
 ## 5E1 {-}
-
-1. **Not** multiple linear, just univariate regression.
-2. Multiple linear with 2 variables $x_i$ and $z_i$
-3. **Not** multiple linear, just univariate with a centralized variable
-4. Multiple linear with 2 variables $x_i$ and $z_i$
-
 ## 5E2 {-}
-
-In section 5.1.2 the notion of control is related to conditional independencies
-where the question becomes *is there any additional values in knowing a variable,
-once I already know the other variables?* (p.131).
-
-Also see Rethinking box in section 5.1.2 on the usage of the word *control*.
-
-The control can be executed by using *predictor residual plots* or *counterfactual plots*
-as described in section 5.1.5.
-
-The model is
-
-$$
-\begin{align*}
-diversity_i &\sim Normal(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_1 \cdot latitude_i + \beta_2 \cdot plantdiversity_i \\
-\alpha &\sim Normal(0, 1) \\
-\beta_1, \beta_2 &\sim Normal(0, 1) \\
-\sigma &\sim Uniform(0, 1)
-\end{align*}
-$$
-
 ## 5E3 {-}
-
-See section 5.2 on *Masked relationship*.
-
-A masked relationship is when there are 2 predictors that are correlated with each other,
-However one is positively correlated with the outcome, the other one is negatively 
-correlated with the outcome. See beginning of section 5.2 for description.
-
-Model is 
-
-$$
-\begin{align*}
-phd_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_1 \cdot funding_i + \beta_2 \cdot size_i \\
-\alpha &\sim \mathcal{N}(0, 1)\\
-\beta_1, \beta_2 &\sim \mathcal{N}(0, 1)\\
-\sigma &\sim \mathcal{Uniform}(0, 1)
-\end{align*}
-$$
-
-The slopes should be positive.
-
 ## 5E4 {-}
-
-Let $k$ be the number of categories, only need to have $k-1$ variables since
-the intercept represents the $k^{th}$ category, hence model 1, 3, 4 are equivalent.
-See explanation in first paragraph of section 5.3.2.
-
-Model 5 is also inferentially equivalent as it uses
-a re-parametrization which was explained in the first edition, edition of 2016. 
-(overthinking box of section 5.4.1 of the 2016 edition)
-
-
 ## 5M1 {-}
-
-A spurious correlation where an outcome is correlated with 2 predictors and
-both predictors and when one predictor is manipulated the correlation between
-the outcome and another predictor vanishes.
-
-For example the performance of a manufacturing plant increases when you buy
-equipment (i.e. invest in capital$C$) or invest in training (i.e. invest in
-labor $L$).  But if the training $L$ is on how to use the equipment $C$
-then the effect on productivity $P$ can be a spurious relationship.
-
-Lets do a simulation to illustrate
-
-```{r}
-sim <- list(n = 100L)
-sim$data <- data.frame(
-  C = rnorm(n = sim$n)) %>%
-  mutate(L = rnorm(n = nrow(.), mean = C),
-         P = rnorm(n = nrow(.), mean = C)) %>%
-  mutate(across(.fns = scale))
-# str(sim$data)
-```
-
-we use `INLA` which is faster
-
-```{r}
-# univariate regression of P on C
-a_file <- here::here("fits", "i05M02c.rds")
-i05M02c <- readRDS(file = a_file)
-# i05M02c <- inla(
-#   data = sim$data,
-#   formula = P ~ C,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02c, file = a_file)
-
-# univariate regression of P on L
-a_file <- here::here("fits", "i05M02l.rds")
-i05M02l <- readRDS(file = a_file)
-# i05M02l <- inla(
-#   data = sim$data,
-#   formula = P ~ L,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02l, file = a_file)
-
-# univariate regression of P on C and L
-a_file <- here::here("fits", "i05M02.rds")
-i05M02 <- readRDS(file = a_file)
-# i05M02 <- inla(
-#   data = sim$data,
-#   formula = P ~ C + L,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M02, file = a_file)
-
-s <- INLA::inla.posterior.sample(n = 3, result = i05M02)
-row.names(s[[1]]$latent)
-
-t <- inla(
-  data = sim$data,
-  formula = P ~ C + L,
-  family = "gaussian",
-  control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-                       mean = 0, prec = 1 / (0.5^2)),
-  control.family = list(
-    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-  quantiles = c(0.025, 0.975)
-  )
-t$.args$control.compute$config
-
-
-```
-
-and looking at the posterior distributions
-
-```{r}
-sample <- list(n = 100L)
-sample$C <- INLA::inla.posterior.sample(n = sample$n, result = i05M02c)
-str(sample$C)
-```
-
-
 ## 5M2 {-}
-
-The profitability of an enterprise will increase depending on how much raw material
-it can process but inversely depending on how much waste is generated.
-
-
 ## 5M3 {-}
-
-More divorces could lead to more remarriage and therefore contribute to an increase
-in marriage rate.
-
-This could be evaluated with mutliple regression if a flag is created to
-identify wich marriage is a remarriage.  We could then compare the models with
-and without remarriage.
-
 ## 5M4 {-}
-
 ### Data {-}
-
-The number of members of the LDS by state for 2021 was scrapped from 
-[population](https://worldpopulationreview.com/state-rankings/mormon-population-by-state).
-
-Note: The mormon file has data for Nevada but not District of Columbia. In
-`WaffleDivorce` there is data for District of Columbia but not Nevada.
-
-```{r}
-lds <- read.csv(here::here("Mormon2021.csv"))
-stopifnot(any(is.finite(lds$mormonPop2021)), any(is.finite(lds$Population2021)))
-```
-
-```{r}
-data("WaffleDivorce")
-d <- WaffleDivorce
-d <- inner_join(x=d, y=lds, by = "Location") %>%
-  mutate(L = mormonPop2021 / Population2021) %>%
-  select(Location, L, A = MedianAgeMarriage, M = Marriage, D = Divorce) %>%
-  mutate(across(.cols = where(is.numeric), 
-                .fns = function(x) {as.vector(scale(x))}))
-stopifnot(nrow(d) == 49)
-
-# The mormon file has data for Nevada but not District of Columbia. In
-# `WaffleDivorce` there is data for District of Columbia but not Nevada.
-lds$Location[!(lds$Location %in% WaffleDivorce$Location)]
-WaffleDivorce$Location[!(WaffleDivorce$Location %in% lds$Location)]
-rm(WaffleDivorce)
-```
-
-
 ### Model {-}
-
-
-$$
-\begin{align*}
-D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_A A_i +  \beta_L L_i + \beta_M M_i\\
-\alpha &\sim \mathcal{N}(0, 0.2) \\
-\beta_A, \beta_L, \beta_M &\sim \mathcal{N}(0, 0.5) \\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-
 ### `brm` {-}
-
-
-```{r}
-a_file <- here::here("fits", "b05M04.rds")
-b05M04 <- readRDS(file = a_file)
-# b05M04 <- brm(
-#   data = d,
-#   formula = D ~ 1 + A + L + M,
-#   family = gaussian,
-#   prior = c(
-#     prior(normal(0, 0.02), class = Intercept),
-#     prior(normal(0, 0.5), class = b),
-#     prior(exponential(1), class = sigma)
-#   ),
-#   iter = 2000, warmup = 1000, chains = 4, core = detectCores(), seed = 5)
-# saveRDS(b05M04, file = a_file)
-summary(b05M04)
-```
-
-```{r}
-# brm posterior summary formatted with gt
-brms::posterior_summary(b05M04) %>%
-  as.data.frame() %>%
-  filter(row.names(.) != "lp__") %>%
-  eflRethinking::gt_posterior(
-    labs = list(title = "Posterior Summary BRMS", subtitle = "Practice 5M4"),
-    qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
-    .tab_options = list(heading.background.color = "lightgreen"))
-```
-
-
-
 ### `inla` {-}
-
-See section 2.3.1, p. 18 from @gomez2020 for multivarable regression
-with `inla`.
-
-```{r}
-a_file <- here::here("fits", "i05M04.rds")
-i05M04 <- readRDS(file = a_file)
-# i05M04 <- inla(
-#   data = d,
-#   formula = D ~ A + L + M,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
-# saveRDS(i05M04, file = a_file)
-```
-
-
-and the summaries
-
-```{r}
-summary(i05M04)
-```
-
-```{r}
-i05M04$summary.fixed
-```
-
-```{r}
-i05M04$summary.hyperpar
-```
-
-We need to convert the hyperparameters from inla which are log of precision to
-the original representation of sd.  See the funciton `posterior_summary` from the
-package `eflINLA` for details on how to do it.  The package `brinla` has a
-similar funciton.
-
-```{r}
-i05M04_summ <- eflINLA::posterior_summary(i05M04)
-# inla posterior summary formatted with gt
-i05M04_summ %>%
-  eflRethinking::gt_posterior(
-    labs = list(title = "Posterior Summary INLA", subtitle = "Practice 5M4"),
-    qtl = list(`0.025quant` = "2.5%", `0.975quant` = "97.5%"),
-    .tab_options = list(heading.background.color = "lightcoral"))
-```
-
 ### brm vs inla {-}
-
-Using the results from the posterior summaries from brm and inla, we can observe
-they give very similar.
-
-```{r}
-summ <- list()
-summ$brm <- brms::posterior_summary(b05M04) %>%
-  as.data.frame() %>%
-  select(mean = Estimate, sd = Est.Error) %>%
-  tibble::rownames_to_column(var = "var") %>%
-  filter(var != "lp__")
-summ$inla <- eflINLA::posterior_summary(i05M04) %>%
-  select(mean, sd) %>%
-  tibble::rownames_to_column(var = "var")
-eflRethinking::gt_posterior_compare(
-  summ, var_df = "brm",
-  labs = list(title = "Posterior Summary Comparison", subtitle = "Practice 5M4"))
-```
-
-
-
 ### Conclusion {-}
-
-For every increase of 1 sd of the mormon population, the divorce
-rate is reduced by about 0.32 which is a significant impact.
-
-The posterior plotsare as follows
-
-```{r}
-gather_draws(model=b05M04, `b_.*`, regex = TRUE) %>%
-  ggplot(aes(x = .value, y = .variable, color = .variable)) +
-  stat_halfeye(.width = c(0.25, 0.5, 0.75), fill = "navajowhite") +
-  geom_vline(xintercept=0, color = "brown", linetype = "dashed") +
-  scale_color_paletteer_d("ggthemes::Classic_10") +
-  ggdist::theme_tidybayes() +
-  theme(legend.position="none") +
-  labs(title = "Practice 5M4", x=NULL, y=NULL)
-```
-
-
-
 ## 5M5 {-}
-
-The dag used to illustrate the model is as follows.  The outcome is $obesity$
-and $price$ is a latent variable that impact all the elements since it not only
-affect  the driving but also the restaurant which sees its cost increase because
-of the more expensive fuel.
-
-
-```{r}
-p <- list()
-p$dag <- ggdag::dagify(obesity ~ restaurant + driving + price,
-                       restaurant ~ driving + price,
-                       driving ~ price,
-                       outcome = "obesity",
-                       latent = "price") %>%
-  ggdag::ggdag(seed=5, layout="circle", node=FALSE) +
-  geom_dag_text(color = "springgreen4") +
-  ggdag::theme_dag() +
-  theme(panel.background = element_rect(fill = "mintcream", color = "mintcream"))
-p$dag
-```
-
-One of the multivariable regressions can be formulated as follows
-
-$$
-\begin{align*}
-obesity_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_D \cdot driving_i + \beta_P \cdot price_i + \beta_R \cdot restaurant_i \\
-\alpha &\sim \mathcal{N}(0, 1)\\
-\beta_D, \beta_P, \beta_R &\sim \mathcal{N}(0, 1)\\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-The  data to use could be as follows
-
-```{r}
-data.frame(
-  variable = c("obesity", "driving", "price", "restaurant"),
-  measure = c("body mass index", "km driven", 
-              "cpi for fuel and restaurant", "attendance")
-)
-```
-
-
-
 ## 5H1 {-}
-
-The conditional independency is *M is independent of D conditional on A* as it 
-is a *chain*.
-
-The data does support it as there was no relation between  M and D once we 
-removed the influence of A.  See Figure 5.7 in section 5.1.5.3.
-
 ### dagitty {-}
-
-We can also use daggity to reaffirm our conclusion above
-
-```{r out.width="50%", fig.cap="5H1 DAG"}
-dag <- ggdag::dagify(D ~ A, A ~ M)
-ggdag(dag, layout = "auto", seed = 5) +
-  ggdag::theme_dag_blank(panel.background = 
-                           element_rect(fill="aliceblue", color="aliceblue")) +
-  geom_dag_point(color = "darksalmon") +
-  geom_dag_text(color = "steelblue4")
-```
-
-and see what has conditional independence
-
-```{r}
-impliedConditionalIndependencies(dag)
-```
-
-and the equivalent ag are
-
-```{r}
-msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
-message(msg)
-```
-
-
-
 ## 5H2 {-}
-
-See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
-@kurtz2020b.
-
 ### Data and model {-}
-
-See practice 5H1 for the DAG.
-
-
-```{r}
-data("WaffleDivorce")
-d <- WaffleDivorce %>% 
-  select(Location, MedianAgeMarriage, Marriage, Divorce) %>%
-  mutate(A=MedianAgeMarriage, M=Marriage, D=Divorce) %>%
-  mutate(across(.cols = c(A, M, D), 
-                .fns = function(x) {as.vector(scale(x))}))
-rm(WaffleDivorce)
-stopifnot(nrow(d) == 50)
-skimr::skim(d)
-```
-
-The dag involves 2 models
-
-The *D model* where $D$ is caused by $A$ as well as $M$
-
-
-$$
-\begin{align*}
-D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_A A_i + \beta_M M_i \\
-\alpha &\sim \mathcal{N}(0, 0.2) \\
-\beta_A, \beta_M &\sim \mathcal{N}(0, 0.5) \\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-and the *A model* where $A$ is caused by $M$
-
-$$
-\begin{align*}
-A_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_M M_i \\
-\alpha &\sim \mathcal{N}(0, 0.2) \\
-\beta_M &\sim \mathcal{N}(0, 0.5) \\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-
-
 ### `brm` {-}
-
-
-```{r}
-d_model <- bf(D ~ 1 + A + M)
-a_model <- bf(A ~ 1 + M)
-```
-
-and make sure you set `set_rescor(FALSE)` to prevent `brms` from taking
-a residual correlation between the 2 models.
-
-```{r}
-a_file <- here::here("fits", "b05H02.rds")
-b05H02 <- readRDS(file = a_file)
-# b05H02 <- brm(data = d,
-#               family = gaussian,
-#               formula = d_model + a_model + set_rescor(FALSE),
-#               prior = c(prior(normal(0, 0.2), class = Intercept, resp = D),
-#                         prior(normal(0, 0.5), class = b, resp = D),
-#                         prior(exponential(1), class = sigma, resp = D),
-# 
-#                         prior(normal(0, 0.2), class = Intercept, resp = A),
-#                         prior(normal(0, 0.5), class = b, resp = A),
-#                         prior(exponential(1), class = sigma, resp = A)),
-#               cores = detectCores(), seed = 5)
-# saveRDS(b05H02, file = a_file)
-```
-
-```{r}
-summary(b05H02)
-```
-
-and we will manipulate the state marriage rate by halving it so that now
-we use them for $M$ once we set $A=0$ to remove the influence of $A$.
-We then simulate to see what the effect this has on $D$.
-
-```{r}
-sim <- list()
-sim$newdata <- data.frame(
-  M = seq_range(x=d$M / 2, n=30),
-  A = 0)
-sim$D <- predict(b05H02, resp = "D", newdata = sim$newdata) %>%
-  as.data.frame() %>%
-  bind_cols(sim$newdata)
-# str(sim$D)
-sim$A <- predict(b05H02, resp = "A", newdata = sim$newdata) %>%
-  as.data.frame() %>%
-  bind_cols(sim$newdata)
-# str(sim$A)
-```
-
-and plot the results
-
-```{r}
-p <- list()
-p$D <- ggplot(sim$D, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_smooth(stat = "identity", fill="palegreen", color="palegreen4") +
-  ggdist::theme_ggdist() +
-  scale_x_continuous(labels = function(x) {
-    y <- x * sd(d$Marriage) + mean(d$Marriage)
-    scales::label_number(accuracy = 1)(y)
-  }) +
-  scale_y_continuous(labels = function(x) {
-    y <- x * sd(d$Divorce) + mean(d$Divorce)
-    scales::label_number(accuracy = 1)(y)
-  }) +
-  labs(title ="Counterfactual effect of M / 2 on D",
-       x="Manipulated Marriage rate", y="Predicted D with 95% CI")
-
-p$A <- ggplot(sim$A, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_smooth(stat = "identity", fill="steelblue1", color="steelblue4") +
-  ggdist::theme_ggdist() +
-  scale_x_continuous(labels = function(x) {
-    y <- x * sd(d$Marriage) + mean(d$Marriage)
-    scales::label_number(accuracy = 1)(y)
-  }) +
-  scale_y_continuous(labels = function(x) {
-    y <- x * sd(d$MedianAgeMarriage) + mean(d$MedianAgeMarriage)
-    scales::label_number(accuracy = 1)(y)
-  }) +
-  labs(title ="Counterfactual effect of M / 2 on A",
-       x="Manipulated Marriage rate", y="Predicted A with 95% CI")
-wrap_plots(p)
-```
-
-which seems to indicate that $M$ has very little influence on $D$ once we control
-$A$. That is $D$ is independent of $M$ conditional on $A$.
-
-
 ### `inla` {-}
-
-We don't seem to have the ability with `inla` to run many models at once as
-done just above with `brm`.  Inla  is however so fast we can run 2 models
-separately and still be faster than brm.
-
-For the *D model* we have
-
-```{r}
-i05H02d_args <- list(
-  data = d,
-  formula = D ~ A + M,
-  family = "gaussian",
-  control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-                       mean = 0, prec = 1 / (0.5^2)),
-  control.family = list(
-    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-  control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
-  quantiles = c(0.025, 0.975)
-)
-
-a_file <- here::here("fits", "i05H02d.rds")
-i05H02d <- readRDS(file = a_file)
-# i05H02d <- do.call(inla, i05H02d_args)
-# saveRDS(i05H02d, file = a_file)
-```
-
-
-and for the *A model* we have
-
-```{r}
-i05H02a_args <- i05H02d_args
-i05H02a_args$formula <- A ~ M
-a_file <- here::here("fits", "i05H02a.rds")
-i05H02a <- readRDS(file = a_file)
-# i05H02a <- do.call(inla, i05H02a_args)
-# saveRDS(i05H02a, file = a_file)
-```
-
-
 ### compare brm vs inla {-}
-
-For the model $D$
-
-```{r}
-brms::posterior_summary(b05H02) %>%
-  as.data.frame() %>%
-  filter(grepl(pattern = "^b_D|^sigma_D",x = row.names(.))) %>%
-  bind_cols(eflINLA::posterior_summary(i05H02d)) %>%
-  select(Estimate, mean, Est.Error, sd) %>%
-  round(digits = 4)
-```
-
-and for model $A$
-
-```{r}
-brms::posterior_summary(b05H02) %>%
-  as.data.frame() %>%
-  filter(grepl(pattern = "^b_A|^sigma_A",x = row.names(.))) %>%
-  bind_cols(eflINLA::posterior_summary(i05H02a)) %>%
-  select(Estimate, mean, Est.Error, sd) %>%
-  round(digits = 4)
-```
-
-
-Conclusion: brm and inla give very similar result. inla is certainly faster.
-
 ## 5H3 {-}
-
-See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
-@kurtz2020b.
-
-
 ### Data, model, DAG {-}
-
-
-```{r fig.cap="5H3 Data"}
-data(milk)
-d <- milk %>%
-  as.data.frame() %>%
-  tidyr::drop_na() %>%
-  mutate(K = as.vector(scale(kcal.per.g)),
-         N = as.vector(scale(neocortex.perc)),
-         M = as.vector(scale(log(mass))))
-rm(milk)
-# skimr::skim(d, kcal.per.g, neocortex.perc, mass, K, N, M)
-# it should give us a dataframe with 17 rows
-stopifnot(nrow(d) == 17)
-d %>%
-  gtsummary::tbl_summary(
-    by = clade,
-    include = c(kcal.per.g, neocortex.perc, mass, K, N, M)) %>%
-  # add_n() %>%
-  add_overall() %>%
-  bold_labels()
-```
-
-The model is the same as model `m5.7` in the textbook.
-
-
-
-$$
-\begin{align*}
-K_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_M log(M_i) + \beta_N  N_i \\
-\alpha &\sim \mathcal{N}(0, 0.2) \\
-\beta_M, \beta_N &\sim \mathcal{N}(0, 0.5) \\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-
-
-The DAG is
-
-```{r echo=TRUE, out.width="50%", fig.cap="5H3 DAG"}
-dag <- ggdag::dagify(N ~ M, K ~ M + N)
-ggdag(dag, layout = "tree", seed = 5) +
-  ggdag::theme_dag_blank(panel.background = 
-                           element_rect(fill="oldlace", color="oldlace")) +
-  geom_dag_point(color = "darkseagreen1") +
-  geom_dag_text(color = "brown1")
-```
-
-
-```{r}
-x <- impliedConditionalIndependencies(dag)
-if(length(x)) x else message("no conditional independence")
-```
-
-```{r}
-msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
-message(msg)
-```
-
-See practice 5H2 just above for similar method with `brms`. We have 2 models
-
-```{r}
-k_model <- bf(K ~ 1 + M + N)
-n_model <- bf(N ~ 1 + M)
-```
-
-which gives the following fit
-
-```{r}
-a_file <- here::here("fits", "b05H03.rds")
-b05H03 <- readRDS(file = a_file)
-# b05H03 <- brm(data = d,
-#               family = gaussian,
-#               formula = k_model + n_model + set_rescor(FALSE),
-#               prior = c(prior(normal(0, 0.2), class = Intercept, resp = K),
-#                         prior(normal(0, 0.5), class = b, resp = K),
-#                         prior(exponential(1), class = sigma, resp = K),
-# 
-#                         prior(normal(0, 0.2), class = Intercept, resp = N),
-#                         prior(normal(0, 0.5), class = b, resp = N),
-#                         prior(exponential(1), class = sigma, resp = N)),
-#               cores = detectCores(), seed = 5)
-# saveRDS(b05H03, file = a_file)
-```
-
-
-```{r}
-sim <- list()
-sim$newdata <- data.frame(
-  M = seq_range(x=2 * d$M, n=30),
-  N = 0)
-sim$K <- predict(b05H03, resp = "K", newdata = sim$newdata) %>%
-  as.data.frame() %>%
-  bind_cols(sim$newdata)
-# str(sim$M)
-sim$N <- predict(b05H03, resp = "N", newdata = sim$newdata) %>%
-  as.data.frame() %>%
-  bind_cols(sim$newdata)
-# str(sim$N)
-```
-
-and plot the results
-
-```{r}
-p <- list()
-p$K <- ggplot(sim$K, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_smooth(stat = "identity", fill="tan", color="tan4") +
-  ggdist::theme_ggdist() +
-  scale_x_continuous(labels = function(x) {
-    y <- x * sd(d$M) + mean(d$M)
-    scales::label_number(accuracy = 0.1)(y)
-  }) +
-  scale_y_continuous(labels = function(x) {
-    y <- x * sd(d$K) + mean(d$K)
-    scales::label_number(accuracy = 0.1)(y)
-  }) +
-  labs(title ="Counterfactual effect of 2 x M on K",
-       x="Manipulated M", y="Predicted K with 95% CI")
-
-p$N <- ggplot(sim$N, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
-  geom_smooth(stat = "identity", fill="darkolivegreen1", color="darkolivegreen4") +
-  ggdist::theme_ggdist() +
-  scale_x_continuous(labels = function(x) {
-    y <- x * sd(d$M) + mean(d$M)
-    scales::label_number(accuracy = 0.1)(y)
-  }) +
-  scale_y_continuous(labels = function(x) {
-    y <- x * sd(d$N) + mean(d$N)
-    scales::label_number(accuracy = 0.1)(y)
-  }) +
-  labs(title ="Counterfactual effect of 2 x M on N",
-       x="Manipulated M", y="Predicted N with 95% CI")
-wrap_plots(p)
-```
-
 ## 5H4 {-}
-
 ### Data {-}
-
-
-```{r}
-data("WaffleDivorce")
-d <- WaffleDivorce %>%
-  select(Location, MedianAgeMarriage, Marriage, Divorce, South) %>%
-  mutate(A=MedianAgeMarriage, M=Marriage, D=Divorce) %>%
-  mutate(across(.cols = c(A, M, D),
-                .fns = function(x) {as.vector(scale(x))}))
-rm(WaffleDivorce)
-stopifnot(nrow(d) == 50)
-d %>%
-  select(-Location) %>%
-  mutate(South = if_else(South==0, "Not South", "South")) %>%
-  gtsummary::tbl_summary(by=South) %>%
-  add_overall() %>%
-  bold_labels()
-```
 ### Correlations
-
-We can look at the pairs of variables to see which ones are related
-
-```{r}
-p <- list()
-p$All <- GGally::ggcorr(d[, c("A", "M", "D")], 
-                        label = TRUE) +
-  theme() +
-  labs(title = "All data")
-p$South <- GGally::ggcorr(d[d$South!=0, c("A", "M", "D")], 
-                        label = TRUE) +
-  theme() +
-  labs(title = "SOUTH")
-p$NotSouth <- GGally::ggcorr(d[d$South==0, c("A", "M", "D")], 
-                        label = TRUE) +
-  theme() +
-  labs(title = "NOT SOUTH")
-
-wrap_plots(p) +
-  plot_annotation(title = "Correlations with and without the South effect") &
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = "bottom")
-```
-
-
-
-
 ### DAG {-}
-
-Based on the correlation plots just above.  When $South = 1$, there seems to 
-be influence on the correlation between $M$ and $D$ and, to a lesser extent,
-between $A$ and $D$ (but still noticeable). No significant change is noted
-between $A$ and $M$.
-
-Otherwise, when $South = 0$, there is no effect on the correlations which are 
-the same as for the data in general.
-
-Therefore we suggest the following DAG's as possible scenarios
-
-```{r out.width="100%", fig.cap="5H4 DAG"}
-dag <- list()
-p <- list()
-dag$A <- ggdag::dagify(D ~ A + M, A ~ S, M ~ A, M ~ S)
-p$A <- ggdag(dag$A, layout = "tree", seed = 5) +
-  ggdag::theme_dag_blank(panel.background =
-                           element_rect(fill="snow", color="snow")) +
-  geom_dag_point(color = "honeydew2") +
-  geom_dag_text(color = "darkgreen") +
-  labs(title = "DAG #1 for Practice 5H4") +
-  theme(title = element_text(color = "midnightblue"))
-
-dag$B <- ggdag::dagify(D ~ A + M, M ~ A, M ~ S)
-p$B <- ggdag(dag$B, layout = "nicely", seed = 5) +
-  ggdag::theme_dag_blank(panel.background =
-                           element_rect(fill="snow", color="snow")) +
-  geom_dag_point(color = "honeydew2") +
-  geom_dag_text(color = "darkgreen") +
-  labs(title = "DAG #2 for Practice 5H4") +
-  theme(title = element_text(color = "midnightblue"))
-# p$B
-wrap_plots(p)
-```
-
 ### Model {-}
-
-To evaluate the influence ot $South$ we will add it to the model as well
-as 2 more variables called $AS$ and $MS$. $AS = A$ when $S=1$ and $A = 0$ 
-otherwise. The same will be done for $MS$.
-
-The interpretations of these 3 new variables, $S$, $A$ and $M$ will be that
-the 
-
-* coefficient of $S$ shows the influence of $South$ on the intercept
-* coefficient of $AS$ shows the influence of $South$ on $A$
-* coefficient of $MS$ shows the influence of $South$ on $M$
-
-
-$$
-\begin{align*}
-D_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta_A A_i + \beta_M M_i +  
-  \beta_{AS} AS_i + \beta_{MS} MS_i + \beta_S S_i\\
-\alpha &\sim \mathcal{N}(0, 0.2) \\
-\beta_A, \beta_M, \beta_{AS}, \beta_{MS}, \beta_S &\sim \mathcal{N}(0, 0.5) \\
-\sigma &\sim \mathcal{Exp}(1)
-\end{align*}
-$$
-so we add the new variables to the data
-
-```{r}
-d <- d %>%
-  mutate(AS = South * A, MS = South * M)
-# d
-```
-
-
-
-and make the fit with `brm`
-
-
-```{r}
-a_file <- here::here("fits", "b05H04.rds")
-b05H04 <- readRDS(file = a_file)
-# b05H04 <- brm(data = d,
-#               family = gaussian,
-#               formula = D ~ 1 + A + M + AS + MS + South,
-#               prior = c(prior(normal(0, 0.2), class = Intercept),
-#                         prior(normal(0, 0.5), class = b),
-#                         prior(exponential(1), class = sigma)),
-#               cores = detectCores(), seed = 5)
-# saveRDS(b05H04, file = a_file)
-```
-
-We could  use `summary()` to see the result.  We will create a simple table
-
-```{r}
-# brm posterior summary formatted with gt
-brms::posterior_summary(b05H04) %>%
-  as.data.frame() %>%
-  filter(row.names(.) != "lp__") %>%
-  eflRethinking::gt_posterior(labs = list(title = "Posterior Summary BRMS",
-                           subtitle = "Practice 5H4"),
-               qtl = list(Q2.5 = "2.5%", Q97.5 = "97.5%"),
-               .tab_options = list(heading.background.color = "lightgreen"))
-```
-
 ### Conclusion {-}
-
-* The south increases the intercept by 0.23, that is, the rate of divorce
-become increase by a factor of 0.23 for every standard deviation of $Divorce$.
-This is very significant considering that for the population in general the
-rate is negative -0.12.
-* The effect of $MedianAgeMarriage$ goes from -0.53 in general to 
--0.92 = -0.53 + -0.39 when taking into account the $South$ variable.
-* The effect of $Marriage$ goes from -0.08 in general to 
-0.31 = -0.08 + 0.39 when taking into account the $South$ variable.
-
-In conclusion, the $South$ variable seems to have significant effect on the 
-model so that the following DAG is our suggestion
-
-```{r}
-p$A
-```
-
-and the $South$ effect is obvious we we plot the results
-
-```{r}
-predict <- list(n = 10, a_rng = c(-2, 2), m_rng = c(-2, 2))
-predict$newdata <- data.frame(
-  A = c(seq_range(x=predict$a_rng, n=predict$n), 
-        seq_range(x=predict$a_rng, n=predict$n)),
-  M = c(seq_range(x=predict$m_rng, n=predict$n), 
-        seq_range(x=predict$m_rng, n=predict$n)),
-  South = rep(0:1, each=predict$n)) %>%
-  mutate(
-    AS = South * A,
-    MS = South * M)
-predict$data <- predict(b05H04, newdata=predict$newdata) %>%
-  as.data.frame() %>%
-  bind_cols(predict$newdata) %>%
-  mutate(South = if_else(South != 0, "Not South", "South"),
-         South = factor(South))
-# str(predict$data)
-```
-
-```{r}
-p <- list()
-p$M <- ggplot(predict$data, aes(x = M, y = Estimate, color = South)) +
-  # geom_smooth(stat = "identity", fill="palegreen", color="palegreen4") +
-  geom_line() +
-  scale_x_continuous(
-    breaks = scales::breaks_extended(n = 7),
-    labels = function(x) {
-      y <- x * sd(d$Marriage) + mean(d$Marriage)
-      scales::label_number(accuracy = 1)(y)
-      },
-    limits = predict$m_rng) +
-  scale_y_continuous(
-    breaks = scales::breaks_extended(n = 5),
-    labels = function(x) {
-      y <- x * sd(d$Divorce) + mean(d$Divorce)
-      scales::label_number(accuracy = 1)(y)
-      }) +
-  ggdist::theme_ggdist() +
-  labs(title ="Divorce vs Marriage Rate",
-       x="Marriage rate", y="Divorce rate",
-       color = NULL)
-# p$M
-p$A <- ggplot(predict$data, aes(x = A, y = Estimate, color = South)) +
-  # geom_smooth(stat = "identity", fill="plum", color="plum4") +
-  geom_line() +
-  scale_x_continuous(
-    breaks = scales::breaks_extended(n = 7),
-    labels = function(x) {
-      y <- x * sd(d$MedianAgeMarriage) + mean(d$MedianAgeMarriage)
-      scales::label_number(accuracy = 1)(y)
-      },
-    limits = predict$m_rng) +
-  scale_y_continuous(
-    breaks = scales::breaks_extended(n = 5),
-    labels = function(x) {
-      y <- x * sd(d$Divorce) + mean(d$Divorce)
-      scales::label_number(accuracy = 1)(y)
-      }) +
-  ggdist::theme_ggdist() +
-  labs(title ="Divorce vs MedianAgeMarriage",
-       x="MedianAgeMarriage", y="Divorce rate",
-       color = NULL)
-# p$M / p$A
-wrap_plots(p) +
-  plot_annotation(title = "Practice 5H4") &
-  theme(legend.position = "bottom")
-```
-
 
 <!--chapter:end:05_Multivariate.Rmd-->
 
@@ -1526,30 +515,755 @@ Placeholder
 
 <!--chapter:end:52_maths.Rmd-->
 
+```{r include=FALSE}
+library(rethinking)
+library(INLA)
+library(brms)
+library(eflINLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(ggdist, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+```
+
+
 
 # `INLA` {-#app-inla}
 
-Placeholder
+This appendix gives example on how to use `inla` objects. The data is simulated
+then the results are verified using the parameters of the siumlation.
 
 
 ## Note on priors {-}
+
+One different aspect of `INLA::inla` from `rethinking::quap` and `brms::brm` is
+its treatment of **priors**.  Contrary to `quap` and `brm` the priors in `inla`
+are scattered among 3 different parameters which can be confusing at first.
+
+The priors for `inla` are organized as follows
+
+* **Likelihood**: The priors are defined using the parameter `hyper` inside 
+`control.family`. See section 5.2 of @gomez2020.
+  - The default prior on precision is the Gamma(shape = 1, rate = 0.00005). 
+  Internally, it is defined on the log(precision) and is therefore 
+  LogGamma(shape = 1, rate = 0.00005) See p. 19 and p. 23 of @gomez2020 and section 3.2, p.44, o
+  wang2018.
+* **Fixed effect**: The prior are defined in `control.fixed`. See section 2.3.1, 
+in particular table 2.1, of @gomez2020.
+* **Latent effect**: The difference between latent and hyperparameters in INLA is that
+latent Gaussain variables describe linear predictor.  Hyperparameters are all
+parameters (very few or none) not arising linearly in the predictors.
+The priors are in defined using the parameter `hyper` inside the
+`f()` function. See section 5.2 of @gomez2020.
+
+The generalized linear models are handled using parameters values that can be
+listed with `?inla.models`
+
+```{r}
+names(inla.models())
+names(inla.models())["prior"]
+?inla.models
+```
+
+and the information on priors can be found in `inla.models()$prior`
+
+```{r}
+names(inla.models()$prior)
+```
+
+The prior parametrization will therefore be detailed in details with examples 
+below.
+
+## Linear regression
+
+### Data
+
+The simulation uses the following
+
+* x1, x2, x3 Are correlated
+* x3 is lognormal distributed with its coefficient force to be positive
+* cat1 is a category with binomial distribution
+
+```{r}
+sim <- list(n = 500L,
+            intercept = c("mu" = 5, "sigma" = 1),
+            sigma_rate = 1,
+            cat1 = c("size" = 1, "p" = 0.5),
+            mus = c("x1" = 1, "x2" = 2, "x3" = 0),
+            sigmas = c("x1" = 0.5, "x2" = 1, "x3" = 1),
+            rhos = c("x1-x2" = 0.25, "x1-x3" = 0.5, "x2-x3" = 0.75),
+            beta = c("x4" = 10))
+# the dtaa is correlated but in the current model this information
+# is not used.
+sim <- within(sim, {
+  # Rho is the correlation matrix
+  Rho <- diag(nrow = length(rhos))
+  Rho[lower.tri(Rho)] <- rhos
+  Rho[upper.tri(Rho)] <- t(Rho[lower.tri(Rho)])
+  # Sigma is the covariance matrix
+  Sigma <- diag(sigmas) %*% Rho %*% diag(sigmas)
+  # create the matrix of correlated data
+  mat <- MASS::mvrnorm(n = n, mu = mus, Sigma = Sigma)
+})
+# create the simulated data
+sim <- within(sim, {
+  data <- as.data.frame(mat)
+  data <- data %>%
+    mutate(x0 = rnorm(n = n, mean = intercept["mu"], sd = intercept["sigma"]),
+           x3 = exp(x3),
+           x4 = beta["x4"] * rbinom(n = n, size = cat1["size"], p = cat1["p"]),
+           mu = x0 + x1 + x2 + x3 + x4,
+           sigma = rexp(n, rate = sigma_rate),
+           y = mu + rnorm(n = n, mean = 0L, sd = sigma)
+           )
+  })
+```
+
+### Model
+
+The model is defined as follows
+
+$$
+\begin{align*}
+y &\sim \mathcal{N}(\mu, \sigma) \\
+\mu &= \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 exp(x_3) + \beta_4 x_4 \\
+\beta_0 &\sim \mathcal{N}(mean = 5,sd = 1.5) \\
+\beta_1 &\sim \mathcal{N}(mean = 1,sd = 0.5) \\
+\beta_2 &\sim \mathcal{N}(mean = 2,sd = 1) \\
+\beta_3 &\sim \mathcal{LogNormal}(meanlog = 0, sdlog = 1) \\
+\sigma &\sim \mathcal{Exponential}(rate = 1)
+\end{align*}
+$$
+### Formula
+
+The formula is expressed as usual, as per the model above
+
+```{r}
+args <- list()  # create the list of parameters
+args$formula <- y ~ x1 + x2 + x3
+```
+
+
+### Priors
+
+#### Family (likelihood)
+
+The default prior on the variance is defined internally in terms of logged
+precision $log(\tau$. It follows the log gamma distribution 
+$log(\tau) \sim LogGamma(1, 10^-5)$ (@wang2018, p.44).
+
+This corresponds to our model so we keep it as is.
+
+```{r}
+args$family = "gaussian"
+stopifnot(args$family %in% names(inla.models()$likelihood))
+```
+
+
+
+#### Fixed effects
+
+See section 2.3.1 of @gomez2020 for details and a nice example at the end of
+section 3.2, p.47, of @wang2018.
+
+The model has 2 fixed effects in $x_1$ and $x_2$ which can be assigned
+the **fixed-effect priors** from inla whose defaults are as follows
+
+
+```{r}
+inla.set.control.fixed.default()[c("mean", "mean.intercept", "prec", "prec.intercept")]
+```
+
+and assigning the fixed effect priors
+
+```{r}
+args$control.fixed = list(mean.intercept = 5, 
+                          prec.intercept = 1 / (1.5^2),
+                          mean = list(x1 = 1, x2 = 2, 
+                                      default = 0),
+                          prec = list(x1 = 1 / (0.5^2), x2 = 1 / (1^2), 
+                                      default = 0.001))
+```
+
+
+
+#### Random effects
+
+
+* the model is fixed (no random effect) and
+* $x_3$ is a **constrained fixed effect** limited to the positive range.
+See section 3.2.2 of @gomez2020 for details.
+
+Therefore the model has a **constrained fixed effect** *weight_c* which is 
+indicated by `clinear` in the `f()` function of the formula. This makes
+*weight_c* a *latent effect* as opposed to a *likelihood effect* such
+as $\sigma$ in the current model.
+
+The available priors, defined in `f()` of *latent effect* are as follows
+
+```{r}
+names(inla.models()$prior)
+```
+
+and we will use `logtnormal` which is equivalent to our prior 
+$\beta &\sim \mathcal{LogNormal}(0, 1)$
+
+```{r}
+args$control.family = list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 10e-5))))
+```
+
+
+### Other parameters
+
+Finally we specify
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## 4M7 {-#app-inla-04M07}
+
+We use practice 4M7 from chapter 4 to illustrate `inla` in more details.
+
+
 ### Data and model {-}
+
+
+```{r}
+data(Howell1)
+data04M07 <- Howell1 %>%
+  filter(age  >= 18) %>%
+  mutate(weight_c = as.vector(scale(weight, center = TRUE, scale = FALSE)))
+rm(Howell1)
+skimr::skim(data04M07)
+```
+
+
+$$
+\begin{align*}
+height_i &\sim \mathcal{N}(\mu_i, \sigma) \\
+\mu_i &= \alpha + \beta(x_i - \bar{x}) \\
+\alpha &\sim \mathcal{N}(178, 20) \\
+\beta &\sim \mathcal{LogNormal}(0, 1) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
 ### Arguments {-}
+
+The arguments will be kept in a list.  This is useful for repeated use and
+ensure consistency when creating different inla model objects. For example
+for fitted and predicted values computations as done below.
+
+```{r}
+i04M07args <- list()
+```
+
+
 #### `formula` {-}
+
+See section 3.2.1 and 3.2.2 of @gomez2020, example on p. 40 at the end of 
+section 3.2.2 on p. 41 and 42.
+
+See section 5.2 in @gomez2020 on how to use the prior.
+
+* the model is fixed (no random effect) and
+* $x_3$ is a **constrained fixed effect** limited to the positive range.
+See section 3.2.2 of @gomez2020 for details.
+
+Therefore the model has a **constrained fixed effect** *weight_c* which is 
+indicated by `clinear` in the `f()` function of the formula. This makes
+*weight_c* a *latent effect* as opposed to a *likelihood effect* such
+as $\sigma$ in the current model.
+
+The available priors, defined in `f()` of *latent effect* are as follows
+
+```{r}
+names(inla.models()$prior)
+```
+
+and we will use `logtnormal` which is equivalent to our prior 
+$\beta &\sim \mathcal{LogNormal}(0, 1)$ and is documented as follows
+
+```{r}
+# inla.doc(inla.models()$prior$logtnormal$pdf)  # this command does not work!
+# inla.doc(inla.models()$prior$normal$pdf)  # this command works
+```
+
+which gives the formula of the linear predictor
+
+```{r}
+# linear predictor
+i04M07args$formula <- height ~ f(weight_c, model = "clinear", range = c(0, Inf),
+                         prior = "logtnormal", param = c(0, 1))
+# the available latent models are in names(inla.models()$latent)
+stopifnot("clinear" %in% names(inla.models()$latent))
+```
+
 #### `family` {-}
+
+`INLA` can work with many families.  They are listed in `inla.models`.
+For this case the family of the likelihood is
+
+```{r}
+# likelihood family
+i04M07args$family <- "gaussian"
+stopifnot(i04M07args$family %in% names(inla.models()$likelihood))
+```
+
+
 #### `control.fixed` {-}
+
+See example on p. 47 at the end of section 3.2 of @wang2018.
+
+As indicated in section 2.3.1, p.19, of @gomez2020 the prior for the intercept
+is *gaussian* with the following latent hyperparameters which need to 
+be modified for our model.
+
+```{r}
+inla.set.control.fixed.default()$mean.intercept
+inla.set.control.fixed.default()$prec.intercept
+```
+Therefore the intercept prior for the  is $\alpha \sim \mathcal{N}(178, 20)$ where $sd = 20$ and 
+precision is $\tau = \frac{1}{sd^2} = \frac{1}{20^2} = 0.0025$
+
+```{r}
+i04M07args$control.fixed <- list(mean.intercept = 178, prec.intercept = 1 / (20^2))
+```
+
 #### `control.family` {-}
+
+See example on p. 47 at the end of section 3.2 of @wang2018.
+See also section 5.2 in @gomez2020.
+
+In our model we have the prior for the sigma of the likelihood set as
+
+$$
+\sigma \sim \mathcal{Exp}(rate_\sigma = 1)
+$$
+Since $\sigma^2 = \frac{1}{\tau}$ then in terms or $\tau$ the rate becomes
+$rate_\tau = \frac{1}{\sigma^2}$ and thereofre
+
+
+$$
+\begin{align*}
+\sigma \sim \mathcal{Exp}(rate_\sigma = 1) \\
+\therefore \\
+\tau \sim \mathcal{Exp}(rate_\tau = \frac{1}{\sigma^2})\\
+\end{align*}
+$$
+
+
+
+As indicated in section 2.3.1, p. 19, of @gomez2020 the default of the likelihood
+precision is gamma distribution with parameter $shape = 1$ and $rate = 0.00005$.
+Since $shape = 1$ this is equivalent to the beta distribution then we use to
+reflect our model's prior. i.e. 
+
+$$
+\tau \sim \mathcal{Gamma}(shape = 1, rate = \tau)
+$$
+
+The internal representation of the precision is $log{\tau}$ (see table 5.3 in section 
+5.3.1 of @wang2018).  Therefore $\tau \sim \mathcal{Gamma}(1, 1 / log(1^2)) \approx \mathcal{Gamma}(1, 0.00005)$. 
+We use 0.00005 because 0 cannot be used as a denominator.
+It is the default setting.
+
+```{r}
+names(inla.models()$prior)
+# change to TRUE to see document
+if (FALSE) inla.doc("gamma", section = "prior")
+```
+
+
+Therefore we use
+
+```{r}
+i04M07args$control.family <- list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005))))
+```
+
+
 #### `control.compute` {-}
+
+See section 3.4 in @wang2018 for model selection and checking.
+For `cpo`, see section 3.4.3 in @wang2018 for details
+
+This arguments, in the form of a list, is as follows
+
+* `config = TRUE`: Compute the posteriors
+* `dic = TRUE`: Compute the Divergence information criteria
+* `waic = TRUE`: Compute the waic
+* `cpo = TRUE`: Compute the conditional predictive ordinance.
+
+which gives
+
+```{r}
+i04M07args$control.compute <- list(config = TRUE, dic = TRUE, waic = TRUE)
+```
+
 #### `quantiles` {-}
+
+the quantiles for credibility intervals.  `inla` uses credibility intervals rather
+than confidence intervals, usually similar when data has a centralized distribution.
+
+```{r}
+i04M07args$quantiles <- c(0.025, 0.5, 0.975)
+```
+
+
 ### Create `inla` {-}
+
+Since we are using a predefined list of arguments, it is convenient to use
+`do.call`.  This ensure that the list of arguments can be reused later for
+fitted and predict.
+
+```{r}
+# the data
+i04M07args$data <- data04M07
+# we use do.call to be able to use the list of parameters
+i04M07 <- do.call(inla, args = i04M07args)
+```
+
+
+
+Note that all the arguments of the `inla` object can be accessed through
+the `.args` item as follows
+
+```{r}
+names(i04M07$.args)
+```
+
 ### Summaries {-}
+
+which gives the summary for fixed parameters
+
+```{r}
+i04M07$summary.fixed
+```
+
+and hyperparameters which are shown on the *internal scale* which is the *log*
+and this case.
+
+```{r}
+i04M07$summary.hyperpar
+```
+
+
 ### Fitted {-#app-inla-04M07-fitted}
+
+
+See [brinla](http://julianfaraway.github.io/brinla/examples/chicago.html)
+on how to find the fit.
+
+First we create the set of new data where the dependent variable has value `NA`
+
+```{r}
+# the new data
+newdata <- list(n = 20L)
+newdata$new <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = newdata$n),
+  height = NA_real_
+)
+# the complete new dataframe with old and new data
+newdata$data <- data04M07 %>%
+  select(height, weight_c) %>%
+  bind_rows(newdata$new)
+```
+
+
+We need to add `control.predictor=list(compute=TRUE)` to compute
+the posterior mean of the linear predictors and use the data with the
+sequence with `NA`
+
+```{r}
+# use the same arguments as the original and add the new data and
+# the control.predictor
+i04M07args$data <- newdata$data
+i04M07args$control.predictor <- list(compute = TRUE)
+i04M07 <- do.call(inla, args = i04M07args)
+```
+
+get the fitted data in a data.frame with only the new values
+
+```{r}
+# get the fitted data 
+p <- list()
+p$fitted <- i04M07$summary.fitted.values %>%
+  select(mean, sd, `0.025quant`, `0.975quant`) %>%
+  slice_tail(n = newdata$n) %>%
+  bind_cols(weight_c = newdata$new$weight_c)
+```
+
+and plot the results
+
+```{r}
+# plot the fitted values against the raw data
+ggplot(p$fitted, 
+       aes(x = weight_c, y = mean, ymin = `0.025quant`, ymax = `0.975quant`)) +
+  geom_lineribbon(size = 1, color = "rosybrown", fill = "rosybrown1") +
+  geom_point(data = data04M07, aes(x = weight_c, y = height, color = age),
+             inherit.aes = FALSE) +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
+                     labels = function(x) x + round(mean(data04M07$weight))) +
+  scale_color_paletteer_c("scico::lapaz") +
+  ggdist::theme_ggdist() +
+  theme(legend.position = c(0.20, 0.80),
+        title = element_text(color = "midnightblue")) +
+  labs(title = "inla fit", x = "weight", y = "height")
+```
+
+
 ### Predictions {-#app-inla-04M07-predict}
+
+When it comes to making predictions, we encounter many different ways to do
+it.  The recommended way from inla org is [inla](https://www.r-inla.org/faq#h.821k2r53fvx3)
+with `i04M07$summary.random`. Thsi however returns a number of predictions
+not equal to the number of predictions requested.  It is impossible to see
+which predictions matches with which prediction.
+
+Also see an example of another way in section 7.2.3, p.184 of @wang2018.
+
+The method below was found on the internet.  Unfortunately I do not remember
+the address.  My apologies. The method seems to work for any model which 
+is why it is the chosen method.
+
+The process is in 3 steps, the first 2 seps are the same as for the fitted
+values (see just above)
+
+1. Get the predicted `inla` object with `NA` values to predict
+2. Sample the posterior with `inla.posterior.sample`
+3. Simulate the posterior predictions by adding variability to the 
+linear predictors
+
 #### Predicted `inla` object {-}
+
+We prepare the data set by adding data to predict
+
+First we create the set of new data where the dependent variable has value `NA`
+
+```{r}
+# the new data
+newdata <- list(n = 20L)
+newdata$new <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = newdata$n),
+  height = NA_real_
+)
+# the complete new dataframe with old and new data
+newdata$data <- data04M07 %>%
+  select(height, weight_c) %>%
+  bind_rows(newdata$new)
+```
+
+
+We need to add `control.predictor=list(compute=TRUE)` to compute
+the posterior mean of the linear predictors with the new data.
+
+```{r}
+# use the same arguments as the original and add the new data and
+# the control.predictor
+i04M07args$data <- newdata$data
+i04M07args$control.predictor <- list(compute = TRUE)
+i04M07 <- do.call(inla, args = i04M07args)
+```
+
+
+For every lines we can obtain the summary. For example for the new 20
+predictions
+
+```{r}
+i04M07$summary.linear.predictor %>%
+  filter(is.na(newdata$data$height))
+```
+and the marginal which was used to compute the line summary is available,
+for example for $predictor.353$ which is the first new
+
+```{r}
+p <- list()
+p$df <- i04M07$marginals.linear.predictor[["Predictor.353"]] %>%
+  as.data.frame()
+ggplot(p$df, aes(x = x, y = y)) +
+  geom_line(color = "rosybrown", size = 1) +
+  theme_minimal() +
+  labs(x = "weight_c", y = "height")
+```
+
+**Important**: The variation from the **likelihood precision** is missing.  The
+above is only the linear predictor itself.  When the link function is the
+identify, the linear predictor is the fitted value. Therefore to get the predictions
+we need to sample the posterior as follows.
+
+
 #### Sample the posterior {-}
+
+From the `inla` object, we extract a list of samples and, for each samples, 
+the list of linear predictors
+
+```{r}
+samples <- list(n = 1000L)
+samples$data <- inla.posterior.sample(n = samples$n, result = app_i04M07)
+with(samples, stopifnot(length(data) == n))
+```
+
+Each sample in the list is structured as follows
+
+```{r}
+str(samples$data[[1]])
+```
+
+We need, for each sample
+
+* The linear predictors which are numbered from their row no in the data
+provided to `inla`
+* The sample's precision to add variability to the linear predictor.  Remember,
+from above, that the linear predictor is a fit and we need to add the likelihood
+variability to it and this, for each sample.
+
+For each sample, a dataframe of simulated data is found in the `latent` item.
+The linear predictors are identified as `"Predictor:<row no>"`.
+
+Since the new predictors are the last items in the latent dataframe we can 
+extract them. Using the first sample as an example, we obtain
+
+```{r}
+# which gives the linear predictors for the first sample
+cat("The linear predictors", "\n")
+samples$data[[1]]$latent[353:372, ]
+# and the sigma value for the first sample
+cat("The sigma", "\n")
+samples$data[[1]]$hyperpar[[1]]
+```
+
+therefore we use this information and repeat it for every sample to simulate
+the linear predictors *with variability*.  The`predict_inla` function automates 
+this process.
+
 #### `predict_inla` {-#app-inla-04M07-predict_inla}
+
+`predict_inla` executes the process of sampling the posterior prediction from
+an inla model object.  It is actually simple.  Please see the documentation
+in the `eflINLA` package for the function `predict_inla`.  For the `R` code,
+just select `predict_inla` and press `F2` to see the code.
+
+```{r}
+app_i04M07args$control.predictor <- list(compute = TRUE)
+app_i04M07args$data <- newdata$data
+preds <- list(n = 1000L)
+preds$inla <- do.call(INLA::inla, app_i04M07args)
+preds$data <- eflINLA::predict_inla(object = preds$inla,
+                                    pos = which(is.na(newdata$data$height)),
+                                    n = preds$n)
+
+# get the intervals
+preds$intervals <- preds$data %>%
+  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
+  mutate(weight_c = newdata$new$weight_c)
+  
+
+# put data in long format
+preds$lng <- preds$data %>%
+  pivot_longer(cols = everything(), names_to = "predictor", values_to = "height") %>%
+  mutate(weight_c = rep(newdata$new$weight_c, times = preds$n))
+# str(preds$lng)
+```
+
+plot the data
+
+```{r}
+ggplot(data04M07, aes(x = weight_c, y = height)) +
+  stat_lineribbon(preds$lng, mapping = aes(x = weight_c, y = height),
+                  color = "slateblue",inherit.aes = FALSE, .width = c(0.50, 0.75, 0.95),
+                  show.legend = FALSE) +
+  geom_point(color = "indianred") +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
+                     labels = function(x) round(x + mean(data04M07$weight))) +
+  scale_fill_paletteer_d("ggsci::indigo_material") +
+  ggdist::theme_ggdist() +
+  theme(title = element_text(color = "midnightblue")) +
+  labs(title = "Predictions with INLA", 
+       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
+                          preds$n, length(preds$data)),
+       x = "weight", y = "height")
+```
+
+
 ##### Predictions vs marginal {-}
+
+and we sample the prediction marginals to be able to compare with the prediction
+samples.  The 2 of them should be similar.
+
+
+```{r}
+lpmargs <- list(margs = app_i04M07$marginals.linear.predictor[which(is.na(newdata$data$height))])
+# get the sample for each predictor
+lpmargs$data <- lapply(X = lpmargs$margs, FUN = function(x) {
+  sample(x = x[, "x"],  size = samples$n, prob = x[, "y"], replace = TRUE)
+  })
+lpmargs$data <- do.call(cbind, lpmargs$data) %>%
+  as.data.frame()
+# str(lpmargs$data)
+
+# both data.frame should have the same dim
+stopifnot(all.equal(dim(preds$data), dim(lpmargs$data)))
+
+# add the intervals
+lpmargs$intervals <- lpmargs$data %>%
+  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
+  mutate(weight_c = newdata$new$weight_c)
+# lpmargs_summ
+```
+
+and we plot the results. The samples and marginals are close.  The marginals do
+not take into account the variations.  If we increase `nsamples`, e.g. to 
+5000, they become virtually the same.
+
+```{r}
+ggplot() +
+  geom_point(data = preds$intervals, aes(x = weight_c, y = y, color = "samples"),
+             size = 2) +
+  geom_line(data = lpmargs$intervals, aes(x = weight_c, y = y, color = "marginals"),
+            size = 1) +
+  scale_color_manual(values= c("samples" = "darkmagenta", "marginals" = "peru")) +
+  scale_x_continuous(breaks = scales::breaks_width(width = 5),
+                     labels = function(x) x + round(mean(data04M07$weight))) +
+  theme_minimal() +
+  theme(title = element_text(color = "midnightblue"),
+        legend.position = c(0.20, 0.80)) +
+  labs(title = "Comparing predictions' marginals and samples",
+       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
+                          nrow(preds$data), nrow(preds$intervals)),
+       x = "weight", y = "height", color = NULL)
+```
+
 
 <!--chapter:end:61_inla.Rmd-->
 

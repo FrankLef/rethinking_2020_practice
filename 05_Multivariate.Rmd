@@ -150,7 +150,7 @@ saveRDS(i05M01_capital, file = a_file)
 
 # univariate regression of P on L
 a_file <- here::here("fits", "i05M01_labor.rds")
-i05M02_labor <- readRDS(file = a_file)
+i05M01_labor <- readRDS(file = a_file)
 # i05M01_labor <- inla(
 #   data = sim$data,
 #   formula = P ~ L,
@@ -433,7 +433,7 @@ brms::posterior_summary(b05M04) %>%
 
 ### `inla` {-}
 
-See section 2.3.1, p. 18 from @gomez2020 for multivarable regression
+See section 2.3.1, p. 18 from @gomez2020 for multivariable regression
 with `inla`.
 
 ```{r}
@@ -468,13 +468,29 @@ i05M04$summary.fixed
 i05M04$summary.hyperpar
 ```
 
-We need to convert the hyperparameters from inla which are log of precision to
-the original representation of sd.  See the funciton `posterior_summary` from the
-package `eflINLA` for details on how to do it.  The package `brinla` has a
-similar function.
+
+To get a summary from `inla` that is similar to `posterior_summary` from `brms`
+we need to
+
+* collect the fixed and hyperparameters summaries together
+* convert the hyperparameters from inla which are log of precision to
+the original representation of sd.
+
+See the function `posterior_summary_inla` from the
+package `eflINLA` fwhich does that.  The package `brinla` has a
+similar functions `brinla::bir.hyperpar.summary`.
 
 ```{r}
 stop("TODO")
+str(i05M04$summary.fixed)
+str(i05M04$summary.hyperpar)
+rbind(i05M04$summary.fixed[, -6], i05M04$summary.hyperpar)
+1/ sqrt(i05M04$summary.hyperpar[1,1])
+1/ sqrt(i05M04$summary.hyperpar[1,2])
+i05M04$summary.hyperpar[1,2]
+brinla::bri.hyperpar.summary()
+
+
 i05M04_summ <- eflINLA::posterior_summary(i05M04)
 # inla posterior summary formatted with gt
 i05M04_summ %>%

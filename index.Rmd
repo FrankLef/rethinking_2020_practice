@@ -112,7 +112,7 @@ devtools::install_github("rmcelreath/rethinking")
   [solution](see https://github.com/rmcelreath/rethinking/issues/250) to solve it.
   This will show the command on the next lines.
 
-Use the following to install `rethinking` locally when usi `R` with version >= 4.0.
+Use the following to install `rethinking` locally when using `R` with version >= 4.0.
 
 ```{r eval=FALSE}
 remotes::install_github("rmcelreath/rethinking")
@@ -124,3 +124,10 @@ These notes borrow heavily from @elreath2016 and  @kurtz2020a which does all the
 bayesian analysis with `brms` instead of `rethinking`.
 
 The newest version of `rethinking` is in @elreath2020 and covered by @kurtz2020b.
+
+Package refeences can be generated with this command
+
+```{r}
+knitr::write_bib(c("simstudy"), width = 60)
+```
+

@@ -5,6 +5,7 @@ library(brms)
 library(eflINLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
+library(simstudy)
 library(modelr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -16,8 +17,8 @@ library(patchwork, quietly = TRUE)
 
 # `INLA` {-#app-inla}
 
-This appendix details the creation of the `inla` objects in the practices.
-The practices are identified in the sections.
+This appendix gives example on how to use `inla` objects. The data is simulated
+then the results are verified using the parameters of the siumlation.
 
 
 ## Note on priors {-}
@@ -28,35 +29,312 @@ are scattered among 3 different parameters which can be confusing at first.
 
 The priors for `inla` are organized as follows
 
-* **Fixed effect**: The prior are defined in `control.fixed`. See section 2.3.1, 
-in particular table 2.1, of @gomez2020.
-* **Latent effect**: The priors are in defined using the parameter `hyper` inside the
-`f()` function. See section 5.2 of @gomez2020.
 * **Likelihood**: The priors are defined using the parameter `hyper` inside 
 `control.family`. See section 5.2 of @gomez2020.
-  - The default prior on precision is the Gamma(shape = 1, rate = 0.00005). See
-    p. 19 of @gomez2020.
+  - The default prior on precision is the Gamma(shape = 1, rate = 0.00005). 
+  Internally, it is defined on the log(precision) and is therefore 
+  LogGamma(shape = 1, rate = 0.00005) See p. 19 and p. 23 of @gomez2020 and section 3.2, p.44, o
+  wang2018.
+* **Fixed effect**: The prior are defined in `control.fixed`. See section 2.3.1, 
+in particular table 2.1, of @gomez2020.
+* **Latent effect**: The difference between latent and hyperparameters in INLA is that
+latent Gaussian variables describe linear predictor.  Hyperparameters are all
+parameters (very few or none) not arising linearly in the predictors.
+The priors are in defined using the parameter `hyper` inside the
+`f()` function. See section 5.2 of @gomez2020.
 
-```{r}
-.libPaths()
-```
-
+The generalized linear models are handled using parameters values that can be
+listed with `?inla.models`
 
 ```{r}
 names(inla.models())
+names(inla.models())["prior"]
+```
+
+and the information on priors can be found in `inla.models()$prior`
+
+```{r}
 names(inla.models()$prior)
 ```
 
+The prior parametrization will therefore be detailed in details with examples 
+below.
+
+## Linear regression
+
+### Data
+
+See [simstudy correlated data](https://kgoldfeld.github.io/simstudy/articles/correlated.html)
+for details on how to create correlated data.
+
+However, if one wants to create a set of correlated data **with a specific**
+correlation structure **and use the correlated** data in a definition this is
+impossible as the data set created with genCorData is independent of a definition
+and cannot be used with additional definition with `defData` or `addColumns`, etc.
+
+One way to do it is just below.
+
+
 
 ```{r}
-names(inla.set.control.fixed.default())
+sim <- list()
+sim$def <- defData(varname = "x0", dist = "normal", 
+                   formula = 5, variance = 1^2)
+sim$def <- defData(sim$def, varname = "x1", dist = "nonrandom", 
+                   formula = "..x1")
+sim$def <- defData(sim$def, varname = "x2", dist = "nonrandom", 
+                   formula = "..x2")
+sim$def <- defData(sim$def, varname = "x3", dist = "nonrandom", 
+                   formula = "..x3")
+sim$def <- defData(sim$def, varname = "mu", dist = "nonrandom",
+                   formula = "x0 + x1 + x2 + exp(x3)")
+sim$def <- defData(sim$def, varname = "sigma", dist = "exponential", 
+                    formula = 1)
+sim$def <- defData(sim$def, varname = "y", dist = "normal", 
+                   formula = "mu", variance = "sigma^2")
+
+# correlation matrix
+sim$Rho <- genCorMat(nvars = 3, 
+                     cors = c("x1-x2" = 0.25, "x1-x3" = 0.5, "x2-x3" = 0.75))
+
+# create x1, x2 and x3 which are correlated
+# since normal distribution, we use genCorData
+# (no need for mode versatile genCorGen and genCorFlex)
+sim$dataCor <- genCorData(n = 10000L,
+                       mu = c("x1" = 1, "x2" = 2, "x3" = 0),
+                       sigma = c("x1" = 0.5, "x2" = 1, "x3" = 1),
+                       corMatrix = sim$Rho,
+                       cnames = c("x1", "x2", "x3"),
+                       idname = "id")
+# glimpse(sim$dataCor)
+
+# This function will inject correlated data inside a simstudy definition
+# to be able to use data with a specific correlated structure AND manipulate 
+# the data, e.g. creating "mu".  The creation of variables inside a funciton
+# avoid the conflcts that might happen otherwise.
+# 
+# dtDefs: data table of definitions definitions
+# dtData: data table, e.g. correlated data from genCorData
+injectData <- function(dtDefs, dtData) {
+  for (nm in names(dtData)) {
+    # NOTE: .. notation in bracket is peculiar to datatables!
+    #       unlist() because must have atomic vector
+    assign(x = eval(nm), value = unlist(dtData[, ..nm], use.names = FALSE))
+  }
+  genData(nrow(dtData), dtDefs)
+}
+sim$data <- injectData(dtDefs = sim$def, dtData = sim$dataCor)
+# glimpse(sim$data)
 ```
 
+
+
+```{r}
+# sim <- list(n = 500L,
+#             intercept = c("mu" = 5, "sigma" = 1),
+#             sigma_rate = 1,
+#             cat1 = c("size" = 1, "p" = 0.5),
+#             mus = c("x1" = 1, "x2" = 2, "x3" = 0),
+#             sigmas = c("x1" = 0.5, "x2" = 1, "x3" = 1),
+#             rhos = c("x1-x2" = 0.25, "x1-x3" = 0.5, "x2-x3" = 0.75),
+#             beta = c("x4" = 10))
+# # the dtaa is correlated but in the current model this information
+# # is not used.
+# sim <- within(sim, {
+#   # Rho is the correlation matrix
+#   Rho <- diag(nrow = length(rhos))
+#   Rho[lower.tri(Rho)] <- rhos
+#   Rho[upper.tri(Rho)] <- t(Rho[lower.tri(Rho)])
+#   # Sigma is the covariance matrix
+#   Sigma <- diag(sigmas) %*% Rho %*% diag(sigmas)
+#   # create the matrix of correlated data
+#   mat <- MASS::mvrnorm(n = n, mu = mus, Sigma = Sigma)
+# })
+# # create the simulated data
+# sim <- within(sim, {
+#   data <- as.data.frame(mat)
+#   data <- data %>%
+#     mutate(x0 = rnorm(n = n, mean = intercept["mu"], sd = intercept["sigma"]),
+#            x3 = exp(x3),
+#            x4 = beta["x4"] * rbinom(n = n, size = cat1["size"], p = cat1["p"]),
+#            mu = x0 + x1 + x2 + x3 + x4,
+#            sigma = rexp(n, rate = sigma_rate),
+#            y = mu + rnorm(n = n, mean = 0L, sd = sigma)
+#            )
+#   })
+```
+
+### Model
+
+The model is defined as follows
+
+$$
+\begin{align*}
+y &\sim \mathcal{N}(\mu, \sigma) \\
+\mu &= \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 exp(x_3) + \beta_4 x_4 \\
+\beta_0 &\sim \mathcal{N}(mean = 5,sd = 1.5) \\
+\beta_1 &\sim \mathcal{N}(mean = 1,sd = 0.5) \\
+\beta_2 &\sim \mathcal{N}(mean = 2,sd = 1) \\
+\beta_3 &\sim \mathcal{LogNormal}(meanlog = 0, sdlog = 1) \\
+\sigma &\sim \mathcal{Exponential}(rate = 1)
+\end{align*}
+$$
+### Simulation
+
+We simulate the model using the `simstudy` package which can be found at
+@R-simstudy. A wonderful package that is used extensively in this project to
+validate the model vs the fitting method.
+
+
+
+
+### Formula
+
+The formula is expressed as usual, as per the model above. We also add the data
+to the inla object.
+
+```{r}
+args <- list()  # create the list of parameters
+args$data <- sim$data
+args$formula <- y ~ x1 + x2 + x3
+```
+
+
+### Priors
+
+#### Family (likelihood)
+
+The default prior on the variance is defined internally in terms of logged
+precision $log(\tau$. It follows the log gamma distribution 
+$log(\tau) \sim LogGamma(1, 10^-5)$ (@wang2018, p.44).
+
+This corresponds to our model so we keep it as is.
+
+```{r}
+args$family = "gaussian"
+stopifnot(args$family %in% names(inla.models()$likelihood))
+```
+
+
+
+#### Fixed effects
+
+See section 2.3.1 of @gomez2020 for details and a nice example at the end of
+section 3.2, p.47, of @wang2018.
+
+The model has 2 fixed effects in $x_1$ and $x_2$ which can be assigned
+the **fixed-effect priors** from inla whose defaults are as follows
 
 
 ```{r}
 inla.set.control.fixed.default()[c("mean", "mean.intercept", "prec", "prec.intercept")]
 ```
+
+and assigning the fixed effect priors
+
+```{r}
+args$control.fixed = list(mean.intercept = 5, 
+                          prec.intercept = 1 / (1.5^2),
+                          mean = list(x1 = 1, x2 = 2, 
+                                      default = 0),
+                          prec = list(x1 = 1 / (0.5^2), x2 = 1 / (1^2), 
+                                      default = 0.001))
+```
+
+
+
+#### Random effects
+
+
+* the model is fixed (no random effect) and
+* $x_3$ is a **constrained fixed effect** limited to the positive range.
+See section 3.2.2 of @gomez2020 for details.
+
+Therefore the model has a **constrained fixed effect** *weight_c* which is 
+indicated by `clinear` in the `f()` function of the formula. This makes
+*weight_c* a *latent effect* as opposed to a *likelihood effect* such
+as $\sigma$ in the current model.
+
+The available priors, defined in `f()` of *latent effect* are as follows
+
+```{r}
+names(inla.models()$prior)
+```
+
+and we will use `logtnormal` which is equivalent to our prior 
+$\beta &\sim \mathcal{LogNormal}(0, 1)$
+
+```{r}
+args$control.family = list(
+    hyper = list(prec = list(prior = "loggamma", param = c(1, 10e-5))))
+```
+
+
+### Other parameters
+
+Finally we specify `control.compute` to obtain the DIC and WAIC. Use 
+`?control.compute` for the details on this parameters. Its default values
+are listed in `inla.set.control.compute.default`
+
+```{r}
+args$control.compute <- list(dic = TRUE, waic = TRUE)
+```
+
+and specify the quantiles to be obtained
+
+```{r}
+args$quantiles <- c(0.025, 0.5, 0.975)
+```
+
+
+### Create inla
+
+
+```{r}
+the_inla <- do.call(what = INLA::inla, args = args)
+```
+
+
+### Summaries
+
+
+```{r}
+margs <- eflINLA::extract_marginals_hyper(the_inla)
+# names(margs)
+# length(margs)
+m <- inla.emarginal(function(xx) c(xx, xx^2), margs[[1]])
+# s <- 1 / (max(0, sqrt(m[2])))
+marg_stats <- c("mean" = m[1], "sd" = sqrt(1 / m[2]))
+# sqrt(1 / m[1]^2)
+marg_stats
+data_stats <- c("mean" = mean(sim$data$sigma), "sd" = sd(sim$data$sigma))
+data_stats
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## 4M7 {-#app-inla-04M07}
@@ -105,7 +383,8 @@ section 3.2.2 on p. 41 and 42.
 See section 5.2 in @gomez2020 on how to use the prior.
 
 * the model is fixed (no random effect) and
-* the $\beta$ coefficient is constrained, i.e. must be positive
+* $x_3$ is a **constrained fixed effect** limited to the positive range.
+See section 3.2.2 of @gomez2020 for details.
 
 Therefore the model has a **constrained fixed effect** *weight_c* which is 
 indicated by `clinear` in the `f()` function of the formula. This makes
