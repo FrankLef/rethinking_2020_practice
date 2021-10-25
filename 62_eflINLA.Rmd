@@ -13,7 +13,6 @@ library(patchwork, quietly = TRUE)
 ```
 
 
-
 # `eflINLA` {-#eflINLA}
 
 This appendix explains the `eflINLA` package.  It is the vignette project
@@ -98,7 +97,7 @@ We get can a sample using the marginal probabilities
 
 ```{r}
 samples <- tidy_marg_draws_inla(i04M07ctr, n = 100)
-samples
+# samples
 ```
 
 ### Linear predictors: `linpred_marg_draws_inla` {-#eflINLA-marg-linpred}
@@ -121,7 +120,7 @@ which allow us to predict with a syntx that is very close to `tidyvayes`
 ```{r}
 preds <- linpred_marg_draws_inla(i04M07ctr_aug$inla, i04M07ctr_aug$new_pos,
                                  n = 100)
-preds
+# preds
 ```
 
 If one wishes to use the existing data without actual newdata, then the original
@@ -129,7 +128,7 @@ If one wishes to use the existing data without actual newdata, then the original
 
 ```{r}
 preds <- linpred_marg_draws_inla(i04M07ctr, n = 50)
-preds
+# preds
 ```
 
 
@@ -142,7 +141,7 @@ just above.
 ```{r}
 preds <- epred_marg_draws_inla(i04M07ctr_aug$inla, i04M07ctr_aug$new_pos,
                                  n = 100)
-preds
+# preds
 ```
 
 ### Posterior predictions: `predict_inla` {-#eflINLA-marg-predict}
@@ -170,7 +169,7 @@ Also, please obtain better references.
 
 ```{r}
 preds <- predict_inla(i04M07ctr, n = 100)
-preds
+# preds
 ```
 
 

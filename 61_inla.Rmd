@@ -3,6 +3,9 @@ library(rethinking)
 library(INLA)
 library(brms)
 library(eflINLA)
+library(eflRethinking)
+library(eflStats)
+library(eflINLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(simstudy)
@@ -69,28 +72,28 @@ for details on how to create correlated data.
 
 However, if one wants to create a set of correlated data **with a specific**
 correlation structure **and use the correlated** data in a definition this is
-impossible as the data set created with genCorData is independent of a definition
-and cannot be used with additional definition with `defData` or `addColumns`, etc.
+impossible as the data set created with genCorData is independent of a 
+`defData` and cannot be used with additional definition with `defData` or 
+`addColumns`, etc.
 
-One way to do it is just below.
-
+One way to do is as follows
 
 
 ```{r}
 sim <- list()
-sim$def <- defData(varname = "x0", dist = "normal", 
+sim$defs <- defData(varname = "x0", dist = "normal", 
                    formula = 5, variance = 1^2)
-sim$def <- defData(sim$def, varname = "x1", dist = "nonrandom", 
+sim$defs <- defData(sim$defs, varname = "x1", dist = "nonrandom", 
                    formula = "..x1")
-sim$def <- defData(sim$def, varname = "x2", dist = "nonrandom", 
+sim$defs <- defData(sim$defs, varname = "x2", dist = "nonrandom", 
                    formula = "..x2")
-sim$def <- defData(sim$def, varname = "x3", dist = "nonrandom", 
+sim$defs <- defData(sim$defs, varname = "x3", dist = "nonrandom", 
                    formula = "..x3")
-sim$def <- defData(sim$def, varname = "mu", dist = "nonrandom",
+sim$defs <- defData(sim$defs, varname = "mu", dist = "nonrandom",
                    formula = "x0 + x1 + x2 + exp(x3)")
-sim$def <- defData(sim$def, varname = "sigma", dist = "exponential", 
+sim$defs <- defData(sim$defs, varname = "sigma", dist = "exponential", 
                     formula = 1)
-sim$def <- defData(sim$def, varname = "y", dist = "normal", 
+sim$defs <- defData(sim$defs, varname = "y", dist = "normal", 
                    formula = "mu", variance = "sigma^2")
 
 # correlation matrix
@@ -100,7 +103,7 @@ sim$Rho <- genCorMat(nvars = 3,
 # create x1, x2 and x3 which are correlated
 # since normal distribution, we use genCorData
 # (no need for mode versatile genCorGen and genCorFlex)
-sim$dataCor <- genCorData(n = 10000L,
+sim$dataCor <- genCorData(n = 1000L,
                        mu = c("x1" = 1, "x2" = 2, "x3" = 0),
                        sigma = c("x1" = 0.5, "x2" = 1, "x3" = 1),
                        corMatrix = sim$Rho,
@@ -115,16 +118,19 @@ sim$dataCor <- genCorData(n = 10000L,
 # 
 # dtDefs: data table of definitions definitions
 # dtData: data table, e.g. correlated data from genCorData
-injectData <- function(dtDefs, dtData) {
-  for (nm in names(dtData)) {
-    # NOTE: .. notation in bracket is peculiar to datatables!
-    #       unlist() because must have atomic vector
-    assign(x = eval(nm), value = unlist(dtData[, ..nm], use.names = FALSE))
-  }
-  genData(nrow(dtData), dtDefs)
-}
-sim$data <- injectData(dtDefs = sim$def, dtData = sim$dataCor)
-# glimpse(sim$data)
+
+
+# injectData <- function(dtDefs, dtData) {
+#   for (nm in names(dtData)) {
+#     # NOTE: .. notation in bracket is peculiar to datatables!
+#     #       unlist() because must have atomic vector
+#     assign(x = eval(nm), value = unlist(dtData[, ..nm], use.names = FALSE))
+#   }
+#   genData(nrow(dtData), dtDefs)
+# }
+# sim$data <- injectData(dtDefs = defs, dtData = sim$dataCor)
+sim$data <- eflStats::injectData(dtDefs = sim$defs, dtData = sim$dataCor)
+glimpse(sim$data)
 ```
 
 
@@ -186,8 +192,6 @@ We simulate the model using the `simstudy` package which can be found at
 validate the model vs the fitting method.
 
 
-
-
 ### Formula
 
 The formula is expressed as usual, as per the model above. We also add the data
@@ -196,7 +200,7 @@ to the inla object.
 ```{r}
 args <- list()  # create the list of parameters
 args$data <- sim$data
-args$formula <- y ~ x1 + x2 + x3
+args$formula <- y ~ x1 + x2 + exp(x3)
 ```
 
 
@@ -292,10 +296,19 @@ args$quantiles <- c(0.025, 0.5, 0.975)
 
 ```{r}
 the_inla <- do.call(what = INLA::inla, args = args)
+names(the_inla$internal.marginals.hyperpar)
+
+print(sim$def)
 ```
 
 
 ### Summaries
+
+
+```{r}
+
+```
+
 
 
 ```{r}
