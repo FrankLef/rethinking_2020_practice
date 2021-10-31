@@ -855,13 +855,19 @@ postInla$predict$inla_aug <- eflINLA::augment_inla(i04M07ctr,
                                                   newdata = postInla$predict$newdata)
 
 # an get the marginal from inla for every predictor
-postInla$predict$data <- predict_inla(postInla$fitted$inla_aug$inla, 
+postInla$predict$data <- predicted_draws_inla(postInla$fitted$inla_aug$inla, 
                                       new_pos = postInla$fitted$inla_aug$new_pos,
                                       n = postInla$predict$nsamples) %>%
   as_draws_df() %>%
   select(-.chain, -.iteration, -.draw)
 
-# str(postInla$predict$data)
+str(postInla$predict$data)
+
+postInla$predict$intervals <- postInla$predict$data %>%
+  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
+  mutate(weight_c = postInla$predict$newdata$weight_c)
+postInla$predict$intervals
+
 ```
 
 and we plot the data. Note that that it is almost the exact same code

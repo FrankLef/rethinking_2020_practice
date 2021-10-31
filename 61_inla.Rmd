@@ -296,9 +296,6 @@ args$quantiles <- c(0.025, 0.5, 0.975)
 
 ```{r}
 the_inla <- do.call(what = INLA::inla, args = args)
-names(the_inla$internal.marginals.hyperpar)
-
-print(sim$def)
 ```
 
 
@@ -306,9 +303,8 @@ print(sim$def)
 
 
 ```{r}
-
+eflINLA::posterior_summary_inla(the_inla)
 ```
-
 
 
 ```{r}
@@ -323,30 +319,6 @@ marg_stats
 data_stats <- c("mean" = mean(sim$data$sigma), "sd" = sd(sim$data$sigma))
 data_stats
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -609,7 +581,7 @@ sequence with `NA`
 # the control.predictor
 i04M07args$data <- newdata$data
 i04M07args$control.predictor <- list(compute = TRUE)
-i04M07 <- do.call(inla, args = i04M07args)
+i04M07fitted <- do.call(inla, args = i04M07args)
 ```
 
 get the fitted data in a data.frame with only the new values
@@ -617,7 +589,7 @@ get the fitted data in a data.frame with only the new values
 ```{r}
 # get the fitted data 
 p <- list()
-p$fitted <- i04M07$summary.fitted.values %>%
+p$fitted <- i04M07fitted$summary.fitted.values %>%
   select(mean, sd, `0.025quant`, `0.975quant`) %>%
   slice_tail(n = newdata$n) %>%
   bind_cols(weight_c = newdata$new$weight_c)
@@ -666,8 +638,6 @@ linear predictors
 
 #### Predicted `inla` object {-}
 
-We prepare the data set by adding data to predict
-
 First we create the set of new data where the dependent variable has value `NA`
 
 ```{r}
@@ -692,7 +662,7 @@ the posterior mean of the linear predictors with the new data.
 # the control.predictor
 i04M07args$data <- newdata$data
 i04M07args$control.predictor <- list(compute = TRUE)
-i04M07 <- do.call(inla, args = i04M07args)
+i04M07fitted <- do.call(inla, args = i04M07args)
 ```
 
 
@@ -700,7 +670,7 @@ For every lines we can obtain the summary. For example for the new 20
 predictions
 
 ```{r}
-i04M07$summary.linear.predictor %>%
+i04M07fitted$summary.linear.predictor %>%
   filter(is.na(newdata$data$height))
 ```
 and the marginal which was used to compute the line summary is available,
@@ -708,7 +678,7 @@ for example for $predictor.353$ which is the first new
 
 ```{r}
 p <- list()
-p$df <- i04M07$marginals.linear.predictor[["Predictor.353"]] %>%
+p$df <- i04M07fitted$marginals.linear.predictor[["Predictor.353"]] %>%
   as.data.frame()
 ggplot(p$df, aes(x = x, y = y)) +
   geom_line(color = "rosybrown", size = 1) +
@@ -729,7 +699,7 @@ the list of linear predictors
 
 ```{r}
 samples <- list(n = 1000L)
-samples$data <- inla.posterior.sample(n = samples$n, result = app_i04M07)
+samples$data <- inla.posterior.sample(n = samples$n, result = i04M07fitted)
 with(samples, stopifnot(length(data) == n))
 ```
 
@@ -769,97 +739,65 @@ this process.
 #### `predict_inla` {-#app-inla-04M07-predict_inla}
 
 `predict_inla` executes the process of sampling the posterior prediction from
-an inla model object.  It is actually simple.  Please see the documentation
-in the `eflINLA` package for the function `predict_inla`.  For the `R` code,
-just select `predict_inla` and press `F2` to see the code.
+an inla model object. It consists in 2 steps:
+
+* *Create an augmented inla object* which is a list of the usual `inla` object
+with a vector of their positions. The vector of positions is necessary as
+the predictors are extracted using them.
+
+Please see the documentation in the `eflINLA` package for the function 
+`predict_inla`.  For the `R` code, just select `predict_inla` and press `F2` 
+to see the code.
 
 ```{r}
-app_i04M07args$control.predictor <- list(compute = TRUE)
-app_i04M07args$data <- newdata$data
-preds <- list(n = 1000L)
-preds$inla <- do.call(INLA::inla, app_i04M07args)
-preds$data <- eflINLA::predict_inla(object = preds$inla,
-                                    pos = which(is.na(newdata$data$height)),
-                                    n = preds$n)
+# the new data
+preds <- list(nsamples = 100L)
+preds$newdata <- data.frame(
+  weight_c = seq_range(x = data04M07$weight_c, n = 20),
+  height = NA_real_
+)
+preds$inla_aug <- eflINLA::augment_inla(i04M07, newdata = preds$newdata)
+
+preds$data <- eflINLA::predicted_draws_inla(preds$inla_aug$inla,
+                                       new_pos = preds$inla_aug$new_pos,
+                                       n = preds$nsamples) %>%
+  as_draws_df() %>%
+  select(starts_with("Predictor"))
+# glimpse(preds$data)
 
 # get the intervals
 preds$intervals <- preds$data %>%
   purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
-  mutate(weight_c = newdata$new$weight_c)
-  
+  mutate(weight_c = preds$newdata$weight_c)
+# preds$intervals
 
 # put data in long format
 preds$lng <- preds$data %>%
-  pivot_longer(cols = everything(), names_to = "predictor", values_to = "height") %>%
-  mutate(weight_c = rep(newdata$new$weight_c, times = preds$n))
-# str(preds$lng)
+  pivot_longer(cols = starts_with("Predictor")) %>%
+  mutate(weight_c = rep(preds$newdata$weight_c, times = nrow(preds$data)))
+glimpse(preds$lng)
+# unique(preds$lng$weight_c)
 ```
 
 plot the data
 
 ```{r}
 ggplot(data04M07, aes(x = weight_c, y = height)) +
-  stat_lineribbon(preds$lng, mapping = aes(x = weight_c, y = height),
+  stat_lineribbon(preds$lng, mapping = aes(x = weight_c, y = value),
                   color = "slateblue",inherit.aes = FALSE, .width = c(0.50, 0.75, 0.95),
                   show.legend = FALSE) +
   geom_point(color = "indianred") +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7),
-                     labels = function(x) round(x + mean(data04M07$weight))) +
+  scale_x_continuous(
+    breaks = scales::breaks_extended(n = 7),
+    labels = function(x) {
+      y <- x + mean(data04M07$weight)
+      scales::label_number(accuracy = 1)(y)
+  }) +
   scale_fill_paletteer_d("ggsci::indigo_material") +
   ggdist::theme_ggdist() +
   theme(title = element_text(color = "midnightblue")) +
   labs(title = "Predictions with INLA", 
        subtitle = sprintf("sample size = %d, nb of predictors = %d", 
-                          preds$n, length(preds$data)),
+                          preds$nsamples, length(preds$data)),
        x = "weight", y = "height")
 ```
-
-
-##### Predictions vs marginal {-}
-
-and we sample the prediction marginals to be able to compare with the prediction
-samples.  The 2 of them should be similar.
-
-
-```{r}
-lpmargs <- list(margs = app_i04M07$marginals.linear.predictor[which(is.na(newdata$data$height))])
-# get the sample for each predictor
-lpmargs$data <- lapply(X = lpmargs$margs, FUN = function(x) {
-  sample(x = x[, "x"],  size = samples$n, prob = x[, "y"], replace = TRUE)
-  })
-lpmargs$data <- do.call(cbind, lpmargs$data) %>%
-  as.data.frame()
-# str(lpmargs$data)
-
-# both data.frame should have the same dim
-stopifnot(all.equal(dim(preds$data), dim(lpmargs$data)))
-
-# add the intervals
-lpmargs$intervals <- lpmargs$data %>%
-  purrr::map_df(.f = function(x) {ggdist::mean_qi(x, .width = c(.50))}) %>%
-  mutate(weight_c = newdata$new$weight_c)
-# lpmargs_summ
-```
-
-and we plot the results. The samples and marginals are close.  The marginals do
-not take into account the variations.  If we increase `nsamples`, e.g. to 
-5000, they become virtually the same.
-
-```{r}
-ggplot() +
-  geom_point(data = preds$intervals, aes(x = weight_c, y = y, color = "samples"),
-             size = 2) +
-  geom_line(data = lpmargs$intervals, aes(x = weight_c, y = y, color = "marginals"),
-            size = 1) +
-  scale_color_manual(values= c("samples" = "darkmagenta", "marginals" = "peru")) +
-  scale_x_continuous(breaks = scales::breaks_width(width = 5),
-                     labels = function(x) x + round(mean(data04M07$weight))) +
-  theme_minimal() +
-  theme(title = element_text(color = "midnightblue"),
-        legend.position = c(0.20, 0.80)) +
-  labs(title = "Comparing predictions' marginals and samples",
-       subtitle = sprintf("sample size = %d, nb of predictors = %d", 
-                          nrow(preds$data), nrow(preds$intervals)),
-       x = "weight", y = "height", color = NULL)
-```
-
