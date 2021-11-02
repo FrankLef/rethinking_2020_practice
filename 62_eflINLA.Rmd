@@ -163,13 +163,11 @@ This process is done by the `eflINLA::predict_inla` function.
 See section 3.3 in @wang2018 for another discussion on prediction.  The 
 discussion is not as informative as Faraway above.
 
-> **Warnings**: This is a work in progress. I think the predictors from
-`INLA::inla.posterior.sample` are linear, we should use fitted predictors.
-Also, please obtain better references.
 
 ```{r}
-preds <- predict_inla(i04M07ctr, n = 100)
-# preds
+preds <- predicted_draws_inla(i04M07ctr_aug$inla, i04M07ctr_aug$new_pos,
+                                 n = 100)
+preds
 ```
 
 
