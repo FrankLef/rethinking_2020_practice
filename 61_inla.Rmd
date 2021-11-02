@@ -775,8 +775,7 @@ preds$intervals <- preds$data %>%
 preds$lng <- preds$data %>%
   pivot_longer(cols = starts_with("Predictor")) %>%
   mutate(weight_c = rep(preds$newdata$weight_c, times = nrow(preds$data)))
-glimpse(preds$lng)
-# unique(preds$lng$weight_c)
+# glimpse(preds$lng)
 ```
 
 plot the data

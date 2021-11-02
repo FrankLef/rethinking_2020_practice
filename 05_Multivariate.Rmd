@@ -2,6 +2,7 @@
 library(rethinking)
 library(brms)
 library(INLA)
+library(eflStats)
 library(eflINLA)
 library(eflRethinking)
 library(dplyr, quietly = TRUE)
@@ -138,29 +139,16 @@ i05M01_capital <- readRDS(file = a_file)
 # i05M01_capital <- inla(
 #   data = sim$data,
 #   formula = P ~ C,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
 #   )
-saveRDS(i05M01_capital, file = a_file)
+# saveRDS(i05M01_capital, file = a_file)
+
 
 # univariate regression of P on L
 a_file <- here::here("fits", "i05M01_labor.rds")
 i05M01_labor <- readRDS(file = a_file)
 # i05M01_labor <- inla(
 #   data = sim$data,
-#   formula = P ~ L,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
+#   formula = P ~ L
 #   )
 # saveRDS(i05M01_labor, file = a_file)
 
@@ -169,14 +157,7 @@ a_file <- here::here("fits", "i05M01_all.rds")
 i05M01_all <- readRDS(file = a_file)
 # i05M01_all <- inla(
 #   data = sim$data,
-#   formula = P ~ C + L,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
+#   formula = P ~ C + L
 #   )
 # saveRDS(i05M01_all, file = a_file)
 ```
@@ -255,15 +236,7 @@ a_file <- here::here("fits", "i05M02_material.rds")
 i05M02_material <- readRDS(file = a_file)
 # i05M02_material <- inla(
 #   data = sim$data,
-#   formula = P ~ M,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
+#   formula = P ~ M)
 # saveRDS(i05M02_material, file = a_file)
 
 # univariate regression of P on W
@@ -271,15 +244,7 @@ a_file <- here::here("fits", "i05M02_waste.rds")
 i05M02_waste <- readRDS(file = a_file)
 # i05M02_waste <- inla(
 #   data = sim$data,
-#   formula = P ~ W,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
+#   formula = P ~ W)
 # saveRDS(i05M02_waste, file = a_file)
 
 # univariate regression of P on M and W
@@ -287,15 +252,7 @@ a_file <- here::here("fits", "i05M02_all.rds")
 i05M02_all <- readRDS(file = a_file)
 # i05M02_all <- inla(
 #   data = sim$data,
-#   formula = P ~ M + W,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
+#   formula = P ~ M + W)
 # saveRDS(i05M02_all, file = a_file)
 ```
 
@@ -343,7 +300,7 @@ ggplot(p$df %>% filter(!(.variable %in% c("b_Intercept", "sigma"))),
 More divorces could lead to more remarriage and therefore contribute to an increase
 in marriage rate.
 
-This could be evaluated with mutliple regression if a flag is created to
+This could be evaluated with multivariable regression if a flag is created to
 identify which marriage is a remarriage.  We could then compare the models with
 and without remarriage.
 
@@ -353,6 +310,7 @@ and without remarriage.
 
 The number of members of the LDS by state for 2021 was scrapped from 
 [population](https://worldpopulationreview.com/state-rankings/mormon-population-by-state).
+on Sep 17, 2021.
 
 Note: The mormon file has data for Nevada but not District of Columbia. In
 `WaffleDivorce` there is data for District of Columbia but not Nevada.
@@ -441,63 +399,16 @@ a_file <- here::here("fits", "i05M04.rds")
 i05M04 <- readRDS(file = a_file)
 # i05M04 <- inla(
 #   data = d,
-#   formula = D ~ A + L + M,
-#   family = "gaussian",
-#   control.fixed = list(mean.intercept = 0, prec.intercept = 1 / (0.2^2),
-#                        mean = 0, prec = 1 / (0.5^2)),
-#   control.family = list(
-#     hyper = list(prec = list(prior = "loggamma", param = c(1, 0.00005)))),
-#   control.compute = list(config = TRUE, dic = TRUE, waic = TRUE),
-#   quantiles = c(0.025, 0.975)
-#   )
+#   formula = D ~ A + L + M)
 # saveRDS(i05M04, file = a_file)
 ```
 
 
-and the summaries
+and for the posterior summary we use `eflINLA::posterior_summary_inla()`. See
+how this function works by pressing `F2`. Also see @ref(app-inla)
 
 ```{r}
-summary(i05M04)
-```
-
-```{r}
-i05M04$summary.fixed
-```
-
-```{r}
-i05M04$summary.hyperpar
-```
-
-
-To get a summary from `inla` that is similar to `posterior_summary` from `brms`
-we need to
-
-* collect the fixed and hyperparameters summaries together
-* convert the hyperparameters from inla which are log of precision to
-the original representation of sd.
-
-See the function `posterior_summary_inla` from the
-package `eflINLA` fwhich does that.  The package `brinla` has a
-similar functions `brinla::bir.hyperpar.summary`.
-
-```{r}
-stop("TODO")
-str(i05M04$summary.fixed)
-str(i05M04$summary.hyperpar)
-rbind(i05M04$summary.fixed[, -6], i05M04$summary.hyperpar)
-1/ sqrt(i05M04$summary.hyperpar[1,1])
-1/ sqrt(i05M04$summary.hyperpar[1,2])
-i05M04$summary.hyperpar[1,2]
-brinla::bri.hyperpar.summary()
-
-
-i05M04_summ <- eflINLA::posterior_summary(i05M04)
-# inla posterior summary formatted with gt
-i05M04_summ %>%
-  eflRethinking::gt_posterior(
-    labs = list(title = "Posterior Summary INLA", subtitle = "Practice 5M4"),
-    qtl = list(`0.025quant` = "2.5%", `0.975quant` = "97.5%"),
-    .tab_options = list(heading.background.color = "lightcoral"))
+eflINLA::posterior_summary_inla(i05M04)
 ```
 
 ### brm vs inla {-}
@@ -512,7 +423,7 @@ summ$brm <- brms::posterior_summary(b05M04) %>%
   select(mean = Estimate, sd = Est.Error) %>%
   tibble::rownames_to_column(var = "var") %>%
   filter(var != "lp__")
-summ$inla <- eflINLA::posterior_summary(i05M04) %>%
+summ$inla <- eflINLA::posterior_summary_inla(i05M04) %>%
   select(mean, sd) %>%
   tibble::rownames_to_column(var = "var")
 eflRethinking::gt_posterior_compare(
@@ -527,7 +438,7 @@ eflRethinking::gt_posterior_compare(
 For every increase of 1 sd of the mormon population, the divorce
 rate is reduced by about 0.32 which is a significant impact.
 
-The posterior plotsare as follows
+The posterior plots are as follows
 
 ```{r}
 gather_draws(model=b05M04, `b_.*`, regex = TRUE) %>%
@@ -537,7 +448,8 @@ gather_draws(model=b05M04, `b_.*`, regex = TRUE) %>%
   scale_color_paletteer_d("ggthemes::Classic_10") +
   ggdist::theme_tidybayes() +
   theme(legend.position="none") +
-  labs(title = "Practice 5M4", x=NULL, y=NULL)
+  labs(title = "Practice 5M4",
+       subtitle = "Posterior distributions from brms fit", x=NULL, y=NULL)
 ```
 
 
@@ -614,7 +526,7 @@ and see what has conditional independence
 impliedConditionalIndependencies(dag)
 ```
 
-and the equivalent ag are
+and the number of equivalent dag are
 
 ```{r}
 msg <- sprintf("there are %d equivalent DAG", length(equivalentDAGs(dag)))
@@ -674,6 +586,7 @@ $$
 
 ### `brm` {-}
 
+We have 2 models defined as
 
 ```{r}
 d_model <- bf(D ~ 1 + A + M)
@@ -792,6 +705,7 @@ i05H02d <- readRDS(file = a_file)
 and for the *A model* we have
 
 ```{r}
+# model A has a modified version of D model's arguments
 i05H02a_args <- i05H02d_args
 i05H02a_args$formula <- A ~ M
 a_file <- here::here("fits", "i05H02a.rds")
@@ -809,7 +723,7 @@ For the model $D$
 brms::posterior_summary(b05H02) %>%
   as.data.frame() %>%
   filter(grepl(pattern = "^b_D|^sigma_D",x = row.names(.))) %>%
-  bind_cols(eflINLA::posterior_summary(i05H02d)) %>%
+  bind_cols(eflINLA::posterior_summary_inla(i05H02d)) %>%
   select(Estimate, mean, Est.Error, sd) %>%
   round(digits = 4)
 ```
@@ -820,7 +734,7 @@ and for model $A$
 brms::posterior_summary(b05H02) %>%
   as.data.frame() %>%
   filter(grepl(pattern = "^b_A|^sigma_A",x = row.names(.))) %>%
-  bind_cols(eflINLA::posterior_summary(i05H02a)) %>%
+  bind_cols(eflINLA::posterior_summary_inla(i05H02a)) %>%
   select(Estimate, mean, Est.Error, sd) %>%
   round(digits = 4)
 ```
@@ -1123,7 +1037,7 @@ brms::posterior_summary(b05H04) %>%
 
 * The south increases the intercept by 0.23, that is, the rate of divorce
 become increase by a factor of 0.23 for every standard deviation of $Divorce$.
-This is very significant considering that for the population in general the
+This is significant considering that for the population in general the
 rate is negative -0.12.
 * The effect of $MedianAgeMarriage$ goes from -0.53 in general to 
 -0.92 = -0.53 + -0.39 when taking into account the $South$ variable.
