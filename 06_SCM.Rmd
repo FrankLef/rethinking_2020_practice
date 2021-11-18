@@ -1,12 +1,21 @@
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
+library(INLA)
+library(eflStats)
+library(eflINLA)
+library(eflRethinking)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
-library(ggraph)
+library(tidybayes.rethinking, quietly = TRUE)
+library(posterior, quietly = TRUE)
+library(modelr, quietly = TRUE)
+library(simstudy, quietly = TRUE)
+library(scales)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
+library(ggraph, quietly = TRUE)
 library(ggdist, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
@@ -16,7 +25,7 @@ library(paletteer, quietly = TRUE)
 # Structural Causal Models {#SCM}
 
 The graph layout are available at [layout](https://rdrr.io/cran/ggraph/man/layout_tbl_graph_igraph.html).
-See laso documentaiton og `ggraph::Layouts`.
+See laso documentation og `ggraph::Layouts`.
 
 The recommended layout is *sugiyama* for DAG. However there are cases where the 
 *kk* layout gives a more desirable, i.e. planar, layout.  See 6M1 for example.
@@ -29,14 +38,14 @@ gg_dag <- function(dag, layout = "sugiyama", seed = 6,
                    clrs_status = NULL, clrs = NULL, sizes = NULL) {
   
   # default status colors
-  clrs_status_default <- list("latent"="mediumvioletred", 
-                                   "exposure"="lightcoral", 
-                                   "outcome"="cornflowerblue")
+  clrs_status_default <- list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue")
   pos <- !(names(clrs_status_default) %in% names(clrs_status))
   clrs_status <- append(x = clrs_status, values = clrs_status_default[pos])
   
   # default colors
-  clrs_default <- list(text ="gold",  na = "mediumseagreen", bg = "snow")
+  clrs_default <- list(text ="black",  na = "honeydew3", bg = "snow")
   pos <- !(names(clrs_default) %in% names(clrs))
   clrs <- append(x = clrs, values = clrs_default[pos])
   
@@ -72,7 +81,7 @@ gg_dag <- function(dag, layout = "sugiyama", seed = 6,
 See section 6.1 for all details.
 
 When predictors are closely related to each other when, for example,
-they have a common, unobserved, cause.  In `ggdag` an unmeasured variable
+they have a common, unobserved cause.  In `ggdag` an unmeasured variable
 is called a latent variable.
 
 For example the cost of a product $P$ can be the result of using 2 manufacturing cells
@@ -88,12 +97,14 @@ dag <- dagify(
   latent = "U")
   # tidy_dagitty(seed = 6, layout = "sugiyama")
 # dag
+dag
 
 p <- list()
 
 p$dag <- gg_dag(dag) +
   labs(title = "Multicollinearity", subtitle = "6H1")
 
+p$dag
 
 dag_tbl <- tidygraph::as_tbl_graph(dag)  # cannot use %>% here
 p$arrow <- dag_tbl %>%
@@ -106,6 +117,8 @@ p$arrow <- dag_tbl %>%
                            element_rect(fill="snow", color="snow")) +
   theme(legend.position = "none") +
   labs(title = "Multicollinearity", subtitle = "6H1")
+p$arrow
+
 
 wrap_plots(p) +
   plot_annotation("2 ways to do the DAG")
@@ -117,12 +130,10 @@ wrap_plots(p) +
 
 See section 6.2 for all details.
 
-When a predictor $X_1$ included in the model is actually the outcome $Y$ of another 
-predictor $X_2$ and the 2 outcomes are related.
+When a predictor $X_1$ of the outcome $y$ included in the model is actually the outcome of another predictor $X_2$ and the 2 outcomes $x_1$ and $y$ are related.
 
-For example the cost of a product $P_1$ is closely related to the cost of 
-another product $P_2$ which is manufactured at the same time or with the same
-process. 
+For example the cost of a product $P_1$ includes 
+another product $P_2$ and $P_1$ and $P_2$ give the final product ready for sale. 
 
 
 ```{r}
@@ -157,7 +168,6 @@ p$dag2 <- gg_dag(dag$d2) +
 wrap_plots(p) +
   plot_annotation("2 possible post-treatment biases")
 ```
-
 
 
 ### Collider bias {-}
@@ -282,6 +292,9 @@ The DAG on page 186 is
 
 ```{r}
 dag <- list()
+dag$coords <- tibble(name = c("X", "U", "A", "B", "C", "Y", "V"),
+                     x = c(1, 1, 2, 2, 3, 3, 3.5),
+                     y = c(1, 2, 2.5, 1.5, 2, 1, 1.5))
 # the original DAG on p. 186
 dag$original <- dagify(
   Y ~ C + X,
@@ -289,8 +302,10 @@ dag$original <- dagify(
   B ~ U + C,
   C ~ A,
   U ~ A,
+  exposure = "X",
   outcome = "Y",
-  latent = "U")
+  latent = "U",
+  coords = dag$coords)
 # the modified DAG
 dag$modified <- dagify(
   Y ~ C + X + V,
@@ -298,16 +313,19 @@ dag$modified <- dagify(
   B ~ U + C,
   C ~ A + V,
   U ~ A,
+  exposure = "X",
   outcome = "Y",
-  latent = c("U", "V"))
+  latent = c("U", "V"),
+  coords = dag$coords)
 
 p <- list()
 p$original <- dag$original %>%
-  gg_dag(layout = "kk") +
+  gg_dag() +
   labs(title = "Two Roads (section 6.4.2, p. 186)", 
        subtitle = "6M1")
+
 p$modified <- dag$modified %>%
-  gg_dag(layout = "kk") +
+  gg_dag() +
   labs(title = "Two Roads MODIFIED", 
        subtitle = "6M1")
 wrap_plots(p)
@@ -320,95 +338,373 @@ p <- dagitty::paths(dag$original, from = "X", to = "Y")$paths
 p
 # the adjustments set
 s <- dagitty::adjustmentSets(dag$original, exposure = "X", outcome = "Y")
+cat("The adjustment set", "\n")
 s
 ```
 
-The modified DAG had the following paths from $X$ to $Y$ with the adjustments set
+The modified DAG has the following paths from $X$ to $Y$ and adjustment set
 
 ```{r}
-# the paths
 p <- dagitty::paths(dag$modified, from = "X", to = "Y")$paths
-# p
+p
+```
+Thus we no have 4 backdoor paths. As described in section 6.4.2, p. 186, we
+must now verify if a backdoor path is open and close it.  It it is not open
+we must not accidentally open it with, for example, a collider.
+
+The set of variable to close is only $A$.  This is because $C$ has become
+a collider. Tat is, closing $C$ will create a path with $V$.
+
+```{r}
 # the adjustments set
 s <- dagitty::adjustmentSets(dag$modified, exposure = "X", outcome = "Y")
-# s
-msg <- sprintf("There are %d paths between X and Y.", length(p))
-print(msg)
-msg <- sprintf("The following set of variables must be conditioned on: %s", s)
-print(msg)
+cat("\n","The adjustment set", "\n")
+s
 ```
 
 
 ## 6M2 {-}
 
-See code in section 14.1.1, chap. 14, of @elreath2020 on how to create the
-Sigma matrix for the bivariate simulation.
+The simulation is made in the form of a *chain*. Observe that the correlation
+between $x$ and $z$ is strong, nearly 0.9.
+
 
 ```{r}
-sample <- list(n = 500L)
-sample$mu <- c("X" = 1, "Z" = 2)
-sample$sigma <- c("X" = 0.5, "Z" = 0.75)
-sample$rho <- 0.9
-sample <- within(sample, {
-  Rho <- matrix(c(1, rho, rho, 1), nrow = 2, byrow = FALSE)
-  Sigma <- diag(sigma) %*% Rho %*% diag(sigma)
-  })
-# then sample the bivariate normal distribution
-set.seed(seed = 6)
-sample$data <- MASS::mvrnorm(n = sample$n,
-                             mu = sample$mu,
-                             Sigma = sample$Sigma) %>%
-  as.data.frame() %>%
-  setNames(nm = names(sample$mu))
-# which gives us the correlation matrix which confirms
-# the correlations from above
-cor(sample$data)
-# and the covariance matrix
-cov(sample$data)
-# which has diagonal values (square root) about the same as sigma above
-sqrt(diag(cov(sample$data)))
+set.seed(as.integer(as.Date("2021-11-07")))
+sim <- list()
+sim <- within(sim, {
+  defs <- defData(varname = "x", dist = "normal", formula = 0, variance = 1)
+  defs <- defData(defs, varname = "z", dist = "normal", formula = "x", variance = 0.2)
+  defs <- defData(defs, varname = "y", dist = "normal", formula = "z", variance = 1)
+  data <- genData(n = 100L, dtDefs = defs)
+})
+# output must e standardized
+sim$data <- sim$data %>%
+  select(-id) %>%
+  mutate(across(.cols = everything(), .fns = function(x) as.vector(scale(x))))
+# glimpse(sim$data)
+GGally::ggpairs(sim$data)
 ```
-and add $Y$ as a result of $Z$
+
+and the model fit is now
 
 ```{r}
-set.seed(6)
-sample$data <- sample$data %>%
-  mutate(Y = rnorm(n = nrow(.), mean = 1 + 2 * Z, sd = 5))
-GGally::ggpairs(sample$data)
+a_file <- here::here("fits", "i06M02.rds")
+i06M02 <- readRDS(file = a_file)
+# i06M02 <- inla(
+#   data = sim$data,
+#   formula = y ~ x + z,
+#   )
+# saveRDS(i06M02, file = a_file)
 ```
 
 
+and we plot the resulting posterior distributions
+
+```{r}
+p <- list()
+
+p$data <- eflINLA::tidy_marg_draws_inla(i06M02) %>%
+  posterior::as_draws_df() %>%
+  pivot_longer(cols = !matches("[.]chain|[.]iteration|[.]draw"))
+# str(p$data)
+
+p$intr <- eflINLA::tidy_marg_draws_inla(i06M02) %>%
+  as_draws_df() %>%
+  eflStats::gather_intervals_rng(fun = mode_qi)
+# p$intr
+
+ggplot(p$data, aes(x = value, y = name)) +
+  stat_halfeye(aes(fill = name),
+               point_interval = mode_qi, 
+               .width = c(0.5, 0.75), fatten_point = 2) +
+  ggrepel::geom_text_repel(data = p$intr, 
+                           aes(x = .value, y = .variable,
+                               label = scales::label_number(accuracy = 0.1)(.value)),
+                           inherit.aes = FALSE) +
+  # scale_x_continuous(labels = scales::label_number(accuracy = 0.1)) +
+  scale_fill_paletteer_d("fishualize::Scarus_quoyi") +
+  theme_ggdist() +
+  theme(legend.position = "none") +
+  labs(title = "Practice 6M2", x = NULL, y = NULL)
+
+```
+
+The main difference with the leg example of section 6.1.1 is that the 
+predictors' coefficients do not overlap and their variable, relative to their
+size, is much lower.
+
+This is caused by the fact that we now have a *chain* whereas the leg example
+was a *collider*.
+
+## 6M3 {-}
+
+*Learning to analyse DAG requires practice*. This is definitively an area where
+using technology to avoid mistake is almost a must.  Even when simple cases, it
+should be a good idea to use *dagitty*.
 
 
 ```{r}
-message("TODO: Do it with simsstudy and compare results")
+dag <- list()
+dag$coords1 <- tibble(name = c("A", "X", "Y", "Z"),
+                     x = c(3, 1, 3, 2),
+                     y = c(2, 1, 1, 2))
+dag$g1 <- dagify(
+  X ~ Z,
+  Y ~ A + X + Z,
+  Z ~ A,
+  exposure = "X",
+  outcome = "Y",
+  coords = dag$coords1)
+
+dag$g2 <- dagify(
+  Y ~ A + X + Z,
+  Z ~ A + X,
+  exposure = "X",
+  outcome = "Y",
+  coords = dag$coords1)
+
+dag$coords2 <- tibble(name = c("A", "X", "Y", "Z"),
+                     x = c(1, 1, 3, 2),
+                     y = c(2, 1, 1, 2))
+dag$g3 <- dagify(
+  X ~ A,
+  Y ~ X,
+  Z ~ A + X + Y,
+  exposure = "X",
+  outcome = "Y",
+  coords = dag$coords2)
+
+dag$g4 <- dagify(
+  X ~ A,
+  Y ~ X + Z,
+  Z ~ A + X,
+  exposure = "X",
+  outcome = "Y",
+  coords = dag$coords2)
+
+p <- list()
+p$g1 <- dag$g1 %>%
+  gg_dag() +
+  labs(title = "DAG 1", 
+       subtitle = "6M3")
+
+p$g2 <- dag$g2 %>%
+  gg_dag() +
+  labs(title = "DAG 2", 
+       subtitle = "6M3")
+
+p$g3 <- dag$g3 %>%
+  gg_dag() +
+  labs(title = "DAG 3", 
+       subtitle = "6M3")
+
+p$g4 <- dag$g4 %>%
+  gg_dag() +
+  labs(title = "DAG 4", 
+       subtitle = "6M3")
+
+wrap_plots(p)
+```
+
+
+```{r}
+dagitty::adjustmentSets(dag$g1, exposure = "X", outcome = "Y")
+```
+
+
+```{r}
+dagitty::adjustmentSets(dag$g2, exposure = "X", outcome = "Y")
+```
+
+
+```{r}
+dagitty::adjustmentSets(dag$g3, exposure = "X", outcome = "Y")
+```
+
+
+
+```{r}
+dagitty::adjustmentSets(dag$g4, exposure = "X", outcome = "Y")
 ```
 
 
 
 ## 6H1 {-}
 
+This practice is explained section 6.4.3.
+
+It is important to note that the question asks the *total causal influence* of
+the number of waffle houses on the divorce rate.  The Overthinking box of
+6.4.3, p. 188, explains that the *total* causal effect is determined by using 
+the *do-operator*, i.e. $P(D = d \mid do(W = w))$ vs the *direct causal effect* 
+which simply conditions on $W$, i.e. $P(D = d \mid W = w)$.
+
 ```{r}
-message("TODO")
+dag <- list()
+dag$coords <- tibble(name = c("A", "D", "M", "S", "W"),
+                     x = c(1, 3, 2, 1, 3),
+                     y = c(1, 1, 2, 3, 3))
+dag$g <- dagify(
+  A ~ S,
+  D ~ A + M + W,
+  M ~ A + S,
+  W ~ S,
+  exposure = "W",
+  outcome = "D",
+  coords = dag$coords)
+p <- list()
+p$g <- dag$g %>%
+  gg_dag() +
+  labs(title = "Waffle Houses", 
+       subtitle = "6H1")
+p$g
+```
+
+To find the *total causal* effect we must use the *do-operator* which closes
+all the backdoors. See section 3.2 and 3.3 of @pearl2016 for details.
+
+The backdoors can be closed by controlling ${A, M}$ or simply ${S}$ as shown
+just below with `adjustmentSets()`.
+
+
+```{r}
+dagitty::adjustmentSets(dag$g, exposure = "W", outcome = "D")
+```
+
+ That is, "we can close them all by conditioning on $S$" (in the middle of 
+ p. 187, just before R code 6.30).
+
+Now conditioning on $S$ simply means filtering the data on the values of $S$.
+Since $S$ is and indicator for $S=1, South$ and $S=0, Not South$ we will filter
+on $S=0$ to remove the effect of $S$.
+
+```{r}
+data("WaffleDivorce")
+data06H01 <- WaffleDivorce %>%
+  as_tibble() %>%
+  select(D = Divorce,
+         A = MedianAgeMarriage,
+         M = Marriage,
+         S = South,
+         W = WaffleHouses) %>%
+  mutate(across(.cols = -S, .fns = standardize),
+         S = factor(S))
+rm(WaffleDivorce)
 ```
 
 
+and we regress after filtering on $S=0$ to avoid spurious effects as discussed above
+
+```{r}
+a_file <- here::here("fits", "i06H01.rds")
+i06H01 <- readRDS(file = a_file)
+# i06H01 <- INLA::inla(
+#   data = data06H01,
+#   formula = D ~ W + S,
+#   quantiles = c(0.025, 0.975)
+# )
+# saveRDS(i06H01, file = a_file)
+
+summary(i06H01)$fixed
+```
+
+Wich shows that once we take the $South$ into account, te $W = Waffle$ has
+very little impact. We note that it is very variable relative to its mean.
+
 ## 6H2 {-}
+
+We use the DAG and data from 6H1 above.
+
+The implied conditional independencies are
+
+```{r}
+dagitty::impliedConditionalIndependencies(dag$g)
+```
+The model for $A \perp\!\!\!\perp W \mid S$
+
+```{r}
+a_file <- here::here("fits", "i06H02a.rds")
+i06H02a <- readRDS(file = a_file)
+# i06H02a <- INLA::inla(
+#   data = data06H01,
+#   formula = A ~ W + S
+# )
+# saveRDS(i06H02a, file = a_file)
+summary(i06H02a)$fixed
+```
+
+
+The model for $D \perp\!\!\!\perp S \mid A, M, W$
+
+```{r}
+a_file <- here::here("fits", "i06H02d.rds")
+i06H02d <- readRDS(file = a_file)
+# i06H02d <- INLA::inla(
+#   data = data06H01,
+#   formula = D ~ S + A + M + W
+# )
+# saveRDS(i06H02d, file = a_file)
+summary(i06H02d)$fixed
+```
+
+The effect of $S$ on $D$ is less than $A$ but still not negligible. By adding
+variables that would replace $S$ and separate the different causes of $A$ and $M$
+we might able to have more choices to reduce the impact of $S$.
+
+
+The model for $M \perp\!\!\!\perp W \mid S$
+
+```{r}
+a_file <- here::here("fits", "i06H02m.rds")
+i06H02m <- readRDS(file = a_file)
+# i06H02m <- INLA::inla(
+#   data = data06H01,
+#   formula = M ~ W + S
+# )
+# saveRDS(i06H02m, file = a_file)
+summary(i06H02m)$fixed
+```
+
+which confirms that $M \perp\!\!\!\perp W \mid S$ is true.
+
+
+## 6H3 {-}
 
 See practice 7H5 in chapter 7 for corresponding exercises.
 
 ```{r}
 data(foxes)
-d <- foxes %>%
-  mutate(
-    W = scale(as.vector(weight)),
-    A = scale(as.vector(area)),
-    S = scale(as.vector(groupsize))
-  )
-skimr::skim(d)
+data06H03 <- foxes %>%
+  select(group, A = area,
+         `F` = avgfood,
+         S = groupsize,
+         W = weight) %>%
+  mutate(across(.cols = -group, .fns = standardize))
+rm(foxes)
 ```
 
-### 6H2 a) By territory area size {-}
+
+```{r}
+dag <- list()
+dag$coords <- tibble(name = c("A", "F", "W", "S"),
+                     x = c(2, 1, 2, 3),
+                     y = c(3, 2, 1, 2))
+dag$g <- dagify(
+  `F` ~ A,
+  S ~ `F`,
+  W ~ `F` + S,
+  exposure = "A",
+  outcome = "W",
+  coords = dag$coords)
+p <- list()
+p$g <- dag$g %>%
+  gg_dag() +
+  labs(title = "Foxes", 
+       subtitle = "6H3")
+p$g
+```
+
 
 $$
 \begin{align*}
@@ -423,10 +719,10 @@ $$
 and the fit
 
 ```{r}
-a_file <- here::here("fits", "b06H02a.rds")
-b06H02a <- readRDS(file = a_file)
-# b06H02a <- brm(
-#   data = d,
+a_file <- here::here("fits", "b06H03.rds")
+b06H03 <- readRDS(file = a_file)
+# b06H03 <- brm(
+#   data = data06H03,
 #   formula = W ~ 1 + A,
 #   family = gaussian,
 #   prior = c(
@@ -437,15 +733,15 @@ b06H02a <- readRDS(file = a_file)
 #   iter = 2000, warmup = 1000, chains = 4, core = detectCores(),
 #   seed = 6
 # )
-# saveRDS(b06H02a, file = a_file)
-summary(b06H02a)
+# saveRDS(b06H03, file = a_file)
+summary(b06H03)
 ```
 
 and create the full data for plotting
 
 ```{r}
 samples <- list()
-samples$fitted <- fitted(b06H02a) %>%
+samples$fitted <- fitted(b06H03) %>%
   as.data.frame() %>%
   rename(
     fit = Estimate,
@@ -453,25 +749,14 @@ samples$fitted <- fitted(b06H02a) %>%
     fit_Q2.5 = Q2.5,
     fit_Q97.5 = Q97.5)
 
-samples$predict <- predict(b06H02a) %>%
-  data.frame() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,)
-
-samples$data <- d %>%
-  bind_cols(samples$fitted) %>%
-  bind_cols(samples$predict)
+samples$data <- data06H03 %>%
+  bind_cols(samples$fitted)
 ```
 
 
 
 ```{r}
 ggplot(data = samples$data, mapping = aes(x = A, y = W)) +
-  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-              fill = "olivedrab1", alpha = 0.5) +
   geom_smooth(mapping = aes(y = fit, ymin = fit_Q2.5, ymax = fit_Q97.5),
               stat = "identity",
               fill = "olivedrab3", color = "olivedrab4", alpha = 0.5) +
@@ -479,34 +764,24 @@ ggplot(data = samples$data, mapping = aes(x = A, y = W)) +
   scale_color_paletteer_c("oompaBase::jetColors") + 
   theme_minimal() +
   theme(legend.position = "none") +
-  labs(title = "Practice 6H1a: Weight vs Area Size",
+  labs(title = "Practice 6H3: Weight vs Area Size",
        color = "group",
        x = "area size (std)", y = "weight (std)")
 ```
 
+Would increasing the area make the foxes healthier? The answer is no given that
+the effect of $A$ from the fit just above is almost nil.
 
-### 6H2 b) By group size {-}
+## 6H4 {-}
 
-
-$$
-\begin{align*}
-W_i &\sim \mathcal{N}(\mu_i, \sigma) \\
-\mu_i &= \alpha + \beta \cdot S_i \\
-\alpha &\sim \mathcal{N}(0, 0.5) \\
-\beta &\sim \mathcal{N}(0, 0.2) \\
-\sigma &\sim \mathcal{HalfCauchy}(0, 1)
-\end{align*}
-$$
-
-and the fit
 
 ```{r}
-a_file <- here::here("fits", "b06H02b.rds")
-b06H02b <- readRDS(file = a_file)
-# b06H02b <- brm(
-#   data = d,
-#   formula = W ~ 1 + S,
-#   family = gaussian(),
+a_file <- here::here("fits", "b06H04.rds")
+b06H04 <- readRDS(file = a_file)
+# b06H04 <- brm(
+#   data = data06H03,
+#   formula = W ~ 1 + `F`,
+#   family = gaussian,
 #   prior = c(
 #     prior(normal(0, 0.5), class = Intercept),
 #     prior(normal(0, 0.2), class = b),
@@ -515,52 +790,51 @@ b06H02b <- readRDS(file = a_file)
 #   iter = 2000, warmup = 1000, chains = 4, core = detectCores(),
 #   seed = 6
 # )
-# saveRDS(b06H02b, file = a_file)
-summary(b06H02b)
+# saveRDS(b06H04, file = a_file)
+summary(b06H04)
 ```
 
-and create the full data for plotting
+Adding food has little impact.  We would need to adjust for group size to
+remove its effect.
 
-```{r}
-samples <- list()
-samples$fitted <- fitted(b06H02b) %>%
-  as.data.frame() %>%
-  rename(
-    fit = Estimate,
-    fit_err = Est.Error,
-    fit_Q2.5 = Q2.5,
-    fit_Q97.5 = Q97.5)
-
-samples$predict <- predict(b06H02b) %>%
-  data.frame() %>%
-  rename(
-    pred = Estimate,
-    pred_err = Est.Error,
-    pred_Q2.5 = Q2.5,
-    pred_Q97.5 = Q97.5,)
-
-samples$data <- d %>%
-  bind_cols(samples$fitted) %>%
-  bind_cols(samples$predict)
-```
-
+## 6H5 {-}
 
 
 ```{r}
-ggplot(data = samples$data, mapping = aes(x = S, y = W)) +
-  geom_ribbon(aes(ymin = pred_Q2.5, ymax = pred_Q97.5),
-              fill = "thistle1", alpha = 0.5) +
-  geom_smooth(mapping = aes(y = fit, ymin = fit_Q2.5, ymax = fit_Q97.5),
-              stat = "identity",
-              fill = "thistle3", color = "thistle4", alpha = 0.5) +
-  geom_point(aes(color = group)) +
-  scale_color_paletteer_c("oompaBase::jetColors") + 
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Practice 6H2b: Weight vs Group Size",
-       color = "group",
-       x = "group size (std)", y = "weight (std)")
+a_file <- here::here("fits", "b06H05.rds")
+b06H05 <- readRDS(file = a_file)
+# b06H05 <- brm(
+#   data = data06H03,
+#   formula = W ~ 1 + S,
+#   family = gaussian,
+#   prior = c(
+#     prior(normal(0, 0.5), class = Intercept),
+#     prior(normal(0, 0.2), class = b),
+#     prior(cauchy(0, 1), class = sigma)
+#   ),
+#   iter = 2000, warmup = 1000, chains = 4, core = detectCores(),
+#   seed = 6
+# )
+# saveRDS(b06H05, file = a_file)
+summary(b06H05)
+```
+
+The causal impact of group size is similar to food, that is very little.  That
+is caused by the fact that $F$, $S$ and $W$ are a collider. That is, as soon as 
+we use $F$ and/or $S$ a dependency of $W$ is created on the other variable.
+
+
+## 6H6 {-}
+
+```{r echo=FALSE}
+message("TODO")
 ```
 
 
 
+## 6H7 {-}
+
+
+```{r echo=FALSE}
+message("TODO")
+```

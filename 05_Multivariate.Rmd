@@ -119,10 +119,10 @@ Lets do a simulation to illustrate
 set.seed(as.integer(as.Date("2021-10-17")))
 sim <- list()
 sim <- within(sim, {
-  def <- defData(varname = "C", dist = "normal", formula = 0, variance = 1)
-  def <- defData(def, varname = "L", dist = "normal", formula = "C", variance = 1)
-  def <- defData(def, varname = "P", dist = "normal", formula = "C", variance = 1)
-  data <- genData(n = 100L, dtDefs = def)
+  defs <- defData(varname = "C", dist = "normal", formula = 0, variance = 1)
+  defs <- defData(defs, varname = "L", dist = "normal", formula = "C", variance = 1)
+  defs <- defData(defs, varname = "P", dist = "normal", formula = "C", variance = 1)
+  data <- genData(n = 100L, dtDefs = defs)
 })
 # output must e standardized
 sim$data <- sim$data %>%
