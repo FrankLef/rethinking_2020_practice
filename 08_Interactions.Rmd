@@ -5,6 +5,7 @@ library(tidybayes, quietly = TRUE)
 library(rethinking)
 library(brms)
 library(loo)
+library(simstudy)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -28,30 +29,31 @@ Socio-economic situation
 
 ### (3) {-}
 
-Electricity (e.g. from battery)
+Electricity (e.g. from battery) or engine type (e.g. V6, V8).
 
 ## 8E2 {-}
 
 ### (1) {-}
 
 Interaction. Heat and moisture interact to obtain cooking effect.
-The word "condition" is key here.
+The words *requires ... and making sure ...* are key here.
 
 
 ### (2) {-}
 
-Additive, no interaction (although this is arguable).
-The word "or" defines the situation
+Additive, no interaction (although this is arguable),
+You can have effect from either cylinders or fuel injector.
+The word "or" defines the situation.
 
 
 ### (3) {-}
 
 Additive, you can get opinions from both without
-them interacting with each other. The word "unless" is a key word.
+them interacting with each other. The word *unless* is a key word.
 
 ### (4) {-}
 
-Additive, no interaction.  The word "or" indicates either one can be
+Additive, no interaction.  The words *either ... or ...* indicates either one can be
 used.
 
 
@@ -102,25 +104,37 @@ $$
 
 ## 8M1 {-}
 
+The tulip example is found in section 8.3.1, p.253.
+
 Temperature interacts with water and/or shade to either cancel the water effect or
 increase the effect of shade or both.
 
 ## 8M2 {-}
 
-Let the binary variable $T$ be the temperature effect where $H=1$ means it is 
-hot and $H=0$ when it is cold.
+Let the binary variable $C$ be the temperature effect where $hot=1$ means it is 
+hot and $hot=0$ when it is cold.
 
 and the initial model
 
 $$
-\mu_i \sim \alpha + \beta_W \cdot water\_c_i + \beta_S \cdot shade\_c_i
+\begin{align*}
+bloom_i &\sim \mathcal{N(\mu_i, \sigma)} \\
+\mu_i &= \alpha + \beta_W \cdot water\_i + \beta_S \cdot shade\_i \\
+\alpha, \beta_S,  \beta_W &\sim \mathcal{N(., .)}\\
+\sigma &\sim \mathcal{Exponential(1)}
+\end{align*}
 $$
 
 now becomes
 
 
 $$
-\mu_i \sim \alpha + (1 - H_i) \cdot \beta_W \cdot water\_c_i + H_i \cdot \beta_S \cdot shade\_c_i
+\begin{align*}
+bloom_i &\sim \mathcal{N(\mu_i, \sigma)} \\
+\mu_i &= (1 - hot_i) \cdot (\alpha + \beta_W \cdot water\_i + \beta_S \cdot shade\_i) \\
+\alpha, \beta_S,  \beta_W &\sim \mathcal{N(., .)}\\
+\sigma &\sim \mathcal{Exponential(1)}
+\end{align*}
 $$
 
 
@@ -130,17 +144,195 @@ The relationship is that ravens depend on wolves for their food but the wolves
 don't depend on the raven.  The question states that ravens depends on wolves.
 It is not clear that they depend entirely as a parasite does for example.
 
-The data would be one where ravens success increases as function of wolves
+**Set of data?**: The data would be one where ravens success increases as function of wolves
 success.  It is not an interaction which would cause the presence of ravens and
 wolves to impact their mutual success in a way similar as if a third variable
 affected both and increase as well as decrease their mutual success.
 
+**Linear interaction?**: It does not seem to be a statistical interaction as it is not symmetric as
+explained in section 8.2.  Therefore the interaction would not be linear.
+
 ## 8M4 {-}
 
+See comment in section 8.3.2, p. 254, about the fact that *basic botany informs
+us that water should have a postivie slope and shade a negative slope*.
 
-```{r echo=FALSE}
-message("TODO")
+A quick glance at the data shows it is pretty evenly distributed. Therefore
+it is not centering and scaling on sd is not that important.
+
+What can simplify the problem by rescaling each variable on its maximum
+value.  In addition, $shade$ will be multiplied by -1 to ensure it has a negative
+impact.  As a result, the problem is simplified a bit as both rescaled $water$,
+called $water_r = \frac{water}{max(water)}$and $light_r = \frac{-shade}{max(shade)}$
+can have the same priors and are easily understood while being in line with
+the constraints that $water_r$ has a beneficial effect and $shade_r$ has a
+detrimental effect.
+
+The $blooms$ variable is also rescaled as 
+$blooms_r = \frac{blooms}{median(blooms)}$ as it allows to simplify the prior
+$alpha$. `median` is used rather than `mean` because $bloom_r$ is heavily
+skewed.
+
+```{r}
+data(tulips, package = "rethinking")
+data08M04 <- tulips %>%
+  mutate(water_r = water / max(water),
+         light_r = -shade / max(shade),
+         blooms_r = blooms / median(blooms))
+rm(tulips)
+skimr::skim(data08M04)
 ```
+
+### Intercept prior {-}
+
+Because of the transformation above, $water_r$ and $light_r$ have strictly positive
+effect on blooms.  Therefore their minimum should match the minimum of
+$blooms_r$ and their maximum to the maximum of $blooms_r$.  Therefore the 
+intercept should be at the minimum of $blooms_r$ which is 0.
+
+We will therefore use the prior
+
+$$
+\alpha \sim \mathcal{N}(1, 0.5)
+$$
+
+
+### Slope prior {-}
+
+
+To simulate the priors' effect on the posterior prediction we will simulate
+them with `simstudy`.  We could use the prior from `rethinking::quap()` or 
+`brms::brm()` also.  Using `simstudy` avoids some issues with convergence
+and is more obvious (my personal taste) as it shows that analysing priors is
+just a straightforward simulation exercise.
+
+Now we simulate the prior, without interaction
+
+```{r}
+set.seed(as.integer(as.Date("2021-11-20")))
+sim <- list()
+sim <- within(sim, {
+  defs <- defData(varname = "water", dist = "uniform", formula = "0;1")
+  defs <- defData(defs, varname = "light", dist = "uniform", formula = "0;1")
+  defs <- defData(defs, varname = "alpha", dist = "normal", formula = 1, variance = 0.5^2)
+  defs <- defData(defs, varname = "betaw", dist = "normal", formula = 1, variance = (1/2)^2)
+  defs <- defData(defs, varname = "betal", dist = "normal", formula = 1, variance = (1/2)^2)
+  defs <- defData(defs, varname = "betawl", dist = "normal", formula = 1, variance = (1/2)^2)
+  defs <- defData(defs, varname = "slope", dist = "nonrandom", 
+                  formula = "betaw * water + betal * light")
+  defs <- defData(defs, varname = "mu", dist = "nonrandom", 
+                  formula = "alpha + slope")
+  data <- round(genData(n = 100, dtDefs = defs), 4)
+})
+
+# skimr::skim(sim$data)
+```
+
+```{r}
+p <- list()
+# sim$data %>%
+#   filter(light %in% quantile(light, probs = c(0.5))
+p$probs <- c(0.25, 0.5, 0.75)
+p$df <- sim$data %>%
+  mutate(light_grp = santoku::chop_quantiles(light, 
+                                             probs = p$probs,
+                                             santoku::lbl_intervals(raw = TRUE)))
+# sum(p$df$sel)
+
+
+p$plot <- ggplot(p$df, aes(x = water, group = id)) +
+  geom_abline(data = p$df, mapping = aes(intercept = alpha, slope = slope),
+              color = "pink", size = 1) +
+  geom_hline(yintercept = range(data08M04$blooms_r), 
+             size = 1, linetype = 2, color = "royalblue") +
+  scale_color_manual(values = c("FALSE" = "pink", "TRUE" = "blue")) +
+  coord_cartesian(ylim = c(min(data08M04$blooms_r) - 0.25, max(data08M04$blooms_r) + 0.25)) +
+  theme_minimal() +
+  labs(title = "8M4: Prior predictions by light interval - NO INTERACTION", 
+       subtitle = sprintf("Simulation size = %d", nrow(p$df)),
+       x = "water", y = "blooms") +
+  facet_wrap(. ~ light_grp)
+p$plot
+```
+
+and the prior with interaction are
+
+
+```{r}
+# when usaing update, do not use a list (!)
+set.seed(as.integer(as.Date("2021-11-20")))
+defsInteract <- sim$defs
+defsInteract <- updateDef(dtDefs = defsInteract, changevar = "slope", 
+                      newformula = "betaw * water + betal * light + betawl * water * light")
+sim$dataInteract <- round(genData(n = 100, dtDefs = defsInteract), 4)
+```
+
+
+
+```{r}
+pInteract <- list()
+pInteract$probs <- p$probs
+pInteract$df <- sim$dataInteract %>%
+  mutate(light_grp = santoku::chop_quantiles(light, 
+                                             probs = pInteract$probs,
+                                             santoku::lbl_intervals(raw = TRUE)))
+# sum(p$pInteract$sel)
+
+
+pInteract$plot <- ggplot(pInteract$df, aes(x = water, group = id)) +
+  geom_abline(data = pInteract$df, mapping = aes(intercept = alpha, slope = slope),
+              color = "pink", size = 1) +
+  geom_hline(yintercept = range(data08M04$blooms_r), 
+             size = 1, linetype = 2, color = "royalblue") +
+  scale_color_manual(values = c("FALSE" = "pink", "TRUE" = "blue")) +
+  coord_cartesian(ylim = c(min(data08M04$blooms_r) - 0.25, max(data08M04$blooms_r) + 0.25)) +
+  theme_minimal() +
+  labs(title = "8M4: Prior predictions by light interval - WITH INTERACTION", 
+       subtitle = sprintf("Simulation size = %d", nrow(p$df)),
+       x = "water", y = "blooms") +
+  facet_wrap(. ~ light_grp)
+pInteract$plot
+```
+
+
+```{r}
+p$all <- data.frame(p$df, model = "no interact") %>%
+  bind_rows(data.frame(pInteract$df, model = "interact")) %>%
+  select(alpha, slope, model) %>%
+  # mutate(model = rep(c("plain", "interact"), times = c(nrow(p$df), nrow(pInteract$df)))) %>%
+  pivot_longer(cols = c("alpha", "slope"), names_to = "param")
+  # mutate(model = as.factor(model),
+  #        param = as.factor(param))
+# str(p$all)
+
+p$stats <- p$all %>%
+  group_by(model, param) %>%
+  mutate(mean = mean(value),
+         mode = ggdist::Mode(value))
+```
+```{r}
+ggplot(p$all %>% filter(param == "slope"), aes(x = value, color = model)) +
+  geom_density(size = 1) +
+  geom_vline(data = p$stats %>% filter(param == "slope"), 
+             aes(xintercept = mean, color = model),
+             linetype = 2, size = 1) +
+  geom_vline(data = p$stats %>% filter(param == "slope"), 
+             aes(xintercept = mode, color = model),
+             linetype = 3, size = 1) +
+  theme_minimal() +
+  theme(legend.position = c(0.8, 0.8)) +
+  coord_cartesian(xlim = c(0, 2)) +
+  labs(title = "Slope Comparison",
+       subtitle = "8M4 (mode = doted line, mean = dashed line)")
+```
+
+
+
+### Conclusion {-}
+
+When taking the interaction into account the prior seem to favor an increased 
+slope. It is supported by the scientific knowledge that the effect of
+$water$ and $light$ together should be higher than their simple addition.
 
 
 ## 8H1 {-}
@@ -148,9 +340,9 @@ message("TODO")
 ```{r}
 data(tulips, package = "rethinking")
 d <- tulips %>%
-  mutate(blooms_r = scales::rescale(blooms),
-         water_c = as.vector(scale(water, scale = FALSE)),
-         shade_c = as.vector(scale(shade, scale = FALSE)))
+  mutate(blooms_r = scales::rescale(blooms),  # rescale from 0 to 1
+         water_c = as.vector(scale(water, scale = FALSE)),  # center the data
+         shade_c = as.vector(scale(shade, scale = FALSE)))  # center the data
 stopifnot(is.factor(d$bed))  # must be a factor to use with brms as category
 rm(tulips)
 skimr::skim(d)
@@ -213,10 +405,10 @@ w <- loo::loo_compare(b08H01, b08H02, criterion = "waic")
 print(w, simplify = FALSE)
 ```
 
-The water and shade effect is the same.  Now however the intercept or 0.36 is
-the same as the mean of the 3 bed intercepts we had in 8H1 above.  In other words
-the model in 8H1 breaks down the intercept into the three beds showing their ingluence
-on the growth.
+The water and shade effects are the same in both models. However the intercept 
+when using the bed category will vary.  This will give a better fit
+as illustrated by the waic comparison just above.
+
 
 ## 8H3 {-}
 
@@ -336,7 +528,8 @@ b08H03t <- readRDS(file = a_file)
 summary(b08H03t)
 ```
 
-Comparing the results
+and comparing the results
+
 
 ```{r}
 w <- loo::loo_compare(b08H03, b08H03t, criterion = "waic")
@@ -374,7 +567,6 @@ ggplot(dp, aes(x = pareto_k, y = p_waic, color = is_africa)) +
   labs(title = "Practice 8H3 (b) - Student distribution",
        subtitle = deparse1(b08H03t$formula$formula))
 ```
-
 ## 8H4 {-}
 
 As required in the question, we use $log(lang.per.cap)$. This gives
@@ -383,7 +575,6 @@ a positive slope (required by our hypothesis), we rescale $lang.per.cap.log$
 to be in $[0,10]$
 
 We also rescale $mean.growing.season$ and $sd.growing.season$ to $[0,10]$
-
 
 
 ```{r}
@@ -397,6 +588,7 @@ d <- nettle %>%
 rm(nettle)
 skimr::skim(d)
 ```
+
 
 ### (a) {-}
 
@@ -975,22 +1167,22 @@ For `brms` formula, see similar treatment in 8H5 just above
 
 ```{r}
 a_file <- here::here(getwd(), "fits", "b08H06a.rds")
-# b08H06a <- readRDS(file = a_file)
-b08H06a <-
-  brm(data = d,
-      family = gaussian,
-      formula = bf(score.s ~ 0 + f + j + w,
-                   f ~ 0 + flight,
-                   j ~ 0 + judge.a,
-                   w ~ 0 + wine.a,
-                   nl = TRUE),
-      prior = c(prior(normal(0, 0.5), nlpar = f),
-                prior(normal(0, 0.5), nlpar = j),
-                prior(normal(0, 0.5), nlpar = w),
-                prior(exponential(1), class = sigma)),
-      iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
-b08H06a <- brms::add_criterion(b08H06a, criterion = c("waic", "loo"))
-saveRDS(b08H06a, file = a_file)
+b08H06a <- readRDS(file = a_file)
+# b08H06a <-
+#   brm(data = d,
+#       family = gaussian,
+#       formula = bf(score.s ~ 0 + f + j + w,
+#                    f ~ 0 + flight,
+#                    j ~ 0 + judge.a,
+#                    w ~ 0 + wine.a,
+#                    nl = TRUE),
+#       prior = c(prior(normal(0, 0.5), nlpar = f),
+#                 prior(normal(0, 0.5), nlpar = j),
+#                 prior(normal(0, 0.5), nlpar = w),
+#                 prior(exponential(1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
+# b08H06a <- brms::add_criterion(b08H06a, criterion = c("waic", "loo"))
+# saveRDS(b08H06a, file = a_file)
 print(b08H06a, digits = 3)
 ```
 

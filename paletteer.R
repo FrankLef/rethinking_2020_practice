@@ -72,6 +72,10 @@ scales::show_col(tmp$pal)
 tmp$pal <- paletteer::paletteer_d("khroma::vibrant")
 scales::show_col(tmp$pal)
 
+# few colors with good contrast
+tmp$pal <- paletteer::paletteer_d("khroma::light")
+scales::show_col(tmp$pal)
+
 # continuous --------------------------------------------------------------
 
 
@@ -121,7 +125,6 @@ scales::show_col(tmp$pal)
 
 tmp$pal <- paletteer::paletteer_c("scico::berlin", n = 16)
 scales::show_col(tmp$pal)
-
 
 
 tmp$pal <- paletteer::paletteer_c("grDevices::Inferno", n = 16)
