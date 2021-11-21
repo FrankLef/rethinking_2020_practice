@@ -790,7 +790,7 @@ Given that the `elpd_diff` for b08H04a3 is -0.6 which exceeds the `se_diff` of
 b08H04a1 then we select b08H04a1 as our model of choice.
 
 
-#### Plotting the model
+#### Plotting the model {-}
 
 
 
@@ -1036,7 +1036,7 @@ b08H04c_fitted <- fitted(b08H04c1, newdata = b08H04c_seq, probs = c(0.015, 0.985
     id = sprintf("sd = %02d", sd.growing.season)
   ) %>%
   arrange(id)
-glimpse(b08H04c_fitted)
+# glimpse(b08H04c_fitted)
 ```
 
 ```{r}
@@ -1121,7 +1121,7 @@ b08H05 <- readRDS(file = a_file)
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
 # b08H05 <- brms::add_criterion(b08H05, criterion = c("waic", "loo"))
 # saveRDS(b08H05, file = a_file)
-print(b08H05, digits = 3)
+# print(b08H05, digits = 3)
 ```
 
 
@@ -1131,7 +1131,7 @@ b08H05_fitted <- fitted(b08H05) %>%
 # glimpse(b08H05_fitted)
 ```
 
-```{r}
+```{r echo=FALSE}
 # get_variables(b08H05)
 ```
 
@@ -1156,8 +1156,9 @@ ggplot(data = df, aes(y = reorder(id, value), x = value, xmin =.lower, xmax = .u
   theme(legend.position = "none",
         title = element_text(color = "midnightblue")) +
   labs(title = "8H5: Coefficient plot",
+       subtitle = "mean and qi interval of width 95%",
        x = NULL,
-       y = "mean and qi interval of width 95%")
+       y = NULL)
   # facet_wrap(. ~ is_wine)
 ```
 
@@ -1200,7 +1201,7 @@ b08H06 <- readRDS(file = a_file)
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
 # b08H06 <- brms::add_criterion(b08H06, criterion = c("waic", "loo"))
 # saveRDS(b08H06, file = a_file)
-print(b08H06, digits = 3)
+# print(b08H06, digits = 3)
 ```
 
 
@@ -1232,8 +1233,9 @@ ggplot(data = df, aes(y = reorder(id, as.integer(type)), x = value, xmin =.lower
   theme(legend.position = "none",
         title = element_text(color = "midnightblue")) +
   labs(title = "8H6: Coefficient plot",
+       subtitle = "mean and qi interval of width 95%",
        x = NULL,
-       y = "mean and qi interval of width 95%")
+       y = NULL)
 ```
 
 
@@ -1250,14 +1252,14 @@ than all other judges.
 ## 8H7 {-}
 
 
-see (https://gregor-mathes.netlify.app/2021/03/22/rethinking-chapter-8/) for
-good example
+See [Gregor Mathes](https://gregor-mathes.netlify.app/2021/03/22/rethinking-chapter-8/) 
+for good example with `rethinking`.
 
 We use an index instead of a dummy variable as suggested by @elreath2020 
 in section 8.1.3. See the same section in @kurtz2020b on how to use an index
 variable not only for the slope but the entire linear equation.
 
-Doing the fit with `brms` as decribe in section 8.1.3 of @kurtz2020b.
+Doing the fit with `brms` as described in section 8.1.3 of @kurtz2020b.
 
 
 ```{r}
@@ -1284,8 +1286,46 @@ b08H07 <- readRDS(file = a_file)
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
 # b08H07 <- brms::add_criterion(b08H07, criterion = c("waic", "loo"))
 # saveRDS(b08H07, file = a_file)
-summary(b08H07)
+# summary(b08H07)
 ```
+
+
+### Predict {-}
+
+We use `fitted` which is the equivalent of `rethinking::link` to get the
+$mu$ values.
+
+```{r echo=FALSE}
+fitted <- list()
+fitted$newdata <- expand.grid(c("red", "white"), c("AmJudge", "NotAmJudge"), 
+                               c("AmWine", "NotAmWine"))
+names(fitted$newdata) <- c("flight", "judge.a", "wine.a")
+fitted$data <- fitted(b08H07, newdata = fitted$newdata) %>%
+  as.data.frame() %>%
+  bind_cols(fitted$newdata) %>%
+  unite(col = "id", flight, judge.a, wine.a, sep = "-")
+
+ggplot(data = fitted$data, aes(y = reorder(id, Estimate), 
+                                x = Estimate, xmin = Q2.5, xmax = Q97.5,
+                                color = Estimate)) +
+  geom_pointinterval(size = 2, fatten_point = 4) +
+  ggrepel::geom_text_repel(aes(label = round(Estimate, 2)), size = 4) +
+  geom_vline(xintercept = 0, color = "grey60") +
+  scale_color_paletteer_c("pals::isol") +
+  ggthemes::theme_hc() +
+  theme(legend.position = "none",
+        title = element_text(color = "midnightblue")) +
+  labs(title = "8H7: fitted scores by permutation of factors",
+       subtitle = "mean and qi interval of width 95%",
+       x = "Standardized score",
+       y = NULL)
+```
+
+
+**Answer to first question**: The scores seem to be different especially between American judges tasting
+Non-American wines and Non-American judges tasting wines ans Non-American
+judges seem to have lower scores. This is particularly true for red wines.
+
 
 ### Comparing models {-}
 
@@ -1296,16 +1336,10 @@ w <- loo::loo_compare(b08H06, b08H07, criterion = "waic")
 print(w, simplify = FALSE)
 ```
 
-The model from 8H7 seems less accurate. However the standard error of the
-difference is very wide, mode than twice the difference itself.  This might 
+**Answer to second question**: The model from 8H7 seems less accurate. 
+However the standard error of the difference is very wide, 
+mode than twice the difference itself.  This might 
 indicate that the comparison is not so clear cut.  Maybe because there is
 not enough data for the number of parameters in 8H7 which has $6 \cdot 2 = 12$
 parameters (intercept and slope by variable and interaction) and only 180
-observations (???).
-
-
-```{r echo=FALSE}
-message("TODO")
-```
-
-
+observations.
