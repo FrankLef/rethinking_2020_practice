@@ -1062,26 +1062,54 @@ ggplot(b08H04c_fitted, aes(x = mean.growing.season, y = Estimate, ymin = Q1.5, y
 
 ```{r}
 data(Wines2012)
-d <- Wines2012 %>%
-  mutate(flight = as.factor(flight),
+data08H05 <- Wines2012 %>%
+  mutate(judge = as.character(judge),
+         judge = substring(judge, regexpr(pattern = " ", text = judge) + 1), 
+         judge = as.factor(judge),
+         flight = as.factor(flight),
          judge.a = ifelse(judge.amer == 0, "NotAmJudge", "AmJudge"),
          wine.a = ifelse(wine.amer == 0, "NotAmWine", "AmWine"),
          judge.a = as.factor(judge.a),
          wine.a = as.factor(wine.a),
          score.s = as.vector(scale(score)))
 rm(Wines2012)
-skimr::skim(d)
-# glimpse(d)
+skimr::skim(data08H05)
 ```
+
+A heatmap can help to illustrate the data.
+
+```{r}
+pd <- data08H05 %>%
+  select(judge, wine, score.s) %>%
+  pivot_wider(names_from = judge, values_from = score.s) %>%
+  tibble::column_to_rownames("wine") %>%
+  as.matrix()
+# glimpse(pd)
+pal <- paletteer::paletteer_d("ggthemes::Hue_Circle")
+pal <- paletteer::paletteer_d("khroma::smooth_rainbow")
+superheat::superheat(X = pd, 
+                     X.text = round(pd, 2), X.text.size = 3,
+                     clustering.method = "hierarchical",
+                     heat.pal = pal,
+                     bottom.label.text.size = 3,
+                     bottom.label.text.angle = 30,
+                     bottom.label.text.alignment = "right",
+                     left.label.text.size = 3,
+                     padding = 0.5,
+                     title = "Wine Coefficients: Wines vs Judges\n8H5")
+```
+
+
+
 
 We have to use index variables with 2 variables.  See @kurtz2020b in his
 section 5.3.2 with model b5.11.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "b08H05a.rds")
-b08H05a <- readRDS(file = a_file)
-# b08H05a <-
-#   brm(data = d,
+a_file <- here::here(getwd(), "fits", "b08H05.rds")
+b08H05 <- readRDS(file = a_file)
+# b08H05 <-
+#   brm(data = data08H05,
 #       family = gaussian,
 #       formula = bf(score.s ~ 0 + j + w,
 #                    j ~ 0 + judge,
@@ -1091,69 +1119,58 @@ b08H05a <- readRDS(file = a_file)
 #                 prior(normal(0, 0.5), nlpar = w),
 #                 prior(exponential(1), class = sigma)),
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
-# b08H05a <- brms::add_criterion(b08H05a, criterion = c("waic", "loo"))
-# saveRDS(b08H05a, file = a_file)
-print(b08H05a, digits = 3)
+# b08H05 <- brms::add_criterion(b08H05, criterion = c("waic", "loo"))
+# saveRDS(b08H05, file = a_file)
+print(b08H05, digits = 3)
 ```
+
+
 ```{r}
-b08H05_fitted <- fitted(b08H05a) %>%
+b08H05_fitted <- fitted(b08H05) %>%
   as_tibble()
-glimpse(b08H05_fitted)
+# glimpse(b08H05_fitted)
 ```
 
 ```{r}
-get_variables(b08H05a)
+# get_variables(b08H05)
 ```
 
 ```{r}
-df <- b08H05a %>%
-  posterior_samples() %>%
-  select(-sigma, -lp__) %>%
-  pivot_longer(cols = everything(), names_to = "vars") %>%
-  group_by(vars) %>%
-  summarize(y = ggdist::mean_hdi(value, width = 0.97)[1, "y"],
-            ymin = ggdist::mean_hdi(value, width = 0.97)[1, "ymin"],
-            ymax = ggdist::mean_hdi(value, width = 0.97)[1, "ymax"]) %>%
-  mutate(is_wine = grepl(pattern = "^b_w_", x = vars),
-         id = gsub(pattern = "b_w_|b_j_|judge", replacement = "", x = vars))
-glimpse(df)
+df <- b08H05 %>%
+  posterior::as_draws_df() %>%
+  select(-sigma, -lp__, - .chain, -.iteration, -.draw) %>%
+  pivot_longer(cols = everything(), names_to = "var") %>%
+  group_by(var) %>%
+  ggdist::mean_qi(.width = 0.95) %>%
+  mutate(is_wine = grepl(pattern = "^b_w_", x = var),
+         id = gsub(pattern = "b_w_|b_j_|judge", replacement = "", x = var)) %>%
+  arrange(value)
+# str(df)
 
-ggplot(data = df, aes(x = id, y = y, ymin = ymin, ymax = ymax, color = is_wine)) +
-  geom_pointinterval() +
-  ggrepel::geom_text_repel(aes(label = round(y, 2)), size = 3) +
-  scale_color_manual(values = c("FALSE" = "blue", "TRUE" = "red")) + 
-  coord_flip() +
-  theme_classic() +
-  theme(legend.position = "none") +
-  labs(title = "8H5: Coeficient plot",
+ggplot(data = df, aes(y = reorder(id, value), x = value, xmin =.lower, xmax = .upper, color = is_wine)) +
+  geom_pointinterval(size = 1) +
+  ggrepel::geom_text_repel(aes(label = round(value, 2)), size = 3) +
+  # ggrepel::geom_text_repel(aes(x = .lower - 0.1, y = id, label = id), size = 3) +
+  scale_color_manual(values = c("FALSE" = "royalblue4", "TRUE" = "violetred")) + 
+  ggthemes::theme_hc() +
+  theme(legend.position = "none",
+        title = element_text(color = "midnightblue")) +
+  labs(title = "8H5: Coefficient plot",
        x = NULL,
-       y = "mean and hdi interval of width 97%")
+       y = "mean and qi interval of width 95%")
   # facet_wrap(. ~ is_wine)
 ```
 
-The heatmap in this case will help answer the questions
+Judges John Foy and Linda Murphy have the most positive ratings. Judges Robert Hogson
+and Jean Cardebat have the most negative ratings
 
-```{r}
-pd <- d %>%
-  select(judge, wine, score.s) %>%
-  pivot_wider(names_from = judge, values_from = score.s) %>%
-  tibble::column_to_rownames("wine") %>%
-  as.matrix()
-# glimpse(pd)
-pheat <- superheat::superheat(X = pd, 
-                              X.text = round(pd, 2), X.text.size = 3,
-                              clustering.method = "hierarchical",
-                              bottom.label.text.size = 3,
-                              bottom.label.text.angle = 30,
-                              bottom.label.text.alignment = "right",
-                              left.label.text.size = 3,
-                              title = "Wine Heatmap")
-pheat
-```
+
 How to interpret variations: Some judges, such as JeanMMCaderbat and Robert Hodgston 
-have generally more negative views whereas John Foy if genrally more positive
+have generally more negative views whereas John Foy and Linda Murphy have 
+generally more positive scores.
 
-Notice patterns: Yes wine I2 seems to be an outlier and John Foy more positive than all other judges.
+Notice patterns: Yes wine I2 seems to be an outlier and John Foy as well as
+Linda Murphy are more positivethan all other judges.
 
 Best rated wines: B2
 
@@ -1166,10 +1183,10 @@ Worst rated wine: I2
 For `brms` formula, see similar treatment in 8H5 just above
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "b08H06a.rds")
-b08H06a <- readRDS(file = a_file)
-# b08H06a <-
-#   brm(data = d,
+a_file <- here::here(getwd(), "fits", "b08H06.rds")
+b08H06 <- readRDS(file = a_file)
+# b08H06 <-
+#   brm(data = data08H05,
 #       family = gaussian,
 #       formula = bf(score.s ~ 0 + f + j + w,
 #                    f ~ 0 + flight,
@@ -1181,10 +1198,45 @@ b08H06a <- readRDS(file = a_file)
 #                 prior(normal(0, 0.5), nlpar = w),
 #                 prior(exponential(1), class = sigma)),
 #       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
-# b08H06a <- brms::add_criterion(b08H06a, criterion = c("waic", "loo"))
-# saveRDS(b08H06a, file = a_file)
-print(b08H06a, digits = 3)
+# b08H06 <- brms::add_criterion(b08H06, criterion = c("waic", "loo"))
+# saveRDS(b08H06, file = a_file)
+print(b08H06, digits = 3)
 ```
+
+
+```{r}
+df <- b08H06 %>%
+  posterior::as_draws_df() %>%
+  select(-sigma, -lp__, - .chain, -.iteration, -.draw) %>%
+  pivot_longer(cols = everything(), names_to = "var") %>%
+  group_by(var) %>%
+  ggdist::mean_qi(.width = 0.95) %>%
+  mutate(
+    type = case_when(
+      grepl(pattern = "^b_w_", x = var) ~ "wine",
+      grepl(pattern = "^b_j_", x = var) ~ "judge",
+      grepl(pattern = "^b_f_", x = var) ~ "flight",
+      TRUE ~ "NA_character"),
+    type = factor(type, levels = c("flight", "judge", "wine"), ordered = TRUE),
+    id = gsub(pattern = "b_w_wine[.]a|b_j_judge[.]a|b_f_", replacement = "", x = var)) %>%
+  arrange(value)
+# str(df)
+df
+
+ggplot(data = df, aes(y = reorder(id, as.integer(type)), x = value, xmin =.lower, xmax = .upper, color = type)) +
+  geom_pointinterval(size = 2, fatten_point = 4) +
+  ggrepel::geom_text_repel(aes(label = round(value, 2)), size = 4) +
+  geom_vline(xintercept = 0, color = "grey60") +
+  scale_color_manual(values = c("flight" = "royalblue4", "judge" = "violetred", "wine" = "darkgreen")) + 
+  ggthemes::theme_hc() +
+  theme(legend.position = "none",
+        title = element_text(color = "midnightblue")) +
+  labs(title = "8H6: Coefficient plot",
+       x = NULL,
+       y = "mean and qi interval of width 95%")
+```
+
+
 
 American judges seem to be generally more favorable than non American ones.
 American wine seem t obtain a more negative score on average.
@@ -1192,11 +1244,68 @@ American wine seem t obtain a more negative score on average.
 Whether the wine is red or wine seems to have little effect.
 
 The favorable american judge effect could be related to judge John Foy
-as mentioned in the previous problem.
+and Linda Murphy, both American judges but with clearly higher score
+than all other judges.
 
 ## 8H7 {-}
+
+
+see (https://gregor-mathes.netlify.app/2021/03/22/rethinking-chapter-8/) for
+good example
+
+We use an index instead of a dummy variable as suggested by @elreath2020 
+in section 8.1.3. See the same section in @kurtz2020b on how to use an index
+variable not only for the slope but the entire linear equation.
+
+Doing the fit with `brms` as decribe in section 8.1.3 of @kurtz2020b.
+
+
+```{r}
+a_file <- here::here(getwd(), "fits", "b08H07.rds")
+b08H07 <- readRDS(file = a_file)
+# b08H07 <-
+#   brm(data = data08H05,
+#       family = gaussian,
+#       formula = bf(score.s ~ 0 + f + j + w + fj + fw + jw,
+#                    f ~ 0 + flight,
+#                    j ~ 0 + judge.a,
+#                    w ~ 0 + wine.a,
+#                    fj ~ 0 + flight:judge.a,
+#                    fw ~ 0 + flight:wine.a,
+#                    jw ~ 0 + judge.a:wine.a,
+#                    nl = TRUE),
+#       prior = c(prior(normal(0, 0.5), nlpar = f),
+#                 prior(normal(0, 0.5), nlpar = j),
+#                 prior(normal(0, 0.5), nlpar = w),
+#                 prior(normal(0, 0.5), nlpar = fj),
+#                 prior(normal(0, 0.5), nlpar = fw),
+#                 prior(normal(0, 0.5), nlpar = jw),
+#                 prior(exponential(1), class = sigma)),
+#       iter = 2000, warmup = 1000, chains = 4, cores = detectCores(), seed = 8)
+# b08H07 <- brms::add_criterion(b08H07, criterion = c("waic", "loo"))
+# saveRDS(b08H07, file = a_file)
+summary(b08H07)
+```
+
+### Comparing models {-}
+
+Compare model from 8H6 and 8H7
+
+```{r}
+w <- loo::loo_compare(b08H06, b08H07, criterion = "waic")
+print(w, simplify = FALSE)
+```
+
+The model from 8H7 seems less accurate. However the standard error of the
+difference is very wide, mode than twice the difference itself.  This might 
+indicate that the comparison is not so clear cut.  Maybe because there is
+not enough data for the number of parameters in 8H7 which has $6 \cdot 2 = 12$
+parameters (intercept and slope by variable and interaction) and only 180
+observations (???).
 
 
 ```{r echo=FALSE}
 message("TODO")
 ```
+
+

@@ -49,7 +49,7 @@ scales::show_col(tmp$pal)
 tmp$pal <- paletteer::paletteer_d("pals::alphabet")
 scales::show_col(tmp$pal)
 
-tmp$pal <- paletteer::paletteer_d("ggthemes::calc")
+tmp$pal <- paletteer::paletteer_d("ggthemes::Hue_Circle")
 scales::show_col(tmp$pal)
 
 # very nice rainbow-like
@@ -73,7 +73,7 @@ tmp$pal <- paletteer::paletteer_d("khroma::vibrant")
 scales::show_col(tmp$pal)
 
 # few colors with good contrast
-tmp$pal <- paletteer::paletteer_d("khroma::light")
+tmp$pal <- paletteer::paletteer_d("khroma::discrete_rainbow")
 scales::show_col(tmp$pal)
 
 # continuous --------------------------------------------------------------
