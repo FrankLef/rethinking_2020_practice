@@ -552,7 +552,7 @@ logit(p_i) &= \alpha + \beta_P P_i + \beta_V V_i, + \beta_A A_i \\
 \end{align*}
 $$
 
-#### `quap` fit
+#### `quap` fit {-}
 
 
 ```{r}
@@ -570,9 +570,9 @@ saveRDS(b11H02a_quap, file = a_file)
 precis(b11H02a_quap, depth = 2)
 ```
 
-#### `brm` fit
+#### `brm` fit {-}
 
-see b11.2 in Kurtz kurtz2020b on how to do this.
+see b11.2 in @kurtz2020b on how to do this.
 
 ```{r}
 a_file <- here::here("fits", "b11H02a_brm.rds")
@@ -600,7 +600,7 @@ summary(b11H02a_brm)
 ```
 
 
-#### `inla` fit
+#### `inla` fit {-}
 
 
 

@@ -17,7 +17,7 @@ library(paletteer, quietly = TRUE)
 # Conditional Manatees {#interactions}
 
 
-## 8E1 {-}
+## 8E1 {-#prac8E1}
 
 ### (1) {-}
 
@@ -31,7 +31,7 @@ Socio-economic situation
 
 Electricity (e.g. from battery) or engine type (e.g. V6, V8).
 
-## 8E2 {-}
+## 8E2 {-#prac8E2}
 
 ### (1) {-}
 
@@ -57,7 +57,7 @@ Additive, no interaction.  The words *either ... or ...* indicates either one ca
 used.
 
 
-## 8E3 {-}
+## 8E3 {-#prac8E3}
 
 ### (1) {-}
 
@@ -102,14 +102,14 @@ intelligence_i &\sim \mathcal{N}(\mu_i, \sigma) \\
 \end{align*}
 $$
 
-## 8M1 {-}
+## 8M1 {-#prac8M1}
 
 The tulip example is found in section 8.3.1, p.253.
 
 Temperature interacts with water and/or shade to either cancel the water effect or
 increase the effect of shade or both.
 
-## 8M2 {-}
+## 8M2 {-#prac8M1}
 
 Let the binary variable $C$ be the temperature effect where $hot=1$ means it is 
 hot and $hot=0$ when it is cold.
@@ -138,7 +138,7 @@ bloom_i &\sim \mathcal{N(\mu_i, \sigma)} \\
 $$
 
 
-## 8M3 {-}
+## 8M3 {-#prac8M3}
 
 The relationship is that ravens depend on wolves for their food but the wolves
 don't depend on the raven.  The question states that ravens depends on wolves.
@@ -152,7 +152,7 @@ affected both and increase as well as decrease their mutual success.
 **Linear interaction?**: It does not seem to be a statistical interaction as it is not symmetric as
 explained in section 8.2.  Therefore the interaction would not be linear.
 
-## 8M4 {-}
+## 8M4 {-#prac8M4}
 
 See comment in section 8.3.2, p. 254, about the fact that *basic botany informs
 us that water should have a postivie slope and shade a negative slope*.
@@ -335,7 +335,7 @@ slope. It is supported by the scientific knowledge that the effect of
 $water$ and $light$ together should be higher than their simple addition.
 
 
-## 8H1 {-}
+## 8H1 {-#prac8H1}
 
 ```{r}
 data(tulips, package = "rethinking")
@@ -380,7 +380,7 @@ summary(b08H01)
 ```
 
 
-## 8H2 {-}
+## 8H2 {-#prac8H2}
 
 
 ```{r}
@@ -410,7 +410,7 @@ when using the bed category will vary.  This will give a better fit
 as illustrated by the waic comparison just above.
 
 
-## 8H3 {-}
+## 8H3 {-#prac8H3}
 
 
 ```{r}
@@ -567,7 +567,7 @@ ggplot(dp, aes(x = pareto_k, y = p_waic, color = is_africa)) +
   labs(title = "Practice 8H3 (b) - Student distribution",
        subtitle = deparse1(b08H03t$formula$formula))
 ```
-## 8H4 {-}
+## 8H4 {-#prac8H4}
 
 As required in the question, we use $log(lang.per.cap)$. This gives
 $lang.per.cap.log \in [-10,0]$.  To avoid the negative outcome which cause
@@ -1058,7 +1058,7 @@ ggplot(b08H04c_fitted, aes(x = mean.growing.season, y = Estimate, ymin = Q1.5, y
 
 
 
-## 8H5 {-}
+## 8H5 {-#prac8H5}
 
 ```{r}
 data(Wines2012)
@@ -1178,7 +1178,7 @@ Best rated wines: B2
 Worst rated wine: I2
 
 
-## 8H6 {-}
+## 8H6 {-#prac8H6}
 
 
 For `brms` formula, see similar treatment in 8H5 just above
@@ -1249,7 +1249,7 @@ The favorable american judge effect could be related to judge John Foy
 and Linda Murphy, both American judges but with clearly higher score
 than all other judges.
 
-## 8H7 {-}
+## 8H7 {-#prac8H7}
 
 
 See [Gregor Mathes](https://gregor-mathes.netlify.app/2021/03/22/rethinking-chapter-8/) 

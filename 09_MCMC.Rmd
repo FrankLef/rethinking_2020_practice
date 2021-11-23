@@ -17,7 +17,7 @@ library(paletteer, quietly = TRUE)
 
 # Markov Chain Monte Carlo {#MCMC}
 
-## 9E1 {-}
+## 9E1 {-#prac9E1}
 
 (1)  The parameters need NOT be discrete. See introduction to section 9.2, p. 267.
 (2) The distribution need NOT be gaussian. See introduction to section 9.2, p. 267.
@@ -28,7 +28,7 @@ library(paletteer, quietly = TRUE)
 to B from A is equal to the probability of proposing A from B, when the proposed
 distribution is symmetric.
 
-## 9E2 {-}
+## 9E2 {-#prac9E2}
 
 It is more efficient, that is obtain estimates of the posterior distribution
 with many fewer samples. See section 9.2.1, p, 267.  It achieves that
@@ -42,7 +42,7 @@ See section 9.2.2, p. 268,
 * When the model is complex and contain many parameters, bot Metropolis and Gibbs
 algorithms become *shockingly inefficient*.  See section 9.2.2, p. 268.
 
-## 9E3 {-}
+## 9E3 {-#prac9E3}
 
 The parameters must be continuous.  Because HMC is actually a simulation of a
 physic particle traveling in the space of  on the log-posterior surface
@@ -50,20 +50,20 @@ physic particle traveling in the space of  on the log-posterior surface
 See 9.3.1, p.271 and p. 272 and section 9.3.2 p. 273.
 
 
-## 9E4 {-}
+## 9E4 {-#prac9E4}
 
 * `n_eff`: Effective nb of samples. An estimate of the number of independent
 samples from the posterior distribution. See beginning of section 9.5.1, p. 287.
 * Actual nb of samples: Raw number of samples. See beginning of section 9.5.1,
 p. 287.
 
-## 9E5 {-}
+## 9E5 {-#prac9E5}
 
 The Gelman-Rubin convergence diagnostic, $\mathcal{\widehat{R}}$, should be
 $\mathcal{\widehat{R}} \leqslant{1}$.  See Rethinking box in section 9.5.2, 
 p. 289.
 
-## 9E6 {-}
+## 9E6 {-#prac9E6}
 
 ### Model and fit {-}
 
@@ -175,7 +175,7 @@ ggmcmc::ggs_autocorrelation(b09E06_ggs) +
        subtitle = "Model b09E06", color = NULL, fill = "chain")
 ```
 
-## 9E7 {-}
+## 9E7 {-#prac9E7}
 
 The trank plot is done with `bayesplot`
 
@@ -196,7 +196,7 @@ b09E06_post %>%
        subtitle = "Model b09E06", color = "chain")
 ```
 
-## 9M1 {-}
+## 9M1 {-#prac9M1}
 
 Same data as in 9E6 above.  But now the model is
 
@@ -275,7 +275,7 @@ It does not have detectible influence.  Because sigma is about 0.11 and therefor
 a prior within $[0,1]$ works.  Uniform prior will probably less efficient time but
 should reach the same conclusion.
 
-## 9M2 {-}
+## 9M2 {-#prac9M2}
 
 The model is now
 
@@ -354,7 +354,7 @@ ggmcmc::ggs_autocorrelation(b09M02_ggs) +
        subtitle = "Model b09M02", color = NULL, fill = "chain")
 ```
 
-## 9M3 {-}
+## 9M3 {-#prac9M3}
 
 We use the data from rugged. See 9E6 above.
 
@@ -416,7 +416,7 @@ b09M03b <- readRDS(file = a_file)
 summary(b09M03b)
 ```
 
-## 9H1 {-}
+## 9H1 {-#prac9H1}
 
 This is similar to section 9.5.3.  Model m9.2 and m9.3.
 
@@ -506,21 +506,21 @@ ggmcmc::ggs_autocorrelation(b09H01_ggs) +
        subtitle = "Model b09H01", color = NULL, fill = "chain")
 ```
 
-## 9H2 {-}
+## 9H2 {-#prac9H2}
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
 
-## 9H3 {-}
+## 9H3 {-#prac9H3}
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
 
-## 9H4 {-}
+## 9H4 {-#prac9H4}
 
 
 ```{r echo=FALSE}
@@ -528,21 +528,21 @@ message("TODO")
 ```
 
 
-## 9H5 {-}
+## 9H5 {-#prac9H5}
 
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
-## 9H6 {-}
+## 9H6 {-#prac9H6}
 
 
 ```{r echo=FALSE}
 message("TODO")
 ```
 
-## 9H7 {-}
+## 9H7 {-#prac9H7}
 
 
 ```{r echo=FALSE}

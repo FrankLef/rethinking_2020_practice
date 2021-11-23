@@ -38,14 +38,14 @@ these practices.
 The `simstudy` is used to generate data under different scenarios to study DAG.
 
 
-## 5E1 {-}
+## 5E1 {-#prac5E1}
 
 1. **Not** multiple linear, just univariate regression.
 2. Multiple linear with 2 variables $x_i$ and $z_i$
 3. **Not** multiple linear, just univariate with a centralized variable
 4. Multiple linear with 2 variables $x_i$ and $z_i$
 
-## 5E2 {-}
+## 5E2 {-#prac5E2}
 
 In section 5.1.2 the notion of control is related to conditional independencies
 where the question becomes *is there any additional values in knowing a variable,
@@ -68,7 +68,7 @@ diversity_i &\sim Normal(\mu_i, \sigma) \\
 \end{align*}
 $$
 
-## 5E3 {-}
+## 5E3 {-#prac5E3}
 
 See section 5.2 on *Masked relationship*.
 
@@ -90,7 +90,7 @@ $$
 
 The slopes should be positive.
 
-## 5E4 {-}
+## 5E4 {-#prac5E4}
 
 Let $k$ be the number of categories, only need to have $k-1$ variables since
 the intercept represents the $k^{th}$ category, hence model 1, 3, 4 are equivalent.
@@ -101,7 +101,7 @@ a re-parametrization which was explained in the first edition, edition of 2016.
 (overthinking box of section 5.4.1 of the 2016 edition)
 
 
-## 5M1 {-}
+## 5M1 {-#prac5M1}
 
 A spurious correlation where an outcome is correlated with 2 predictors and
 and when one predictor is manipulated the correlation between
@@ -202,7 +202,7 @@ ggplot(p$df %>% filter(!(.variable %in% c("b_Intercept", "sigma"))),
 ```
 
 
-## 5M2 {-}
+## 5M2 {-#prac5M2}
 
 The productivity $P$ of an enterprise will increase depending on how much material
 $M$ it can process but will be affected inversely depending on how much waste $W$ 
@@ -295,7 +295,7 @@ ggplot(p$df %>% filter(!(.variable %in% c("b_Intercept", "sigma"))),
 ```
 
 
-## 5M3 {-}
+## 5M3 {-#prac5M3}
 
 More divorces could lead to more remarriage and therefore contribute to an increase
 in marriage rate.
@@ -304,7 +304,7 @@ This could be evaluated with multivariable regression if a flag is created to
 identify which marriage is a remarriage.  We could then compare the models with
 and without remarriage.
 
-## 5M4 {-}
+## 5M4 {-#prac5M4}
 
 ### Data {-}
 
@@ -454,7 +454,7 @@ gather_draws(model=b05M04, `b_.*`, regex = TRUE) %>%
 
 
 
-## 5M5 {-}
+## 5M5 {-#prac5M5}
 
 The dag used to illustrate the model is as follows.  The outcome is $obesity$
 and $price$ is a latent variable that impact all the elements since it not only
@@ -499,7 +499,7 @@ data.frame(
 
 
 
-## 5H1 {-}
+## 5H1 {-#prac5H1}
 
 The conditional independency is *M is independent of D conditional on A* as it 
 is a *chain*.
@@ -535,7 +535,7 @@ message(msg)
 
 
 
-## 5H2 {-}
+## 5H2 {-#prac5H2}
 
 See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
 @kurtz2020b.
@@ -742,7 +742,7 @@ brms::posterior_summary(b05H02) %>%
 
 Conclusion: brm and inla give very similar result. inla is certainly faster.
 
-## 5H3 {-}
+## 5H3 {-#prac5H3}
 
 See section 5.1.5.3 on . 140 of @elreath2020. Also see the same section in
 @kurtz2020b.
@@ -885,7 +885,7 @@ p$N <- ggplot(sim$N, aes(x = M, y = Estimate, ymin = Q2.5, ymax = Q97.5)) +
 wrap_plots(p)
 ```
 
-## 5H4 {-}
+## 5H4 {-#prac5H4}
 
 ### Data {-}
 

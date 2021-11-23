@@ -1,5 +1,5 @@
 # The Golem of Prague {#golem}
 
-```{r}
+```{r echo=FALSE}
 message("There is no practice for this chapter.")
 ```

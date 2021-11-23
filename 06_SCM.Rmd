@@ -74,7 +74,7 @@ gg_dag <- function(dag, layout = "sugiyama", seed = 6,
 
 
 
-## 6E1 {-}
+## 6E1 {-#prac6E1}
 
 ### Multicollinearity {-}
 
@@ -205,12 +205,12 @@ wrap_plots(p) +
 ```
 
 
-## 6E2 {-}
+## 6E2 {-#prac6E2}
 
 See examples and graphs in 6H1 just above.
 
 
-## 6E3 {-}
+## 6E3 {-#prac6E3}
 
 See section 6.4.1
 
@@ -262,7 +262,7 @@ wrap_plots(p) +
   theme(title = element_text(color = "midnightblue", size = 8))
 ```
 
-## 6E4 {-}
+## 6E4 {-#prac6E4}
 
 The sample is biased because the selection of the outcome creates a dependency
 between the 2 causal variables.  For example, the sum $z$ of 2 variables $x$ and
@@ -286,7 +286,7 @@ gg_dag(dag) +
        subtitle = "If we condition on S then TW become dependent of the value of NW")
 ```
 
-## 6M1 {-}
+## 6M1 {-#prac6M1}
 
 The DAG on page 186 is
 
@@ -363,7 +363,7 @@ s
 ```
 
 
-## 6M2 {-}
+## 6M2 {-#prac6M2}
 
 The simulation is made in the form of a *chain*. Observe that the correlation
 between $x$ and $z$ is strong, nearly 0.9.
@@ -437,7 +437,7 @@ size, is much lower.
 This is caused by the fact that we now have a *chain* whereas the leg example
 was a *collider*.
 
-## 6M3 {-}
+## 6M3 {-#prac6M3}
 
 *Learning to analyse DAG requires practice*. This is definitively an area where
 using technology to avoid mistake is almost a must.  Even when simple cases, it
@@ -530,7 +530,7 @@ dagitty::adjustmentSets(dag$g4, exposure = "X", outcome = "Y")
 
 
 
-## 6H1 {-}
+## 6H1 {-#prac6H1}
 
 This practice is explained section 6.4.3.
 
@@ -609,10 +609,10 @@ i06H01 <- readRDS(file = a_file)
 summary(i06H01)$fixed
 ```
 
-Wich shows that once we take the $South$ into account, te $W = Waffle$ has
+Which shows that once we take the $South$ into account, te $W = Waffle$ has
 very little impact. We note that it is very variable relative to its mean.
 
-## 6H2 {-}
+## 6H2 {-#prac6H2}
 
 We use the DAG and data from 6H1 above.
 
@@ -669,7 +669,7 @@ summary(i06H02m)$fixed
 which confirms that $M \perp\!\!\!\perp W \mid S$ is true.
 
 
-## 6H3 {-}
+## 6H3 {-#prac6H3}
 
 See practice 7H5 in chapter 7 for corresponding exercises.
 
@@ -772,7 +772,7 @@ ggplot(data = samples$data, mapping = aes(x = A, y = W)) +
 Would increasing the area make the foxes healthier? The answer is no given that
 the effect of $A$ from the fit just above is almost nil.
 
-## 6H4 {-}
+## 6H4 {-#prac6H4}
 
 
 ```{r}
@@ -797,7 +797,7 @@ summary(b06H04)
 Adding food has little impact.  We would need to adjust for group size to
 remove its effect.
 
-## 6H5 {-}
+## 6H5 {-#prac6H5}
 
 
 ```{r}
@@ -824,7 +824,7 @@ is caused by the fact that $F$, $S$ and $W$ are a collider. That is, as soon as
 we use $F$ and/or $S$ a dependency of $W$ is created on the other variable.
 
 
-## 6H6 {-}
+## 6H6 {-#prac6H6}
 
 ```{r echo=FALSE}
 message("TODO")
@@ -832,7 +832,7 @@ message("TODO")
 
 
 
-## 6H7 {-}
+## 6H7 {-#prac6H7}
 
 
 ```{r echo=FALSE}
