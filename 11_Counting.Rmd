@@ -20,6 +20,8 @@ library(paletteer, quietly = TRUE)
 
 ## 11E1 {-#prac11E1}
 
+When coding, the predefined function `gtools::logit()` will be used.
+
 ```{r}
 prob <- 0.35
 # using the definition of logit
@@ -30,6 +32,9 @@ stopifnot(lodds == gtools::logit(prob))
 ```
 ## 11E2 {-#prac11E2}
 
+When coding, the predefined function `gtools::inv.logit()` will be used. Also,
+note that some authors call this function `expit()`, e.g. @brumback2022.
+
 ```{r}
 lodds <- 3.2
 prob = exp(lodds) / (1 + exp(lodds))
@@ -39,7 +44,8 @@ stopifnot(prob == gtools::inv.logit(lodds))
 ```
 ## 11E3 {-#prac11E3}
 
-See Overthinking box in section 11.1.2.
+See section 11.1.2, for a discussion on **relative effects** measured by 
+**proportional odds** on p. 336 and Overthinking box on p. 337.
 
 
 Since the logistic regression is using the link function
@@ -54,8 +60,8 @@ $$
 odds(p) = \frac{p}{1-p} = \exp{(\alpha + \beta x)}
 $$
 
-and the *proportional* effect of $\beta$ is found when we increase $x$ by one unit. That is
-the effect, called $z$, is found by solving for $z$
+and the *proportional* effect of $\beta$ is found when we increase $x$ by one unit.
+That is the effect, called $z$, is found by solving for $z$
 
 $$
 \begin{align*}
@@ -73,7 +79,7 @@ exp(1.7)
 
 ## 11E4 {-#prac11E4}
 
-See section 11.2.3 for details.
+See section 11.2.3, p. 357-359, for detail.
 
 The $\lambda$ parameter in Poisson can also
 be seen as a rate.  The exposure is the denominator of that rate.  If different
@@ -99,6 +105,15 @@ y_i &\sim Poisson(\lambda_i) \\
 \end{align*}
 $$
 
+which becomes
+
+$$
+\begin{align*}
+\log{\frac{\mu_i}{\tau_i}} = \log{\mu_i} - \log{\tau_i}  &= \alpha + \beta x_i \\
+\log{\mu_i}  &= \log{\tau_i} + \alpha + \beta x_i
+\end{align*}
+$$
+
 For example if the count is over days and weeks then the exposures will be 1 and 7.
 
 
@@ -110,12 +125,16 @@ The difference in the likelihood function is caused by the different organizatio
 of data. In the binomial model there is only 2 outcomes for each observation
 and therefore the joint probability is just a chain of bernoulli probability.
 
-For example, in simple binomial probabilty, the probability of obtaining a $x_1=1$
+For example, in simple binomial probability, the probability of obtaining a $x_1=1$
 and $x_2=0$ is $p(1-p)$. That is $P(x_i=1, x_2 =0) = p(1-p)= P(x_i=1, x_2 =0)$.
 
 But if we organize the data differently and each observation is the total number
 of success then $P(x_1 = 1 \mid n =2)= \binom{1}{2}p(1-p)$ because we have to take
 into account there are $\binom{1}{2}$ possible orderings.
+
+This will cause noticeable difference in the PSIS and WAIC as shown on 
+p. 358-359 with models m11.4 and m11.6. However the likelihood *probability*
+will be unaffected.
 
 
 ## 11M2 {-#prac11M2}
@@ -142,7 +161,7 @@ z &= e^\beta
 \end{align*}
 $$
 
-Therefore the effect of a coeficient of 1.7 will be a proportionally change the
+Therefore the effect of a coefficient of 1.7 will proportionally change the
 rate $\lambda_i$ by
 
 ```{r}
@@ -160,8 +179,9 @@ Gaussian model can be used on the transformed variable.
 
 See section 10.2.2 in chapter 10.
 
-The $log$ link puts the parameter $\lambda \in [0,\infty)$ on the scale $(-\infty, \infty)$ so that the
-Gaussian model can be used on the transformed variable.
+The $log$ link puts the parameter $\lambda \in [0,\infty)$ on the scale 
+$(-\infty, \infty)$ so that the Gaussian model can be used on the transformed 
+variable.
 
 ## 11M5 {-#prac11M5}
 
@@ -178,13 +198,16 @@ cars passing every day at an intersection.
 
 ## 11M6 {-#prac11M6}
 
-See section 10.1.2 in chapter 10 for the binomial distribution.  It has maximum 
+See section 10.1.2, p. 307, in chapter 10 for the binomial distribution.  It has maximum 
 entropy when
 
 1. there is only 2 unordered events,
 2. it has a constant expected value
 
-See section 10.2.1 for Poisson distribution.
+See section 10.2.1, p. 315, for Poisson distribution.
+
+The Poisson distribution is used in practice for counts that never get close
+to any theoretical maximum.
 
 It is a special case of the binomial distribution when the probability of 
 success $p$ is very small and the number of trials is very large. 
@@ -249,9 +272,9 @@ m11M07b <- readRDS(a_file)
 precis(m11M07b, depth = 2)
 ```
 
-Conclusion: The 2 ethods generate about the same results.  Probably caused because
+Conclusion: The 2 methods generate about the same results.  Probably because
 the posterior is gaussian.  When the posterior is gaussian, the quadratic
-approximation gives similar results to MCMC but much faster.
+approximation gives similar results to MCMC but more efficiently.
 
 
 ### Model with $\mathcal{N}(0, 10)$ {-}
@@ -299,16 +322,18 @@ m11M07d <- readRDS(a_file)
 precis(m11M07d, depth = 2)
 ```
 
+
 There is a significant different for actor # 2 who has mean = 11.09 and sd= 5.23
 with MCMC and mean = 6.97, sd = 3.51 with quap.  In addition the MCMC warns
 that we have 22 divergent samples after warmup and is therefore more informative
 with for the diagnosis.
 
-The quap offers no diagnosis and the mean is less affected by the new prior has
+The quap offers no diagnosis and the mean is less affected by the new prior as
 it gives a more centralized value.  The quap might be giving a false sense of
 security as one might tend to conclude that the mean of 6.97 is more reasonable
-when in fact it does not reflect that actor #2 is actually a clear outlier as it always
-pull the left lever as discussed in section 11.1.1 and illustrated in figure 11.4.
+when in fact it does not reflect that actor #2 is actually a clear outlier as 
+it always pull the left lever as discussed in section 11.1.1 and illustrated 
+in figure 11.4.
 
 ## 11M8 {-#prac11M8}
 
@@ -324,14 +349,16 @@ d <- Kline %>%
 rm(Kline)
 ```
 
+The model is
+
 $$
 total\_tools_i \sim \mathcal{Poisson}(\lambda_i) \\
 \log{\lambda_i} = \alpha_{cid[i]} + \beta_{cid[i]} \log{log\_pop\_s_i} \\
 \alpha_j \sim \mathcal{N}(3, 0.5) \\
 \beta_k \sim \mathcal{N}(0, 0.2)
 $$
-the fit *including* Hawaii is
 
+the fit *including* Hawaii is
 
 ```{r}
 a_file <- here::here(getwd(), "fits", "b11M08a.rds")
@@ -350,8 +377,6 @@ summary(b11M08a)
 ```
 
 and the fit *excluding* Hawaii is
-
-
 
 ```{r}
 dh <- d %>%
@@ -375,8 +400,9 @@ Conclusion: The impact is on the factor *low* which has a lower cluster factor
 of 3.18 without Hawaii vs 3.32 with Hawaii.  The effect without Hawaii is also
 lower with 0.19 vs 0.38 with Hawaii.
 
-It is important ot note that these differences are relative, as described in
-section 10.2.4 of chapter 10.
+It is important to note that these differences are relative, as described in
+section 10.2.4 of chapter 10. That is *keep in mind that a big beta-coefficient 
+may not correspond to a big effect on the outcome*.
 
 
 ## 11H1 {-#prac11H1}
@@ -475,7 +501,6 @@ logit(p_i) &= \alpha_{actor[i]} + \beta_{treatment[i]} \\
 $$
 
 
-
 ```{r}
 a_file <- here::here("fits", "b11H01c.rds")
 b11H01c <- readRDS(file = a_file)
@@ -500,12 +525,14 @@ brms::inv_logit_scaled(fixef(b11H01c))
 ```
 
 
+
 ### Model comparison {-}
 
 The model with general intercept ("null model") and treatment-only intercepts
 have about the same performance.  The model with actor and treatment intercept
-is mthe most informative as the treatment is directly related to what the actor
+is the most informative as the treatment is directly related to what the actor
 choose.
+
 
 ```{r}
 # no need to print all the columns, the result is obvious
@@ -526,7 +553,7 @@ bw <- c(
   "5" = "large pir., not adult pir., large vic.",
   "6" = "not large pir., adult pir., large vic.",
   "7" = "large pir., adult pir., large vic.")
-d <- eagles %>%
+data11H02 <- eagles %>%
   mutate(id = seq_len(n()),
          cond = (P == "L") * 1 + (A == "A") * 2 + (V == "L") * 4,
          desc = bw[as.character(cond)],
@@ -535,9 +562,10 @@ d <- eagles %>%
   relocate(id)
 rm(eagles)
 # glimpse(d)
-skimr::skim(d)
-d
+skimr::skim(data11H02)
 ```
+
+
 
 ### (a) {-}
 
@@ -556,18 +584,18 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "b11H02a_quap.rds")
-# b11H02a_quap <- readRDS(file = a_file)
-b11H02a_quap <- quap(
-  flist = alist(
-    y ~ dbinom(n, p),
-    logit(p) <- a + bP[cond],
-    a ~ dnorm(0, 1.5),
-    bP[cond] ~ dnorm(0, 0.5)),
-  data = d
-)
-saveRDS(b11H02a_quap, file = a_file)
-precis(b11H02a_quap, depth = 2)
+a_file <- here::here("fits", "m11H02a.rds")
+m11H02a <- readRDS(file = a_file)
+# m11H02a <- quap(
+#   flist = alist(
+#     y ~ dbinom(n, p),
+#     logit(p) <- a + bP[cond],
+#     a ~ dnorm(0, 1.5),
+#     bP[cond] ~ dnorm(0, 0.5)),
+#   data = data11H02
+# )
+# saveRDS(m11H02a, file = a_file)
+precis(m11H02a, depth = 2)
 ```
 
 #### `brm` fit {-}
@@ -575,9 +603,9 @@ precis(b11H02a_quap, depth = 2)
 see b11.2 in @kurtz2020b on how to do this.
 
 ```{r}
-a_file <- here::here("fits", "b11H02a_brm.rds")
-b11H02a_brm <- readRDS(file = a_file)
-# b11H02a_brm <- brm(data = d,
+a_file <- here::here("fits", "b11H02a.rds")
+b11H02a <- readRDS(file = a_file)
+# b11H02a <- brm(data = data11H02,
 #                    family = binomial,
 #                    formula = bf(y | trials(n) ~ a + b,
 #                                 a ~ 1,
@@ -595,26 +623,30 @@ b11H02a_brm <- readRDS(file = a_file)
 #                      prior(normal(0, 0.5), nlpar = b, coef = cond7)),
 #                    cores = detectCores(), seed = 12
 #                    )
-# saveRDS(b11H02a_brm, file = a_file)
-summary(b11H02a_brm)
+# saveRDS(b11H02a, file = a_file)
+summary(b11H02a)
 ```
 
 
 #### `inla` fit {-}
 
+```{r}
+message("TODO")
+```
+
 
 
 ```{r}
-a_file <- here::here("fits", "b11H02a_inla.rds")
-# b11H02a_inla <- readRDS(file = a_file)
-b11H02a_inla <- inla(formula =  y ~ 1 + cond,
-                     family = "binomial",
-                     Ntrials = n,
-                     data = d,
-                     num.threads = 2,
-                     control.compute = list(dic = TRUE, waic = TRUE))
-saveRDS(b11H02a_inla, file = a_file)
-summary(b11H02a_inla)
+# a_file <- here::here("fits", "i11H02a.rds")
+# i11H02a <- readRDS(file = a_file)
+# i11H02a <- inla(formula =  y ~ 1 + cond,
+#                      family = "binomial",
+#                      Ntrials = n,
+#                      data = data11H02,
+#                      num.threads = 2,
+#                      control.compute = list(dic = TRUE, waic = TRUE))
+# saveRDS(i11H02a, file = a_file)
+# summary(i11H02a)
 ```
 
 
