@@ -649,16 +649,21 @@ precis(m11H02a, depth = 2)
 
 ```{r}
 gt <- list()
-gt$m11H02a <- rethinking::link(m11H02a) %>%
+gt$m11H02a_link <- rethinking::link(m11H02a) %>%
   data.frame() %>%
   setNames(nm = paste("cond", seq_len(length(.)), sep = "_")) %>%
   pivot_longer(cols = everything(), names_to = "cond") %>%
   group_by(cond) %>%
-  ggdist::mean_qi()
-gt$m11H02a
+  ggdist::mean_qi(.width = 0.89)
+# glimpse(gt$m11H02a)
 
-gt$m11H02a$value * dataEagles$n[dataEagles$cond]
-
+gt$m11H02a_sim <- rethinking::sim(m11H02a) %>%
+  data.frame() %>%
+  setNames(nm = paste("cond", seq_len(length(.)), sep = "_")) %>%
+  pivot_longer(cols = everything(), names_to = "cond") %>%
+  group_by(cond) %>%
+  ggdist::mean_qi(.width = 0.89)
+# glimpse(gt$m11H02a_sim)
 ```
 
 
@@ -686,28 +691,36 @@ summary(b11H02a)
 ```
 
 ```{r}
+
 gt$b11H02a_epred <- epred_draws(b11H02a, newdata = dataEagles) %>%
   as.data.frame() %>%
   select(cond, .epred) %>%
   group_by(cond) %>%
-  ggdist::mean_qi()
-gt$b11H02a_epred
+  ggdist::mean_qi(.width = 0.89) %>%
+  inner_join(dataEagles[, c("cond", "n")], by = "cond") %>%
+  mutate(prob = .epred / n,
+         prob_lower = .lower / n,
+         prob_upper = .upper / n)
+# gt$b11H02a_epred
+
+
 gt$b11H02a_linpred <- linpred_draws(b11H02a, newdata = dataEagles) %>%
   as.data.frame() %>%
   select(cond, .linpred) %>%
   group_by(cond) %>%
-  ggdist::mean_qi()
-gt$b11H02a_linpred
+  ggdist::mean_qi(.width = 0.89)
+# gt$b11H02a_linpred
 
 gt$b11H02a_predict <- predicted_draws(b11H02a, newdata = dataEagles) %>%
   as.data.frame() %>%
   select(cond, .prediction) %>%
   group_by(cond) %>%
-  ggdist::mean_qi()
-gt$b11H02a_predict
-
-dataEagles$n[dataEagles$cond]
-gtools::inv.logit(gt$b11H02a_linpred$.linpred) * dataEagles$n[dataEagles$cond]
+  ggdist::mean_qi(.width = 0.89) %>%
+  inner_join(dataEagles[, c("cond", "n")], by = "cond") %>%
+  mutate(prob = .prediction / n,
+         prob_lower = .lower / n,
+         prob_upper = .upper / n)
+# gt$b11H02a_predict
 ```
 
 
@@ -766,20 +779,136 @@ df <- dataEagles %>%
   select(y, n, cond) %>%
   arrange(cond) %>%  # important: make sure data is arrange by cond
   mutate(p_y = y / n,
-         p_quap = gt$m11H02a$value,
+         p_quap = gt$m11H02a_link$value,
          p_brm = gtools::inv.logit(gt$b11H02a_linpred$.linpred),
          p_inla = i11H02a$summary.fitted.values$mean) %>%
-  mutate(mean_quap = p_quap * n,
-         mean_brm = p_brm * n,
-         mean_inla = p_inla *n) %>%
+  mutate(mu_quap = p_quap * n,
+         mu_brm = p_brm * n,
+         mu_inla = p_inla *n) %>%
   mutate(across(.cols = starts_with("p"), .fns = ~round(., digits = 2)),
-         across(.cols = starts_with("mean"), .fns = ~round(., digits = 1)))
+         across(.cols = starts_with("mu"), .fns = ~round(., digits = 0)))
 df
 ```
 
-Conclusion: `INLA` is very fast but not really good . . . probably because
-the distribution is skewed. `INLA` is designed fo centralized (gaussian) 
-distributions.
+Conclusion: `INLA` is very fast and seems to be a better fit than `quap`.  
+If we take the absolute difference between the predictions and the observed 
+values as a gross indicator, then `brm` seems to be the best fit.
+
+
+```{r}
+df_diff <- df %>%
+  transmute(
+    cond = cond,
+    p_y = p_y,
+    n = n,
+    dp_quap = abs(p_quap - p_y),
+    dp_brm = abs(p_brm - p_y),
+    dp_inla = abs(p_inla - p_y),
+    dmu_quap = abs(mu_quap - y),
+    dmu_brm = abs(mu_brm - y),
+    dmu_inla = abs(mu_inla - y),
+  )
+# df_diff
+
+df_summ <- data.frame(
+  fit = c("quap", "brm", "inla"),
+  probs = c(sum(df_diff$dp_quap), sum(df_diff$dp_brm), sum(df_diff$dp_inla)),
+  mu = c(sum(df_diff$dmu_quap), sum(df_diff$dmu_brm), sum(df_diff$dmu_inla))
+)
+df_summ
+```
+
 
 
 ### (b) {-}
+
+
+The predicted probabilities
+
+```{r}
+# str(gt$b11H02a_predict)
+# str(gt$b11H02a_epred)
+
+p <- list()
+p$prob <- ggplot(dataEagles, aes(x = cond, y = y / n)) +
+  geom_linerange(gt$b11H02a_predict, 
+                 mapping = aes(x = cond, y = prob,
+                               ymin = prob_lower, ymax = prob_upper),
+                 size = 5, color = "gold3") +
+  geom_pointrange(gt$b11H02a_epred,
+                  mapping = aes(x = cond, y = prob, 
+                                ymin = prob_lower, ymax = prob_upper),
+                  size = 1, shape = 1, color = "magenta") +
+  geom_point(size = 3, color = "forestgreen") +
+  # scale_x_continuous(breaks = 1:12) +
+  # scale_y_continuous(breaks = 0:5 / 5, limits = c(0, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "Posterior predictions of probabilities by condition",
+       subtitle = "Fit b11H02a with 89% interval",
+       x = "condition", y = "probability")
+p$prob
+```
+
+and he predicted success count
+
+```{r}
+p$count <- ggplot(dataEagles, aes(x = cond, y = y)) +
+  geom_linerange(gt$b11H02a_predict, 
+                 mapping = aes(x = cond, y = .prediction,
+                               ymin = .lower, ymax = .upper),
+                 size = 5, color = "lightseagreen") +
+  geom_pointrange(gt$b11H02a_epred,
+                  mapping = aes(x = cond, y = .epred, 
+                                ymin = .lower, ymax = .upper),
+                  size = 1, shape = 1, color = "darkviolet") +
+  geom_point(size = 3, color = "brown") +
+  theme(legend.position = "none") +
+  labs(title = "Posterior predictions of success count by condition",
+       subtitle = "Fit b11H02a with 89% interval",
+       x = "condition", y = "count")
+p$count
+```
+
+
+The difference between the predicted probabilities and the predicted counts
+is mainly because of the *effect size* a large difference in probability
+might not translate in a large difference in count as shown in the computed
+differences in a) above.
+
+### (c) {-}
+
+
+```{r}
+a_file <- here::here("fits", "b11H02b.rds")
+b11H02b <- readRDS(file = a_file)
+# b11H02b <- brm(data = dataEagles,
+#                    family = binomial,
+#                    formula = bf(y | trials(n) ~ a + b + A*P,
+#                                 a ~ 1,
+#                                 b ~ 0 + cond,
+#                                 nl = TRUE),
+#                    prior = c(
+#                      prior(normal(0, 1.5), nlpar = a),
+#                      prior(normal(0, 0.5), nlpar = b)),
+#                    cores = detectCores(), seed = 12)
+# b11H02b <- brms::add_criterion(b11H02b, criterion = c("waic", "loo"))
+# saveRDS(b11H02b, file = a_file)
+summary(b11H02b)
+```
+
+```{r}
+loo_compare(b11H02a, b11H02b, criterion = "waic")
+```
+
+
+```{r}
+model_weights(b11H02a, b11H02b, weights = "waic")
+```
+Conclusion: Adding the variables $A = age of pirate$ and $P = pirate's size$
+reduces a less useful model.  This is caused by the fact that the variables
+$A$ and $P$ are already taken into account in the variable $cond$.  The added
+parameter $A*P$ increases the penalty term of the WAIC. See section 7.4.2 for
+more details on waic.
+
+
+## 11H3 {-#prac11H3}
