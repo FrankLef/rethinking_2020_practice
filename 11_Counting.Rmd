@@ -18,6 +18,21 @@ library(paletteer, quietly = TRUE)
 
 # Counting and Classification {#Counting}
 
+We set the current theme used for plotting
+
+```{r}
+theme_set(
+  ggthemes::theme_tufte(base_size = 11, base_family = "sans", ticks = TRUE) +
+  theme(title = element_text(color = "midnightblue"),
+        panel.grid.major  = element_blank(),
+        panel.grid.minor  = element_blank(),
+        plot.background = element_rect(fill = "gainsboro", color = NA))
+  )
+```
+
+
+
+
 ## 11E1 {-#prac11E1}
 
 When coding, the predefined function `gtools::logit()` will be used.
@@ -219,13 +234,13 @@ See section 11.1.1, p. 330, for the m11.4 model.
 
 
 ```{r}
-d <- data(chimpanzees)
-d <- chimpanzees %>%
+data(chimpanzees)
+dataChimp <- chimpanzees %>%
   mutate(treatment = as.integer(1 + prosoc_left + 2 * condition)) %>%
   select(pulled_left, actor, treatment)
 rm(chimpanzees)
 # unique(d$treatment)
-skimr::skim(d)
+skimr::skim(dataChimp)
 ```
 
 ### Model with $\mathcal{N}(0, 1.5)$ {-}
@@ -245,15 +260,16 @@ The fit with hamiltonian MCMC
 a_file <- here::here(getwd(), "fits", "m11M07a.rds")
 m11M07a <- readRDS(a_file)
 # m11M07a <- ulam(
+#   data = dataChimp,
 #   flist = alist(
 #     pulled_left ~ dbinom(1, p),
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 1.5),
 #     b[treatment] ~ dnorm(0, 0.5)),
-#   data = d, chains = 4, log_lik = TRUE
+#   chains = 4, log_lik = TRUE
 #   )
 # saveRDS(m11M07a, file = a_file)
-precis(m11M07a, depth = 2)
+# precis(m11M07a, depth = 2)
 ```
 
 and with quadratic approximation
@@ -262,14 +278,14 @@ and with quadratic approximation
 a_file <- here::here(getwd(), "fits", "m11M07b.rds")
 m11M07b <- readRDS(a_file)
 # m11M07b <- quap(
+#   dataChimp,
 #   flist = alist(
 #     pulled_left ~ dbinom(1, p),
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 1.5),
-#     b[treatment] ~ dnorm(0, 0.5)),
-#   data = d)
+#     b[treatment] ~ dnorm(0, 0.5)))
 # saveRDS(m11M07b, file = a_file)
-precis(m11M07b, depth = 2)
+# precis(m11M07b, depth = 2)
 ```
 
 Conclusion: The 2 methods generate about the same results.  Probably because
@@ -288,22 +304,23 @@ logit(p_i) &= \alpha_{actor[i]} + \beta_{treatment[i]} \\
 \end{align*}
 $$
 
-The fit with hamiltonian MCMC
+The fit with Hamiltonian MCMC
 
 ```{r}
 a_file <- here::here(getwd(), "fits", "m11M07c.rds")
 m11M07c <- readRDS(a_file)
-message("22 divergent pairs after warmup, examine pairs() plot for diagnosis")
+# message("22 divergent pairs after warmup, examine pairs() plot for diagnosis")
 # m11M07c <- ulam(
+#   data = dataChimp,
 #   flist = alist(
 #     pulled_left ~ dbinom(1, p),
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 10),
 #     b[treatment] ~ dnorm(0, 0.5)),
-#   data = d, chains = 4, log_lik = TRUE
+#   chains = 4, log_lik = TRUE
 #   )
 # saveRDS(m11M07c, file = a_file)
-precis(m11M07c, depth = 2)
+# precis(m11M07c, depth = 2)
 ```
 
 and with quadratic approximation
@@ -312,26 +329,42 @@ and with quadratic approximation
 a_file <- here::here(getwd(), "fits", "m11M07d.rds")
 m11M07d <- readRDS(a_file)
 # m11M07d <- quap(
+#   dataChimp,
 #   flist = alist(
 #     pulled_left ~ dbinom(1, p),
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 10),
-#     b[treatment] ~ dnorm(0, 0.5)),
-#   data = d)
+#     b[treatment] ~ dnorm(0, 0.5)))
 # saveRDS(m11M07d, file = a_file)
-precis(m11M07d, depth = 2)
+# precis(m11M07d, depth = 2)
 ```
 
+and we look at the mean for each fit object to answer the question
 
-There is a significant different for actor # 2 who has mean = 11.09 and sd= 5.23
-with MCMC and mean = 6.97, sd = 3.51 with quap.  In addition the MCMC warns
+```{r}
+gt <- list()
+gt$data <- purrr::map_dfr(.x = paste0("m11M07", letters[1:4]) %>%
+                            setNames(nm = .),
+                         .f = ~get(.) %>% 
+                           precis(depth = 2) %>%
+                           data.frame() %>%
+                           tibble::rownames_to_column(var = "param"),
+                         .id = "fit")
+
+gt$data %>%
+  select(fit, param, mean) %>%
+  pivot_wider(id_cols = param, names_from = fit, values_from = mean) %>%
+  mutate(across(.cols = where(is.double), .fns = ~round(., 2)))
+```
+
+There is a significant different for actor # 2 who has mean = 11.43 with m11M07c (MCMC with `ulam`) and mean = 6.99 with `quap`.  In addition the m11M07c warns
 that we have 22 divergent samples after warmup and is therefore more informative
 with for the diagnosis.
 
-The quap offers no diagnosis and the mean is less affected by the new prior as
+The `quap` offers no diagnosis and the mean is less affected by the new prior as
 it gives a more centralized value.  The quap might be giving a false sense of
-security as one might tend to conclude that the mean of 6.97 is more reasonable
-when in fact it does not reflect that actor #2 is actually a clear outlier as 
+security as one might tend to conclude that the mean of 6.99 is more reasonable
+when in fact it does not reflect that actor #2 is actually an outlier as 
 it always pull the left lever as discussed in section 11.1.1 and illustrated 
 in figure 11.4.
 
@@ -342,7 +375,7 @@ be careful when interpreting the relative importance of the coefficients.
 
 ```{r}
 data(Kline)
-d <- Kline %>%
+dataKline <- Kline %>%
   mutate(log_pop_s = log(population),
          log_pop_s = as.vector(scale(log_pop_s)),
          cid = factor(contact, levels = c("low", "high")))
@@ -363,7 +396,7 @@ the fit *including* Hawaii is
 ```{r}
 a_file <- here::here(getwd(), "fits", "b11M08a.rds")
 b11M08a <- readRDS(a_file)
-# b11M08a <- brm(data = d,
+# b11M08a <- brm(data = dataKline,
 #              family = poisson,
 #              formula = bf(total_tools ~ a + b * log_pop_s,
 #                           a + b ~ 0 + cid,
@@ -379,10 +412,10 @@ summary(b11M08a)
 and the fit *excluding* Hawaii is
 
 ```{r}
-dh <- d %>%
-  filter(culture != "Hawaii")
 a_file <- here::here(getwd(),"fits", "b11M08b.rds")
 b11M08b <- readRDS(a_file)
+# dh <- dataKline %>%
+#   filter(culture != "Hawaii")
 # b11M08b <- brm(data = dh,
 #              family = poisson,
 #              formula = bf(total_tools ~ a + b * log_pop_s,
@@ -395,6 +428,24 @@ b11M08b <- readRDS(a_file)
 # saveRDS(b11M08b, file = a_file)
 summary(b11M08b)
 ```
+
+
+```{r}
+gt <- list()
+gt$data <- purrr::map_dfr(.x = paste0("b11M08", letters[1:2]) %>%
+                           setNames(nm = .),
+                         .f = ~get(.) %>%
+                           fixef() %>%
+                           data.frame() %>%
+                           tibble::rownames_to_column(var = "param"),
+                         .id = "fit")
+gt$data %>%
+  select(fit, param, Estimate) %>%
+  pivot_wider(id_cols = param, names_from = fit, values_from = Estimate) %>%
+  mutate(across(.cols = where(is.double), .fns = ~round(., 2))) %>%
+  mutate(diff = b11M08a - b11M08b)
+```
+
 
 Conclusion: The impact is on the factor *low* which has a lower cluster factor
 of 3.18 without Hawaii vs 3.32 with Hawaii.  The effect without Hawaii is also
@@ -409,8 +460,8 @@ may not correspond to a big effect on the outcome*.
 
 
 ```{r}
-d <- data(chimpanzees)
-d <- chimpanzees %>%
+data(chimpanzees)
+dataChimp <- chimpanzees %>%
   mutate(actor = factor(actor),
          treatment = factor(1 + prosoc_left + 2 * condition)) %>%
   select(pulled_left, actor, treatment)
@@ -435,7 +486,7 @@ $$
 ```{r}
 a_file <- here::here("fits", "b11H01a.rds")
 b11H01a <- readRDS(file = a_file)
-# b11H01a <- brm(data = d,
+# b11H01a <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = pulled_left | trials(1) ~ 1,
 #               prior = c(
@@ -446,7 +497,6 @@ b11H01a <- readRDS(file = a_file)
 # b11H01a <- brms::add_criterion(b11H01a, criterion = c("waic", "loo"))
 # saveRDS(b11H01a, file = a_file)
 summary(b11H01a)
-brms::inv_logit_scaled(fixef(b11H01a))
 ```
 
 ### Model with treatment intercepts {-}
@@ -466,7 +516,7 @@ $$
 ```{r}
 a_file <- here::here("fits", "b11H01b.rds")
 b11H01b <- readRDS(file = a_file)
-# b11H01b <- brm(data = d,
+# b11H01b <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = bf(pulled_left | trials(1) ~ a + b,
 #                            a ~ 1,
@@ -481,9 +531,8 @@ b11H01b <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01b <- brms::add_criterion(b11H01b, criterion = c("waic", "loo"))
-# saveRDS(b11H01b, file = a_file)
-summary(b11H01b)
-brms::inv_logit_scaled(fixef(b11H01b))
+saveRDS(b11H01b, file = a_file)
+# summary(b11H01b)
 ```
 
 
@@ -504,7 +553,7 @@ $$
 ```{r}
 a_file <- here::here("fits", "b11H01c.rds")
 b11H01c <- readRDS(file = a_file)
-# b11H01c <- brm(data = d,
+# b11H01c <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = bf(pulled_left | trials(1) ~ a + b,
 #                            a ~ 0 + actor,
@@ -519,9 +568,8 @@ b11H01c <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01c <- brms::add_criterion(b11H01c, criterion = c("waic", "loo"))
-# saveRDS(b11H01c, file = a_file)
+saveRDS(b11H01c, file = a_file)
 summary(b11H01c)
-brms::inv_logit_scaled(fixef(b11H01c))
 ```
 
 
@@ -553,16 +601,17 @@ bw <- c(
   "5" = "large pir., not adult pir., large vic.",
   "6" = "not large pir., adult pir., large vic.",
   "7" = "large pir., adult pir., large vic.")
-data11H02 <- eagles %>%
+dataEagles <- eagles %>%
   mutate(id = seq_len(n()),
          cond = (P == "L") * 1 + (A == "A") * 2 + (V == "L") * 4,
+         idx = cond + 1,  # indx=ex to use with INLA
          desc = bw[as.character(cond)],
          cond = factor(cond, ordered = TRUE, levels = 0:7),
          desc = factor(desc)) %>%
   relocate(id)
 rm(eagles)
-# glimpse(d)
-skimr::skim(data11H02)
+glimpse(dataEagles)
+skimr::skim(dataEagles)
 ```
 
 
@@ -587,16 +636,32 @@ $$
 a_file <- here::here("fits", "m11H02a.rds")
 m11H02a <- readRDS(file = a_file)
 # m11H02a <- quap(
+#   dataEagles,
 #   flist = alist(
 #     y ~ dbinom(n, p),
 #     logit(p) <- a + bP[cond],
 #     a ~ dnorm(0, 1.5),
-#     bP[cond] ~ dnorm(0, 0.5)),
-#   data = data11H02
+#     bP[cond] ~ dnorm(0, 0.5))
 # )
 # saveRDS(m11H02a, file = a_file)
 precis(m11H02a, depth = 2)
 ```
+
+```{r}
+gt <- list()
+gt$m11H02a <- rethinking::link(m11H02a) %>%
+  data.frame() %>%
+  setNames(nm = paste("cond", seq_len(length(.)), sep = "_")) %>%
+  pivot_longer(cols = everything(), names_to = "cond") %>%
+  group_by(cond) %>%
+  ggdist::mean_qi()
+gt$m11H02a
+
+gt$m11H02a$value * dataEagles$n[dataEagles$cond]
+
+```
+
+
 
 #### `brm` fit {-}
 
@@ -605,7 +670,7 @@ see b11.2 in @kurtz2020b on how to do this.
 ```{r}
 a_file <- here::here("fits", "b11H02a.rds")
 b11H02a <- readRDS(file = a_file)
-# b11H02a <- brm(data = data11H02,
+# b11H02a <- brm(data = dataEagles,
 #                    family = binomial,
 #                    formula = bf(y | trials(n) ~ a + b,
 #                                 a ~ 1,
@@ -613,40 +678,108 @@ b11H02a <- readRDS(file = a_file)
 #                                 nl = TRUE),
 #                    prior = c(
 #                      prior(normal(0, 1.5), nlpar = a),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond0),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond1),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond2),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond3),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond4),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond5),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond6),
-#                      prior(normal(0, 0.5), nlpar = b, coef = cond7)),
-#                    cores = detectCores(), seed = 12
-#                    )
+#                      prior(normal(0, 0.5), nlpar = b)),
+#                    cores = detectCores(), seed = 12)
+# b11H02a <- brms::add_criterion(b11H02a, criterion = c("waic", "loo"))
 # saveRDS(b11H02a, file = a_file)
 summary(b11H02a)
+```
+
+```{r}
+gt$b11H02a_epred <- epred_draws(b11H02a, newdata = dataEagles) %>%
+  as.data.frame() %>%
+  select(cond, .epred) %>%
+  group_by(cond) %>%
+  ggdist::mean_qi()
+gt$b11H02a_epred
+gt$b11H02a_linpred <- linpred_draws(b11H02a, newdata = dataEagles) %>%
+  as.data.frame() %>%
+  select(cond, .linpred) %>%
+  group_by(cond) %>%
+  ggdist::mean_qi()
+gt$b11H02a_linpred
+
+gt$b11H02a_predict <- predicted_draws(b11H02a, newdata = dataEagles) %>%
+  as.data.frame() %>%
+  select(cond, .prediction) %>%
+  group_by(cond) %>%
+  ggdist::mean_qi()
+gt$b11H02a_predict
+
+dataEagles$n[dataEagles$cond]
+gtools::inv.logit(gt$b11H02a_linpred$.linpred) * dataEagles$n[dataEagles$cond]
+```
+
+
+
+```{r}
+fixef(b11H02a)[,"Estimate"]
+gtools::inv.logit(fixef(b11H02a)[,"Estimate"])
+inv_logit_scaled(fixef(b11H02a)[,"Estimate"])
 ```
 
 
 #### `inla` fit {-}
 
 ```{r}
-message("TODO")
+str(dataEagles)
 ```
 
 
 
 ```{r}
-# a_file <- here::here("fits", "i11H02a.rds")
-# i11H02a <- readRDS(file = a_file)
-# i11H02a <- inla(formula =  y ~ 1 + cond,
-#                      family = "binomial",
-#                      Ntrials = n,
-#                      data = data11H02,
-#                      num.threads = 2,
-#                      control.compute = list(dic = TRUE, waic = TRUE))
+a_file <- here::here("fits", "i11H02a.rds")
+i11H02a <- readRDS(file = a_file)
+# i11H02a <- inla(data = dataEagles,
+#                 formula =  y ~ 1 + f(idx, model = "iid",  
+#                                      hyper = list(prec = list(param = c(0.001, 0.001)))),
+#                 family = "binomial",
+#                 Ntrials = n,
+#                 control.family = list(link = "logit"),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
 # saveRDS(i11H02a, file = a_file)
-# summary(i11H02a)
+summary(i11H02a)
 ```
 
 
+```{r}
+i11H02a$summary.fixed
+```
+
+which gives the fitted values
+
+```{r}
+i11H02a$summary.fitted.values
+```
+
+
+#### Conclusion {-}
+
+and we can now compare the fitted rate and mean for each of the 3 methods.
+
+
+```{r}
+# Make sure the data.frame is sorted in increasing order of "cond"
+# to match the fitted data
+df <- dataEagles %>%
+  select(y, n, cond) %>%
+  arrange(cond) %>%  # important: make sure data is arrange by cond
+  mutate(p_y = y / n,
+         p_quap = gt$m11H02a$value,
+         p_brm = gtools::inv.logit(gt$b11H02a_linpred$.linpred),
+         p_inla = i11H02a$summary.fitted.values$mean) %>%
+  mutate(mean_quap = p_quap * n,
+         mean_brm = p_brm * n,
+         mean_inla = p_inla *n) %>%
+  mutate(across(.cols = starts_with("p"), .fns = ~round(., digits = 2)),
+         across(.cols = starts_with("mean"), .fns = ~round(., digits = 1)))
+df
+```
+
+Conclusion: `INLA` is very fast but not really good . . . probably because
+the distribution is skewed. `INLA` is designed fo centralized (gaussian) 
+distributions.
+
+
+### (b) {-}
