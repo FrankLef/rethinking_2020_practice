@@ -28,6 +28,13 @@ paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "awto
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "futurevisions"]
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "Manu"]
 
+tmp$pal <- paletteer::paletteer_d("khroma::soil")
+scales::show_col(tmp$pal)
+
+
+tmp$pal <- paletteer::paletteer_d("awtools::bpalette")
+scales::show_col(tmp$pal)
+
 tmp$pal <- paletteer::paletteer_d("futurevisions::cancri")
 scales::show_col(tmp$pal)
 
@@ -35,6 +42,12 @@ tmp$pal <- paletteer::paletteer_d("ggthemes::Classic_Cyclic")
 scales::show_col(tmp$pal)
 
 tmp$pal <- paletteer::paletteer_d("ggthemes::stata_economist")
+scales::show_col(tmp$pal)
+
+tmp$pal <- paletteer::paletteer_d("ggthemes::Hue_Circle")
+scales::show_col(tmp$pal)
+
+tmp$pal <- paletteer::paletteer_d("ggthemes::Classic_10")
 scales::show_col(tmp$pal)
 
 tmp$pal <- paletteer::paletteer_d("tvthemes::WaterTribe")
@@ -49,8 +62,6 @@ scales::show_col(tmp$pal)
 tmp$pal <- paletteer::paletteer_d("pals::alphabet")
 scales::show_col(tmp$pal)
 
-tmp$pal <- paletteer::paletteer_d("ggthemes::Hue_Circle")
-scales::show_col(tmp$pal)
 
 # very nice rainbow-like
 tmp$pal <- paletteer::paletteer_d("fishualize::Bodianus_rufus")

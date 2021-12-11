@@ -6,6 +6,7 @@ library(rethinking)
 library(brms)
 library(INLA)
 library(loo)
+library(simstudy)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
 library(ggdist, quietly = TRUE)
@@ -26,7 +27,8 @@ theme_set(
   theme(title = element_text(color = "midnightblue"),
         panel.grid.major  = element_blank(),
         panel.grid.minor  = element_blank(),
-        plot.background = element_rect(fill = "gainsboro", color = NA))
+        plot.background = element_rect(fill = "gainsboro", color = NA),
+        strip.background = element_rect(fill = "wheat", color = NA))
   )
 ```
 
@@ -458,6 +460,7 @@ may not correspond to a big effect on the outcome*.
 
 ## 11H1 {-#prac11H1}
 
+See section 11.1.1 on how to do this practice.
 
 ```{r}
 data(chimpanzees)
@@ -588,6 +591,8 @@ loo_compare(b11H01a, b11H01b, b11H01c, criterion = "waic")
 ```
 
 ## 11H2 {-#prac11H2}
+
+See sections 11.1.3 and 11.1.4 for details on how to do this practice.
 
 ```{r}
 data(eagles, package = "MASS")
@@ -734,11 +739,6 @@ inv_logit_scaled(fixef(b11H02a)[,"Estimate"])
 
 #### `inla` fit {-}
 
-```{r}
-str(dataEagles)
-```
-
-
 
 ```{r}
 a_file <- here::here("fits", "i11H02a.rds")
@@ -769,13 +769,37 @@ i11H02a$summary.fitted.values
 
 #### Conclusion {-}
 
-and we can now compare the fitted rate and mean for each of the 3 methods.
+and we can now compare the 3 fits using WAIC.
+
+```{r}
+data.frame(
+  fit = c("quap", "brm", "inla"),
+  waic = c(as.double(rethinking::WAIC(m11H02a)["WAIC"]), 
+           brms::WAIC(b11H02a)$estimates["waic", "Estimate"],
+           i11H02a$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H02a)["std_err"]),
+         brms::WAIC(b11H02a)$estimates["waic", "SE"],
+         sd(i11H02a$waic$local.waic))
+  ) %>%
+  mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
+  arrange(waic)
+```
+
+`brm` has the lowest WAIC. `quap` has virtually the same WAIC, well
+within the santdard error. `inla` seems to be doing particularly worse than the 
+others. Given the speed of `quap` with the same results, it would be the favorite
+choice in a practical setting (my opinion).
+
+The reason why `inla` is doing worse seems to be illustrated in the following table
+which shows that its estimates are outside of the range determined by `quap` and
+`brm`. It also shows that `inla` has estimates closer to the observed values
+which might indicate overfitting . . . hence the worse WAIC.
 
 
 ```{r}
 # Make sure the data.frame is sorted in increasing order of "cond"
 # to match the fitted data
-df <- dataEagles %>%
+dataEagles %>%
   select(y, n, cond) %>%
   arrange(cond) %>%  # important: make sure data is arrange by cond
   mutate(p_y = y / n,
@@ -784,38 +808,9 @@ df <- dataEagles %>%
          p_inla = i11H02a$summary.fitted.values$mean) %>%
   mutate(mu_quap = p_quap * n,
          mu_brm = p_brm * n,
-         mu_inla = p_inla *n) %>%
+         mu_inla = p_inla * n) %>%
   mutate(across(.cols = starts_with("p"), .fns = ~round(., digits = 2)),
          across(.cols = starts_with("mu"), .fns = ~round(., digits = 0)))
-df
-```
-
-Conclusion: `INLA` is very fast and seems to be a better fit than `quap`.  
-If we take the absolute difference between the predictions and the observed 
-values as a gross indicator, then `brm` seems to be the best fit.
-
-
-```{r}
-df_diff <- df %>%
-  transmute(
-    cond = cond,
-    p_y = p_y,
-    n = n,
-    dp_quap = abs(p_quap - p_y),
-    dp_brm = abs(p_brm - p_y),
-    dp_inla = abs(p_inla - p_y),
-    dmu_quap = abs(mu_quap - y),
-    dmu_brm = abs(mu_brm - y),
-    dmu_inla = abs(mu_inla - y),
-  )
-# df_diff
-
-df_summ <- data.frame(
-  fit = c("quap", "brm", "inla"),
-  probs = c(sum(df_diff$dp_quap), sum(df_diff$dp_brm), sum(df_diff$dp_inla)),
-  mu = c(sum(df_diff$dmu_quap), sum(df_diff$dmu_brm), sum(df_diff$dmu_inla))
-)
-df_summ
 ```
 
 
@@ -826,9 +821,6 @@ df_summ
 The predicted probabilities
 
 ```{r}
-# str(gt$b11H02a_predict)
-# str(gt$b11H02a_epred)
-
 p <- list()
 p$prob <- ggplot(dataEagles, aes(x = cond, y = y / n)) +
   geom_linerange(gt$b11H02a_predict, 
@@ -840,8 +832,10 @@ p$prob <- ggplot(dataEagles, aes(x = cond, y = y / n)) +
                                 ymin = prob_lower, ymax = prob_upper),
                   size = 1, shape = 1, color = "magenta") +
   geom_point(size = 3, color = "forestgreen") +
-  # scale_x_continuous(breaks = 1:12) +
-  # scale_y_continuous(breaks = 0:5 / 5, limits = c(0, 1)) +
+  ggrepel::geom_text_repel(aes(label = round(y / n, 2))) +
+  ggrepel::geom_text_repel(gt$b11H02a_epred, 
+                           mapping = aes(x = cond, y = prob, 
+                                         label = round(prob, 2))) +
   theme(legend.position = "none") +
   labs(title = "Posterior predictions of probabilities by condition",
        subtitle = "Fit b11H02a with 89% interval",
@@ -849,7 +843,7 @@ p$prob <- ggplot(dataEagles, aes(x = cond, y = y / n)) +
 p$prob
 ```
 
-and he predicted success count
+and he predicted success counts
 
 ```{r}
 p$count <- ggplot(dataEagles, aes(x = cond, y = y)) +
@@ -862,6 +856,10 @@ p$count <- ggplot(dataEagles, aes(x = cond, y = y)) +
                                 ymin = .lower, ymax = .upper),
                   size = 1, shape = 1, color = "darkviolet") +
   geom_point(size = 3, color = "brown") +
+  ggrepel::geom_text_repel(aes(label = y)) +
+  ggrepel::geom_text_repel(gt$b11H02a_epred, 
+                           mapping = aes(x = cond, y = .epred, 
+                                         label = round(.epred, 0))) +
   theme(legend.position = "none") +
   labs(title = "Posterior predictions of success count by condition",
        subtitle = "Fit b11H02a with 89% interval",
@@ -904,11 +902,517 @@ loo_compare(b11H02a, b11H02b, criterion = "waic")
 ```{r}
 model_weights(b11H02a, b11H02b, weights = "waic")
 ```
+
 Conclusion: Adding the variables $A = age of pirate$ and $P = pirate's size$
-reduces a less useful model.  This is caused by the fact that the variables
+worsens the WAIC.  This is caused by the fact that the combinations of variables
 $A$ and $P$ are already taken into account in the variable $cond$.  The added
-parameter $A*P$ increases the penalty term of the WAIC. See section 7.4.2 for
-more details on waic.
+parameter $A*P$ adds no information that is not already in $cond$ and increases 
+the penalty term of the WAIC. See section 7.4.2 for more details on waic.
 
 
 ## 11H3 {-#prac11H3}
+
+See section 11.2.1 for details on how to do this practice.
+
+* We keep the variable $PCTCOVER$ as is since it is arguably already scaled
+as a percentage. 
+* We log transform $FORESTAGE$ to reduce the large variations.
+* We log transform $SALAMAN$ after adding 1 to avoid $log(0$ with `log1p()`
+* We remove 1 line, site 30, that has **zero everywhere** and has the only
+$FORESTAGE = 0$. It is clearly an invalid row of data.
+
+
+```{r}
+data(salamanders)
+dataSalam <- salamanders %>%
+  filter(FORESTAGE > 0) %>%
+  mutate(site = as.factor(SITE),
+         age = log(FORESTAGE),
+         cover = log(PCTCOVER))
+rm(salamanders)
+skimr::skim(dataSalam)
+```
+
+```{r}
+p <- list()
+p$points <- ggplot(dataSalam, aes(x = PCTCOVER, y = SALAMAN, color = FORESTAGE)) +
+  geom_point() +
+  scale_color_paletteer_c("pals::coolwarm") +
+  theme(legend.position = c(0.2,0.7))
+p$count <- ggplot(dataSalam, aes(x = SALAMAN)) +
+  geom_histogram(aes(fill = ..count..)) +
+  scale_fill_paletteer_c("pals::warmcool") +
+  theme(legend.position = "none")
+wrap_plots(p)
+```
+
+
+
+### Priors: Intercept {-}
+
+Since the model is
+
+$$
+\begin{align*}
+salamanders_i &\sim \mathcal{Poisson(\lambda_i)} \\
+\log{\lambda_i} &= a \\
+a &\sim \mathcal{N(mean=m, sd=s)}
+\end{align*}
+$$
+
+then we know that $\lambda \sim \mathcal{LogNormal(meanlog = m, sdlogs = s)}$
+and we need to simulate for different values of $m$ and $s$ using the
+`rlnorm()` function.
+
+However since we are using `simstudy` as our prime simulation
+tools, lets do it with `simstudy`.
+
+
+```{r}
+sim <- list(nsamples = 100)
+sim <- within(sim, {
+  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..s^2")
+  defs <- defData(defs, varname = "lambda", dist = "nonrandom",
+                formula = "a", link = "log")
+  grid <- expand.grid(mean = c(1, 2, 3), sd = c(0.5, 1, 1.5)) %>%
+    mutate(model = sprintf("m=%.2f, s=%.2f", mean, sd))
+  lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    set.seed(as.integer(as.Date("2021-12-11")))
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = grid$mean[i],
+             sd = grid$sd[i],
+             model = grid$model[i])
+    })
+  
+    data <- do.call(rbind, lst)
+    })
+
+ggplot(sim$data, aes(x = lambda, fill = model, color = model)) +
+  geom_density(aes(y = ..scaled..), size = 1.5) +
+  scale_fill_paletteer_d("ggthemes::Classic_Cyclic") +
+  scale_color_paletteer_d("ggthemes::Classic_Cyclic") +
+  coord_cartesian(xlim = c(0, 10)) +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "Density of intercept prior", x = NULL, y = NULL) +
+  facet_grid(sprintf("sd of a=%.1f", sd) ~ sprintf("mean of a=%.1f", mean))
+```
+
+For the prior of the intercept we select $a \sim \mathcal{N(mean=2, sd=0.5)}$.
+We justify this choice by the following
+
+* The nb of salamanders should be greater than 0 and easily higher tha 5
+* The nb of salamanders is unlikely to be be higher than 20 $exp(1) \approx 20$
+
+
+### Priors: Slope {-}
+
+
+```{r}
+sim <- list(nsamples = 100, 
+            npreds = 50)
+sim <- within(sim, {
+  # define the model
+  defs <- defData(varname = "a", dist = "normal", formula = 2,
+                  variance = 0.5^2)
+  defs <- defData(defs, varname = "b", dist = "normal", 
+                  formula = "..m", variance = "..s^2")
+  
+  # generate data using the grid f specs
+  grid <- expand.grid(mean = 0, 
+                      sd = seq(from = 0.1, to = 0.6, by = 0.1)) %>%
+    mutate(model = sprintf("m=%.1f, s=%.1f", mean, sd))
+  
+  lst_log <- lapply(seq_len(nrow(grid)), FUN = function(i) {
+    set.seed(as.integer(as.Date("2021-12-11")))
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = grid$mean[i],
+             sd = grid$sd[i],
+             model = grid$model[i]) %>%
+      tidyr::expand(nesting(id, a, b, mean, sd, model),
+           log_predictor = seq(from = log(1), to = log(100), length.out = npreds)) %>%
+      mutate(lambda = exp(a + b * log_predictor))
+    })
+  names(lst_log) <- grid$model
+  data_log <- do.call(rbind, lst_log)
+})
+
+
+p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = model)) +
+  geom_line() +
+  scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
+  scale_x_continuous(labels = scales::label_percent(scale = 1)) +
+  coord_cartesian(ylim = c(0, 200)) +
+  theme(legend.position = "none") +
+  labs(title = "Prior predictive distribution of the mean nb of salamanders",
+       x = "Log pct of cover", y = "mean nb of salamanders") +
+  facet_wrap(. ~ model, scales = "free_y")
+# p$log
+
+p$hline <- 100
+p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = model)) +
+  geom_line() +
+  geom_hline(yintercept = p$hline, color = "darkblue", linetype = "dashed", size = 1) +
+  scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
+  scale_x_continuous(labels = scales::label_percent(scale = 1)) +
+  coord_cartesian(ylim = c(0, 200)) +
+  theme(legend.position = "none") +
+  labs(title = "Prior predictive distribution of the mean (lambda)",
+       x = "Pct of cover", y = "mean nb of salamanders") +
+  facet_wrap(. ~ model, scales = "free_y")
+p$nat
+```
+
+For the prior of the slope we select $b \sim \mathcal{N(mean=0, sd=0.5)}$
+which seems to offer a reasonably good coverage.
+
+
+### (a) {-}
+
+#### `quap` {-}
+
+```{r}
+a_file <- here::here("fits", "m11H03a.rds")
+m11H03a <- readRDS(file = a_file)
+# m11H03a <- quap(
+#   data = dataSalam,
+#   flist = alist(
+#     SALAMAN ~ dpois(lambda),
+#     log(lambda) <- a + b * cover,
+#     a ~ dnorm(0, 2),
+#     b ~ dnorm(0, 0.5))
+#   )
+# saveRDS(m11H03a, file = a_file)
+precis(m11H03a)
+```
+
+
+#### `brm` {-}
+
+
+```{r}
+a_file <- here::here("fits", "b11H03a.rds")
+b11H03a <- readRDS(a_file)
+# b11H03a <- brm(data = dataSalam,
+#              family = poisson,
+#              formula = SALAMAN ~ 1 + cover,
+#              prior = c(prior(normal(0, 2), class = Intercept),
+#                        prior(normal(0, 0.5), class = b)),
+#              cores = detectCores())
+# b11H03a <- brms::add_criterion(b11H03a, criterion = c("waic", "loo"))
+saveRDS(b11H03a, file = a_file)
+```
+
+
+```{r}
+summary(b11H03a)
+```
+
+#### Outlier {-}
+
+
+
+
+```{r}
+loo(b11H03a)
+```
+
+see section 7.5.2, p. 232 for more details on this
+
+
+```{r}
+p <- list()
+p$df <- data.frame(paretoK = b11H03a$criteria$loo$diagnostics$pareto_k,
+                   penaltyWAIC = b11H03a$criteria$waic$pointwise[, "p_waic"],
+                   SITE = pull(dataSalam, SITE),
+                   SALAMAN = pull(dataSalam, SALAMAN)) %>%
+  mutate(out = paretoK >= 0.5)
+p$out <- ggplot(p$df, aes(x = paretoK, y = penaltyWAIC, color = out)) +
+  geom_point() +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "violetred") +
+  ggrepel::geom_text_repel(aes(label = SITE), size = 3) +
+  scale_x_continuous(breaks = scales::breaks_width(width = 0.1)) +
+  scale_color_manual(values = c("TRUE" = "violetred", "FALSE" = "royalblue")) +
+  theme(legend.position = "none") +
+  labs(title = "Outlier diagnostic", subtitle = "Fit b11H03a")
+p$out
+```
+
+Conclusion: Site # 17 seems to be highly influental (high psis) and unlikely
+to occur (high WAIC penalty term). It has 2 salamanders, normally it should be 
+zero.
+
+```{r}
+loo(b11H03a) %>% 
+  pareto_k_ids(threshold = 0.5)
+```
+
+```{r}
+fitted <- list()
+fitted <- within(fitted, {
+  data <- epred_draws(b11H03a, newdata = dataSalam) %>%
+    as.data.frame()
+  summ <- data %>%
+    select(PCTCOVER, SALAMAN) %>%
+    group_by(PCTCOVER) %>%
+    ggdist::mean_qi(.width = 0.89)
+  })
+# str(fitted$summ)
+
+p <- list()
+p$all <-  ggplot(dataSalam, aes(x = PCTCOVER, y = SALAMAN)) +
+# p$all <-  ggplot(dataSalam) +
+  geom_lineribbon(fitted$summ, 
+                  mapping = aes(x = PCTCOVER, y = SALAMAN, ymin = .lower, ymax = .upper),
+                  inherit.aes = FALSE,
+                  color = "firebrick" , fill = "lightcoral") +
+  geom_point(color = "darkblue") +
+  labs(title = "Expected count with 89% interval",
+       subtitle = "b11H03a")
+p$sel <- p$all +
+  coord_cartesian(xlim = c(75, 100)) +
+  labs(title = "Expected count with 89% interval with zoom on 75 <= PCTCOVER <= 100",
+       subtitle = "b11H03a")
+
+wrap_plots(p, ncol = 1)
+```
+
+
+Conclusion: The expected count barely reaches the actual values for forest
+coverage above 75%.  Probably caused by the fact that all data is gathered above
+75% and almost always zero otherwise.
+
+
+### (b) {-}
+
+#### priors {-}
+
+
+##### Intercept prior {-}
+
+```{r}
+sim <- list(nsamples = 100)
+sim <- within(sim, {
+  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..s^2")
+  defs <- defData(defs, varname = "lambda", dist = "nonrandom",
+                formula = "a", link = "log")
+  grid <- expand.grid(mean = log(c(25, 50, 75)), sd = log(c(1.5, 2, 3))) %>%
+    mutate(model = sprintf("m=%.2f, s=%.2f", mean, sd))
+  lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    set.seed(as.integer(as.Date("2021-12-11")))
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = grid$mean[i],
+             sd = grid$sd[i],
+             model = grid$model[i])
+    })
+  
+    data <- do.call(rbind, lst)
+    })
+
+ggplot(sim$data, aes(x = lambda, fill = model, color = model)) +
+  geom_density(aes(y = ..scaled..), size = 1.5) +
+  scale_fill_paletteer_d("awtools::bpalette") +
+  scale_color_paletteer_d("awtools::bpalette") +
+  coord_cartesian(xlim = c(0, 100)) +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "Density of intercept prior", x = NULL, y = NULL) +
+  facet_grid(sprintf("sd of a=%.1f", sd) ~ sprintf("mean of a=%.1f", mean))
+```
+
+For the prior of the intercept we select $a \sim \mathcal{N(mean=4, sd=0.5)}$.
+
+
+
+##### Slope prior {-}
+
+```{r}
+sim <- list(nsamples = 100, 
+            npreds = 50)
+sim <- within(sim, {
+  # define the model
+  defs <- defData(varname = "a", dist = "normal", formula = 4,
+                  variance = 0.5^2)
+  defs <- defData(defs, varname = "b", dist = "normal", 
+                  formula = "..m", variance = "..s^2")
+  
+  # generate data using the grid f specs
+  grid <- expand.grid(mean = 0, 
+                      sd = seq(from = 0.1, to = 0.6, by = 0.1)) %>%
+    mutate(model = sprintf("m=%.1f, s=%.1f", mean, sd))
+  
+  lst_log <- lapply(seq_len(nrow(grid)), FUN = function(i) {
+    set.seed(as.integer(as.Date("2021-12-11")))
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = grid$mean[i],
+             sd = grid$sd[i],
+             model = grid$model[i]) %>%
+      tidyr::expand(nesting(id, a, b, mean, sd, model),
+           log_predictor = seq(from = log(2), to = log(700), length.out = npreds)) %>%
+      mutate(lambda = exp(a + b * log_predictor))
+    })
+  names(lst_log) <- grid$model
+  data_log <- do.call(rbind, lst_log)
+})
+
+
+p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = model)) +
+  geom_line() +
+  scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
+  scale_x_continuous(labels = scales::label_number()) +
+  coord_cartesian(ylim = c(0, 200)) +
+  theme(legend.position = "none") +
+  labs(title = "Prior predictive distribution of the mean nb of salamanders",
+       x = "Log of FORESTAGE", y = "mean nb of salamanders") +
+  facet_wrap(. ~ model, scales = "free_y")
+# p$log
+
+p$hline <- 100
+p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = model)) +
+  geom_line() +
+  geom_hline(yintercept = p$hline, color = "darkblue", linetype = "dashed", size = 1) +
+  scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
+  scale_x_continuous(labels = scales::label_number()) +
+  coord_cartesian(ylim = c(0, 200)) +
+  theme(legend.position = "none") +
+  labs(title = "Prior predictive distribution of the mean (lambda)",
+       x = "FORESTAGE", y = "mean nb of salamanders") +
+  facet_wrap(. ~ model, scales = "free_y")
+p$nat
+```
+
+
+For the prior of the slope we select $b \sim \mathcal{N(mean=0, sd=0.5)}$
+which seems to offer a reasonably good coverage.
+
+
+#### `brm` {}
+
+```{r}
+a_file <- here::here("fits", "b11H03b.rds")
+b11H03b <- readRDS(a_file)
+# b11H03b <- brm(data = dataSalam,
+#              family = poisson,
+#              formula = SALAMAN ~ 1 + age,
+#              prior = c(prior(normal(4, 0.5), class = Intercept),
+#                        prior(normal(0, 0.5), class = b)),
+#              cores = detectCores())
+# b11H03b <- brms::add_criterion(b11H03b, criterion = c("waic", "loo"))
+# saveRDS(b11H03b, file = a_file)
+```
+
+
+```{r}
+print(loo_compare(b11H03a, b11H03b), simplify = FALSE)
+```
+
+#### Conclusion {-}
+
+Conclusion: Adding $FORESTAGE$ does not help as it is a spurious relation.  That
+is, the older the forest is, the more covergae percentage we have.  It can be
+illustrated with a plot of $PCTCOVER$ vs $FORESTAGE$.
+
+Actually, beyond the fact that salamnders appear when coverage is above 75%,
+there seems to be little relationship between $SALAMAN$ and $PCTCOVER$ or
+$FORESTAGE$.
+
+One way to improve it would be to use a different rate for each $SITE$.
+
+
+```{r}
+p <- list()
+p$cover_age <- ggplot(dataSalam, aes(x = PCTCOVER, y = FORESTAGE)) +
+  geom_point() +
+  coord_cartesian(xlim = c(75, 100))
+
+p$cover_salam <- ggplot(dataSalam, aes(x = PCTCOVER, y = SALAMAN)) +
+  geom_point() +
+  coord_cartesian(xlim = c(75, 100))
+
+p$age_salam <- ggplot(dataSalam, aes(x = FORESTAGE, y = SALAMAN)) +
+  geom_point()
+
+p$logage_logsalam <- ggplot(dataSalam, aes(x = log(FORESTAGE), y = log(SALAMAN))) +
+  geom_point()
+
+wrap_plots(p, ncol = 2)
+```
+
+
+```{r}
+a_file <- here::here("fits", "b11H03c.rds")
+b11H03c <- readRDS(a_file)
+# b11H03c <- brm(data = dataSalam,
+#              family = poisson,
+#              formula = bf(SALAMAN ~ a + b * cover,
+#                           a + b ~ 0 + site,
+#                           nl = TRUE),
+#              prior = c(prior(normal(0, 2), nlpar = a),
+#                        prior(normal(0, 0.5), nlpar = b)),
+#              cores = detectCores())
+# b11H03c <- brms::add_criterion(b11H03c, criterion = c("waic", "loo"))
+# saveRDS(b11H03c, file = a_file)
+```
+
+
+```{r}
+# summary(b11H03c)
+```
+
+
+```{r}
+print(loo_compare(b11H03a, b11H03b, b11H03c), simplify = FALSE)
+```
+
+Which confirms that the using the $SITE$ improve the model noticeably.
+
+
+
+```{r}
+fitted <- list()
+fitted <- within(fitted, {
+  data <- epred_draws(b11H03c, newdata = dataSalam) %>%
+    as.data.frame()
+  summ <- data %>%
+    select(PCTCOVER, SALAMAN) %>%
+    group_by(PCTCOVER) %>%
+    ggdist::mean_qi(.width = 0.89)
+  })
+# str(fitted$summ)
+
+p <- list()
+p$all <-  ggplot(dataSalam, aes(x = PCTCOVER, y = SALAMAN)) +
+# p$all <-  ggplot(dataSalam) +
+  geom_lineribbon(fitted$summ, 
+                  mapping = aes(x = PCTCOVER, y = SALAMAN, ymin = .lower, ymax = .upper),
+                  inherit.aes = FALSE,
+                  color = "tan3" , fill = "moccasin") +
+  geom_point(color = "darkblue") +
+  labs(title = "Expected count with 89% interval",
+       subtitle = "b11H03c")
+p$sel <- p$all +
+  coord_cartesian(xlim = c(75, 100)) +
+  labs(title = "Expected count with 89% interval with zoom on 75 <= PCTCOVER <= 100",
+       subtitle = "b11H03c")
+
+wrap_plots(p, ncol = 1)
+```
+
+
+
+## 11H4 {-#prac11H4}
+
