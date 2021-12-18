@@ -1476,18 +1476,21 @@ wrap_plots(p, ncol = 1)
 
 See section 11.1.4 for reference.
 
+Also the paper from van der Lee and Ellemers can be found at 
+[NWO](https://www.pnas.org/content/112/40/12349).
+
 ```{r}
 data(NWOGrants)
 disc_labels <- c("Chem", "Life", "Human", "Inter", "Med", "Physical", 
                  "Physics", "Soc",  "Tech")
 dataGrants <- NWOGrants %>%
   mutate(female = as.integer(gender == "f"),
-         discipline = factor(discipline, labels = disc_labels),
+         disc = factor(discipline, labels = disc_labels),
          prop = round(awards / applications, 4))
 rm(NWOGrants)
 skimr::skim(dataGrants)
-# levels(dataGrants$discipline)
-# levels(dataGrants$gender)
+levels(dataGrants$discipline)
+dataGrants
 ```
 
 
@@ -1607,16 +1610,15 @@ the disciplines effect.
 ```{r}
 a_file <- here::here(getwd(), "fits", "m11H04b.rds")
 m11H04b <- readRDS(a_file)
-m11H04b <- quap(
-  dataGrants,
-  flist = alist(
-    awards ~ dbinom(applications, p),
-    logit(p) <- bG[gender] + bD[discipline],
-    bG[gender] ~ dnorm(0, 1.5),
-    bD[discipline] ~ dnorm(0, 1.5)))
+# m11H04b <- quap(
+#   dataGrants,
+#   flist = alist(
+#     awards ~ dbinom(applications, p),
+#     logit(p) <- bG[gender] + bD[disc],
+#     bG[gender] ~ dnorm(0, 1.5),
+#     bD[discipline] ~ dnorm(0, 1.5)))
 # saveRDS(m11H04b, file = a_file)
 precis(m11H04b, depth = 2)
-summary(m11H04b)
 ```
 
 #### `brm` {-}
@@ -1625,7 +1627,6 @@ summary(m11H04b)
 
 
 ```{r}
-# awards | trials(applications) ~ 0 + gender
 a_file <- here::here("fits", "b11H04a.rds")
 b11H04a <- readRDS(a_file)
 # b11H04a <- brm(data = dataGrants,
@@ -1642,57 +1643,17 @@ summary(b11H04a)
 
 
 ```{r}
-# formula = bf(awards | trials(applications) ~ a + b,
-#                    a ~ 0 + gender,
-#                    b ~ 0 + discipline,
-#                    nl = TRUE),
-#       prior= c(
-#         prior(normal(0, 1.5), nlpar = a),
-#         prior(normal(0, 1.5), nlpar = b))
 a_file <- here::here("fits", "b11H04b.rds")
 b11H04b <- readRDS(a_file)
 # b11H04b <- brm(data = dataGrants,
 #       family = binomial,
-#       formula = awards | trials(applications) ~ 0 + gender + discipline,
+#       formula = awards | trials(applications) ~ 0 + gender + disc,
 #       prior= c(prior(normal(0, 1.5), class = b)),
 #       cores = detectCores(), seed = 11)
 # b11H04b <- brms::add_criterion(b11H04b, criterion = c("waic", "loo"))
-# saveRDS(b11H04b, file = a_file)
+saveRDS(b11H04b, file = a_file)
 summary(b11H04b)
 ```
-
-```{r}
-# a_file <- here::here("fits", "b11H04c.rds")
-# b11H04c <- readRDS(a_file)
-# b11H04c <- brm(data = dataGrants,
-#       family = binomial,
-#       formula = awards | trials(applications) ~ gender,
-#       prior = c(prior(normal(1, 0.5), class = Intercept),
-#                 prior(normal(0, 1.5), class = b)),
-#       cores = detectCores(), seed = 11)
-# b11H04c <- brms::add_criterion(b11H04c, criterion = c("waic", "loo"))
-# saveRDS(b11H04c, file = a_file)
-# summary(b11H04c)
-```
-
-
-
-
-```{r}
-# a_file <- here::here("fits", "b11H04d.rds")
-# b11H04d <- readRDS(a_file)
-# b11H04d <- brm(data = dataGrants,
-#       family = binomial,
-#       formula = awards | trials(applications) ~ gender + discipline,
-#       prior = c(prior(normal(1, 0.5), class = Intercept),
-#                 prior(normal(0, 1.5), class = b)),
-#       cores = detectCores(), seed = 11)
-# b11H04d <- brms::add_criterion(b11H04d, criterion = c("waic", "loo"))
-# saveRDS(b11H04d, file = a_file)
-# summary(b11H04d)
-```
-
-
 
 #### `inla` {-}
 
@@ -1716,7 +1677,7 @@ summary(i11H04a)
 a_file <- here::here("fits", "i11H04b.rds")
 i11H04b <- readRDS(file = a_file)
 # i11H04b <- inla(data = dataGrants,
-#                 formula =  awards ~ -1 + gender + discipline,
+#                 formula =  awards ~ -1 + gender + disc,
 #                 family = "binomial",
 #                 Ntrials = applications,
 #                 control.family = list(link = "logit"),
@@ -1770,18 +1731,18 @@ summ <- list()
 summ$quap <- precis(m11H04b, depth = 2) %>%
   data.frame() %>%
   tibble::rownames_to_column(var = "var") %>%
-  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline))) %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc))) %>%
   select(var, mean, sd) %>%
   mutate(fit = "quap")
 summ$brm <- fixef(b11H04b) %>%
   as.data.frame() %>%
   tibble::rownames_to_column(var = "var") %>%
-  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline))) %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc)[-1])) %>%
   select(var, mean = Estimate, sd = Est.Error) %>%
   mutate(fit = "brm")
 summ$inla <- i11H04b$summary.fixed %>%
   tibble::rownames_to_column(var = "var") %>%
-  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline)[-1])) %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc)[-1])) %>%
   select(var, mean, sd) %>%
   mutate(fit = "inla")
 # str(summ$quap)
@@ -1834,7 +1795,7 @@ summ$gt <- summ$all %>%
     column_labels.background.color = "seashell",
     column_labels.font.weight = "bold",
     stub.background.color = "seashell")
-# summ$gt
+summ$gt
 ```
 
 ### Inferences {-}
@@ -1852,10 +1813,10 @@ predict <- list()
 predict <- within(predict, {
   data <- predicted_draws(b11H04a, newdata = dataGrants) %>%
     as.data.frame() %>%
-    select(discipline, gender, .prediction) %>%
+    select(disc, gender, .prediction) %>%
     # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
     # select(discipline, gender, applications, awards) %>%
-    group_by(discipline, gender) %>%
+    group_by(disc, gender) %>%
     ggdist::mean_qi() %>%
     mutate(applications = dataGrants$applications,
            prop = .prediction / applications,
@@ -1872,18 +1833,18 @@ Using only gender, the predicted rates are prety much always outside of the
 observed range. 
 
 ```{r}
-ggplot(predict$data %>% filter(discipline != "Human"), 
+ggplot(predict$data %>% filter(disc != "Human"), 
        aes(x = gender, y = prop, ymin = prop.lower, ymax = prop.upper,
                          color = gender)) +
   geom_pointinterval(shape = 1, size = 1, fatten_point = 3, position = "dodge") +
-  geom_point(dataGrants %>% filter(discipline != "Human"), 
+  geom_point(dataGrants %>% filter(disc != "Human"), 
              mapping = aes(x = gender, y = prop, color = gender),
              inherit.aes = FALSE, position = "dodge", shape = 19) +
   scale_color_manual(values = c("f" = "purple", "m" = "navyblue")) +
   theme(legend.position = "none") +
   labs(title = "Admission rate considering only gender (excluding Humanities)",
        subtitle = "Model b11H04a", x = NULL) +
-  facet_wrap(. ~ discipline)
+  facet_wrap(. ~ disc)
 ```
 
 
@@ -1900,10 +1861,10 @@ predict <- list()
 predict <- within(predict, {
   data <- predicted_draws(b11H04b, newdata = dataGrants) %>%
     as.data.frame() %>%
-    select(discipline, gender, .prediction) %>%
+    select(disc, gender, .prediction) %>%
     # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
     # select(discipline, gender, applications, awards) %>%
-    group_by(discipline, gender) %>%
+    group_by(disc, gender) %>%
     ggdist::mean_qi() %>%
     mutate(applications = dataGrants$applications,
            prop = .prediction / applications,
@@ -1920,18 +1881,18 @@ and the plots
 
 
 ```{r}
-ggplot(predict$data %>% filter(discipline != "Human"), 
+ggplot(predict$data %>% filter(disc != "Human"), 
        aes(x = gender, y = prop, ymin = prop.lower, ymax = prop.upper,
                          color = gender)) +
   geom_pointinterval(shape = 1, size = 1, fatten_point = 3, position = "dodge") +
-  geom_point(dataGrants %>% filter(discipline != "Human"), 
+  geom_point(dataGrants %>% filter(disc != "Human"), 
              mapping = aes(x = gender, y = prop, color = gender),
              inherit.aes = FALSE, position = "dodge", shape = 19) +
   scale_color_manual(values = c("f" = "purple", "m" = "navyblue")) +
   theme(legend.position = "none") +
-  labs(title = "Admission rate considering gender and discipline",
+  labs(title = "Admission rate considering gender and discipline (excluding humanities)",
        subtitle = "Model b11H04b", x = NULL) +
-  facet_wrap(. ~ discipline)
+  facet_wrap(. ~ disc)
 ```
 
 
