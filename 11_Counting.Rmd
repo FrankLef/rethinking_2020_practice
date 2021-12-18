@@ -9,11 +9,13 @@ library(loo)
 library(simstudy)
 library(dagitty, quietly = TRUE)
 library(ggdag, quietly = TRUE)
+library(posterior)
 library(ggdist, quietly = TRUE)
 library(ggmcmc, quietly = TRUE)
 library(bayesplot, quietly = TRUE)
 library(patchwork, quietly = TRUE)
 library(paletteer, quietly = TRUE)
+library(gt)
 ```
 
 
@@ -975,7 +977,7 @@ sim <- within(sim, {
   defs <- defData(defs, varname = "lambda", dist = "nonrandom",
                 formula = "a", link = "log")
   grid <- expand.grid(mean = c(1, 2, 3), sd = c(0.5, 1, 1.5)) %>%
-    mutate(model = sprintf("m=%.2f, s=%.2f", mean, sd))
+    mutate(params = sprintf("m=%.2f, s=%.2f", mean, sd))
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     m <- grid$mean[i]
     s <- grid$sd[i]
@@ -984,13 +986,13 @@ sim <- within(sim, {
       as.data.frame() %>%
       mutate(mean = grid$mean[i],
              sd = grid$sd[i],
-             model = grid$model[i])
+             params = grid$params[i])
     })
   
     data <- do.call(rbind, lst)
     })
 
-ggplot(sim$data, aes(x = lambda, fill = model, color = model)) +
+ggplot(sim$data, aes(x = lambda, fill = params, color = params)) +
   geom_density(aes(y = ..scaled..), size = 1.5) +
   scale_fill_paletteer_d("ggthemes::Classic_Cyclic") +
   scale_color_paletteer_d("ggthemes::Classic_Cyclic") +
@@ -1013,8 +1015,7 @@ We justify this choice by the following
 
 
 ```{r}
-sim <- list(nsamples = 100, 
-            npreds = 50)
+sim <- list(nsamples = 100, npreds = 50)
 sim <- within(sim, {
   # define the model
   defs <- defData(varname = "a", dist = "normal", formula = 2,
@@ -1025,7 +1026,7 @@ sim <- within(sim, {
   # generate data using the grid f specs
   grid <- expand.grid(mean = 0, 
                       sd = seq(from = 0.1, to = 0.6, by = 0.1)) %>%
-    mutate(model = sprintf("m=%.1f, s=%.1f", mean, sd))
+    mutate(params = sprintf("m=%.1f, s=%.1f", mean, sd))
   
   lst_log <- lapply(seq_len(nrow(grid)), FUN = function(i) {
     set.seed(as.integer(as.Date("2021-12-11")))
@@ -1035,17 +1036,17 @@ sim <- within(sim, {
       as.data.frame() %>%
       mutate(mean = grid$mean[i],
              sd = grid$sd[i],
-             model = grid$model[i]) %>%
-      tidyr::expand(nesting(id, a, b, mean, sd, model),
+             params = grid$params[i]) %>%
+      tidyr::expand(nesting(id, a, b, mean, sd, params),
            log_predictor = seq(from = log(1), to = log(100), length.out = npreds)) %>%
       mutate(lambda = exp(a + b * log_predictor))
     })
-  names(lst_log) <- grid$model
+  names(lst_log) <- grid$params
   data_log <- do.call(rbind, lst_log)
 })
 
 
-p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = model)) +
+p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = params)) +
   geom_line() +
   scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
   scale_x_continuous(labels = scales::label_percent(scale = 1)) +
@@ -1053,11 +1054,11 @@ p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, col
   theme(legend.position = "none") +
   labs(title = "Prior predictive distribution of the mean nb of salamanders",
        x = "Log pct of cover", y = "mean nb of salamanders") +
-  facet_wrap(. ~ model, scales = "free_y")
+  facet_wrap(. ~ params, scales = "free_y")
 # p$log
 
 p$hline <- 100
-p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = model)) +
+p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = params)) +
   geom_line() +
   geom_hline(yintercept = p$hline, color = "darkblue", linetype = "dashed", size = 1) +
   scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
@@ -1066,7 +1067,7 @@ p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id
   theme(legend.position = "none") +
   labs(title = "Prior predictive distribution of the mean (lambda)",
        x = "Pct of cover", y = "mean nb of salamanders") +
-  facet_wrap(. ~ model, scales = "free_y")
+  facet_wrap(. ~ params, scales = "free_y")
 p$nat
 ```
 
@@ -1115,9 +1116,53 @@ saveRDS(b11H03a, file = a_file)
 summary(b11H03a)
 ```
 
+
+#### `inla` {-}
+
+
+```{r}
+a_file <- here::here("fits", "i11H03a.rds")
+i11H03a <- readRDS(file = a_file)
+# i11H03a <- inla(data = dataSalam,
+#                 formula =  SALAMAN ~ 1 + cover,
+#                 family = "poisson",
+#                 control.family = list(link = "log"),
+#                 control.fixed = list(mean.intercept = 0, prec.intercept = (1 / 2^2),
+#                                      mean = 0, prec = 1 / 0.5^2),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i11H03a, file = a_file)
+```
+
+
+and the summary is very similar to what `quap` and `brm` gave
+
+```{r}
+summary(i11H03a)
+```
+
+#### `quap`, `brm`, `inla`
+
+They give the same result and `inla` seems to be much less variable. Given
+`inla` speed and precision it would be my personal choice here.
+
+```{r}
+data.frame(
+  fit = c("quap", "brm", "inla"),
+  waic = c(as.double(rethinking::WAIC(m11H03a)["WAIC"]), 
+           brms::WAIC(b11H03a)$estimates["waic", "Estimate"],
+           i11H03a$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H03a)["std_err"]),
+         brms::WAIC(b11H03a)$estimates["waic", "SE"],
+         sd(i11H03a$waic$local.waic))) %>%
+  mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
+  arrange(waic)
+```
+
+
+
+
 #### Outlier {-}
-
-
 
 
 ```{r}
@@ -1204,7 +1249,7 @@ sim <- within(sim, {
   defs <- defData(defs, varname = "lambda", dist = "nonrandom",
                 formula = "a", link = "log")
   grid <- expand.grid(mean = log(c(25, 50, 75)), sd = log(c(1.5, 2, 3))) %>%
-    mutate(model = sprintf("m=%.2f, s=%.2f", mean, sd))
+    mutate(params = sprintf("m=%.2f, s=%.2f", mean, sd))
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     m <- grid$mean[i]
     s <- grid$sd[i]
@@ -1213,13 +1258,13 @@ sim <- within(sim, {
       as.data.frame() %>%
       mutate(mean = grid$mean[i],
              sd = grid$sd[i],
-             model = grid$model[i])
+             params = grid$params[i])
     })
   
     data <- do.call(rbind, lst)
     })
 
-ggplot(sim$data, aes(x = lambda, fill = model, color = model)) +
+ggplot(sim$data, aes(x = lambda, fill = params, color = params)) +
   geom_density(aes(y = ..scaled..), size = 1.5) +
   scale_fill_paletteer_d("awtools::bpalette") +
   scale_color_paletteer_d("awtools::bpalette") +
@@ -1241,7 +1286,7 @@ For the prior of the intercept we select $a \sim \mathcal{N(mean=4, sd=0.5)}$.
 sim <- list(nsamples = 100, 
             npreds = 50)
 sim <- within(sim, {
-  # define the model
+  # define the params
   defs <- defData(varname = "a", dist = "normal", formula = 4,
                   variance = 0.5^2)
   defs <- defData(defs, varname = "b", dist = "normal", 
@@ -1250,7 +1295,7 @@ sim <- within(sim, {
   # generate data using the grid f specs
   grid <- expand.grid(mean = 0, 
                       sd = seq(from = 0.1, to = 0.6, by = 0.1)) %>%
-    mutate(model = sprintf("m=%.1f, s=%.1f", mean, sd))
+    mutate(params = sprintf("m=%.1f, s=%.1f", mean, sd))
   
   lst_log <- lapply(seq_len(nrow(grid)), FUN = function(i) {
     set.seed(as.integer(as.Date("2021-12-11")))
@@ -1260,17 +1305,17 @@ sim <- within(sim, {
       as.data.frame() %>%
       mutate(mean = grid$mean[i],
              sd = grid$sd[i],
-             model = grid$model[i]) %>%
-      tidyr::expand(nesting(id, a, b, mean, sd, model),
+             params = grid$params[i]) %>%
+      tidyr::expand(nesting(id, a, b, mean, sd, params),
            log_predictor = seq(from = log(2), to = log(700), length.out = npreds)) %>%
       mutate(lambda = exp(a + b * log_predictor))
     })
-  names(lst_log) <- grid$model
+  names(lst_log) <- grid$params
   data_log <- do.call(rbind, lst_log)
 })
 
 
-p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = model)) +
+p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, color = params)) +
   geom_line() +
   scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
   scale_x_continuous(labels = scales::label_number()) +
@@ -1278,11 +1323,11 @@ p$log <- ggplot(sim$data_log, aes(x = log_predictor, y = lambda, group = id, col
   theme(legend.position = "none") +
   labs(title = "Prior predictive distribution of the mean nb of salamanders",
        x = "Log of FORESTAGE", y = "mean nb of salamanders") +
-  facet_wrap(. ~ model, scales = "free_y")
+  facet_wrap(. ~ params, scales = "free_y")
 # p$log
 
 p$hline <- 100
-p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = model)) +
+p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id, color = params)) +
   geom_line() +
   geom_hline(yintercept = p$hline, color = "darkblue", linetype = "dashed", size = 1) +
   scale_fill_paletteer_d("LaCroixColoR::PassionFruit") +
@@ -1291,7 +1336,7 @@ p$nat <- ggplot(sim$data_log, aes(x = exp(log_predictor), y = lambda, group = id
   theme(legend.position = "none") +
   labs(title = "Prior predictive distribution of the mean (lambda)",
        x = "FORESTAGE", y = "mean nb of salamanders") +
-  facet_wrap(. ~ model, scales = "free_y")
+  facet_wrap(. ~ params, scales = "free_y")
 p$nat
 ```
 
@@ -1322,13 +1367,26 @@ print(loo_compare(b11H03a, b11H03b), simplify = FALSE)
 
 #### Conclusion {-}
 
-Conclusion: Adding $FORESTAGE$ does not help as it is a spurious relation.  That
-is, the older the forest is, the more covergae percentage we have.  It can be
-illustrated with a plot of $PCTCOVER$ vs $FORESTAGE$.
+Conclusion: Adding $FORESTAGE$ does not help since $FORESTAGE$ and $PCTCOVER$ 
+seem to be collinear as described in section 6.1 of the textbook.  That
+is, the older the forest is, the more covergae percentage we have.
 
-Actually, beyond the fact that salamnders appear when coverage is above 75%,
+Also, beyond the fact that salamnders appear when coverage is above 75%,
 there seems to be little relationship between $SALAMAN$ and $PCTCOVER$ or
-$FORESTAGE$.
+$FORESTAGE$ as shown in the following plots
+
+```{r}
+GGally::ggscatmat(dataSalam %>% select(-SITE, - age, - cover))
+```
+
+and comparing to log yields about the same results
+
+```{r}
+GGally::ggscatmat(dataSalam %>% select(-SITE, -PCTCOVER, -FORESTAGE))
+```
+
+
+
 
 One way to improve it would be to use a different rate for each $SITE$.
 
@@ -1415,4 +1473,487 @@ wrap_plots(p, ncol = 1)
 
 
 ## 11H4 {-#prac11H4}
+
+See section 11.1.4 for reference.
+
+```{r}
+data(NWOGrants)
+disc_labels <- c("Chem", "Life", "Human", "Inter", "Med", "Physical", 
+                 "Physics", "Soc",  "Tech")
+dataGrants <- NWOGrants %>%
+  mutate(female = as.integer(gender == "f"),
+         discipline = factor(discipline, labels = disc_labels),
+         prop = round(awards / applications, 4))
+rm(NWOGrants)
+skimr::skim(dataGrants)
+# levels(dataGrants$discipline)
+# levels(dataGrants$gender)
+```
+
+
+```{r}
+dag <- list()
+dag <- within(dag, {
+  dag <- dagify(
+    discipline ~ gender,
+    pct ~ discipline,
+  outcome = "pct",
+  exposure = "gender")
+  
+  plot <- dag %>% 
+    tidy_dagitty(seed = as.integer(as.Date("2021-12-12")), layout = "sugiyama") %>%
+    ggdag_status(color = status, text = TRUE, 
+                       node_size = 14, text_size = 4, 
+                       text_col = "black") +
+    scale_color_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                       na.value = "honeydew3") +
+    scale_fill_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                      na.value = "honeydew3") +
+    ggdag::theme_dag_blank(panel.background = element_rect(fill="snow", color="snow")) +
+    theme(legend.position = "none") +
+    labs(title = "11H4 DAG")
+})
+dag$plot
+```
+
+
+and the model is
+
+$$
+\begin{align*}
+awards_i &\sim \mathcal{Binomial}(n_i, p_i) \\
+logit(p_i) &= \alpha_{gid[i]} + \delta_{disc[i]} \\
+\alpha_j &\sim \mathcal{N}(mean, sd) \\
+\delta_k &\sim \mathcal{N}(mean, sd)
+\end{align*}
+$$
+
+
+### Priors {-}
+
+This prior represents the probability of choosing a gender.  *It is also used to
+represent the probability of choosing a discipline*.  We assume it should be
+centered around 50% and be between 0 and 1. It gives about the same results as
+in section 11.1.4. We choose $\sim \mathcal{N(0, 1.5)}$.
+
+```{r}
+sim <- list(nsamples = 100, npreds = 25)
+sim <- within(sim, {
+  defs <- defData(varname = "a", dist = "normal", formula = "..m", 
+                  variance = "..s")
+  defs <- defData(defs, varname = "p", dist = "nonrandom", formula = "a",
+                  link = "logit")
+  
+  grid <- expand.grid(mean = c(0, 1, 2), sd = c(0.5, 1, 1.5)) %>%
+    mutate(params = sprintf("m=%.1f, s=%.1f", mean, sd))
+  lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    set.seed(as.integer(as.Date("2021-12-12")))
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = grid$mean[i],
+             sd = grid$sd[i],
+             params = grid$params[i])
+    })
+  
+    data <- do.call(rbind, lst)
+})
+
+ggplot(sim$data, aes(x = p, fill = params, color = params)) +
+  geom_density(aes(y = ..scaled..), size = 1.5) +
+  scale_fill_paletteer_d("ggthemes::Classic_10") +
+  scale_color_paletteer_d("ggthemes::Classic_10") +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "Prior probability", x = NULL, y = NULL) +
+  facet_grid(sprintf("sd = %.1f", sd) ~ sprintf("mean = %.1f", mean))
+```
+### Fits {-}
+
+As explained by McElreath in section 11.1.4, p. 345, using indexed predictors in
+this case could be overparametrized.  I have tried using both methods, i.e.
+indexed predictors or using dummy variables and they give the same results.
+
+The dummy variables method is however more cumbersome to use, so my final choice
+was with indexed predictors.
+
+#### `quap` {-}
+
+
+The model used to get the total effect of gender, both direct and indirect.
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11H04a.rds")
+m11H04a <- readRDS(a_file)
+# m11H04a <- quap(
+#   dataGrants,
+#   flist = alist(
+#     awards ~ dbinom(applications, p),
+#     logit(p) <- a[gender],
+#     a[gender] ~ dnorm(0, 1.5)))
+# saveRDS(m11H04a, file = a_file)
+precis(m11H04a, depth = 2)
+```
+
+The model used to get the direct effect of $gender$ taking into account
+the disciplines effect.
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11H04b.rds")
+m11H04b <- readRDS(a_file)
+m11H04b <- quap(
+  dataGrants,
+  flist = alist(
+    awards ~ dbinom(applications, p),
+    logit(p) <- bG[gender] + bD[discipline],
+    bG[gender] ~ dnorm(0, 1.5),
+    bD[discipline] ~ dnorm(0, 1.5)))
+# saveRDS(m11H04b, file = a_file)
+precis(m11H04b, depth = 2)
+summary(m11H04b)
+```
+
+#### `brm` {-}
+
+
+
+
+```{r}
+# awards | trials(applications) ~ 0 + gender
+a_file <- here::here("fits", "b11H04a.rds")
+b11H04a <- readRDS(a_file)
+# b11H04a <- brm(data = dataGrants,
+#       family = binomial,
+#       formula = awards | trials(applications) ~ 0 + gender,
+#       prior = prior(normal(0, 1.5), class = b),
+#       cores = detectCores(), seed = 11)
+# b11H04a <- brms::add_criterion(b11H04a, criterion = c("waic", "loo"))
+# saveRDS(b11H04a, file = a_file)
+summary(b11H04a)
+```
+
+
+
+
+```{r}
+# formula = bf(awards | trials(applications) ~ a + b,
+#                    a ~ 0 + gender,
+#                    b ~ 0 + discipline,
+#                    nl = TRUE),
+#       prior= c(
+#         prior(normal(0, 1.5), nlpar = a),
+#         prior(normal(0, 1.5), nlpar = b))
+a_file <- here::here("fits", "b11H04b.rds")
+b11H04b <- readRDS(a_file)
+# b11H04b <- brm(data = dataGrants,
+#       family = binomial,
+#       formula = awards | trials(applications) ~ 0 + gender + discipline,
+#       prior= c(prior(normal(0, 1.5), class = b)),
+#       cores = detectCores(), seed = 11)
+# b11H04b <- brms::add_criterion(b11H04b, criterion = c("waic", "loo"))
+# saveRDS(b11H04b, file = a_file)
+summary(b11H04b)
+```
+
+```{r}
+# a_file <- here::here("fits", "b11H04c.rds")
+# b11H04c <- readRDS(a_file)
+# b11H04c <- brm(data = dataGrants,
+#       family = binomial,
+#       formula = awards | trials(applications) ~ gender,
+#       prior = c(prior(normal(1, 0.5), class = Intercept),
+#                 prior(normal(0, 1.5), class = b)),
+#       cores = detectCores(), seed = 11)
+# b11H04c <- brms::add_criterion(b11H04c, criterion = c("waic", "loo"))
+# saveRDS(b11H04c, file = a_file)
+# summary(b11H04c)
+```
+
+
+
+
+```{r}
+# a_file <- here::here("fits", "b11H04d.rds")
+# b11H04d <- readRDS(a_file)
+# b11H04d <- brm(data = dataGrants,
+#       family = binomial,
+#       formula = awards | trials(applications) ~ gender + discipline,
+#       prior = c(prior(normal(1, 0.5), class = Intercept),
+#                 prior(normal(0, 1.5), class = b)),
+#       cores = detectCores(), seed = 11)
+# b11H04d <- brms::add_criterion(b11H04d, criterion = c("waic", "loo"))
+# saveRDS(b11H04d, file = a_file)
+# summary(b11H04d)
+```
+
+
+
+#### `inla` {-}
+
+```{r}
+a_file <- here::here("fits", "i11H04a.rds")
+i11H04a <- readRDS(file = a_file)
+# i11H04a <- inla(data = dataGrants,
+#                 formula =  awards ~ -1 + gender,
+#                 family = "binomial",
+#                 Ntrials = applications,
+#                 control.family = list(link = "logit"),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i11H04a, file = a_file)
+summary(i11H04a)
+```
+
+
+```{r}
+# f(-1 + gender, model = "linear")
+a_file <- here::here("fits", "i11H04b.rds")
+i11H04b <- readRDS(file = a_file)
+# i11H04b <- inla(data = dataGrants,
+#                 formula =  awards ~ -1 + gender + discipline,
+#                 family = "binomial",
+#                 Ntrials = applications,
+#                 control.family = list(link = "logit"),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i11H04b, file = a_file)
+summary(i11H04b)
+i11H04b$summary.fixed
+# i11H04b$summary.random
+# i11H04b$summary.fitted.values
+# i11H04b$summary.linear.predictor
+```
+
+### `quap`, `brm`, `inla` {-}
+
+```{r}
+data.frame(
+  fit = c("quap", "brm", "inla"),
+  waic = c(as.double(rethinking::WAIC(m11H04a)["WAIC"]), 
+           brms::WAIC(b11H04a)$estimates["waic", "Estimate"],
+           i11H04a$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H04a)["std_err"]),
+         brms::WAIC(b11H04a)$estimates["waic", "SE"],
+         sd(i11H04a$waic$local.waic))) %>%
+  mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
+  arrange(waic)
+```
+
+
+
+```{r}
+data.frame(
+  fit = c("quap", "brm", "inla"),
+  waic = c(as.double(rethinking::WAIC(m11H04b)["WAIC"]), 
+           brms::WAIC(b11H04b)$estimates["waic", "Estimate"],
+           i11H04b$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H04b)["std_err"]),
+         brms::WAIC(b11H04b)$estimates["waic", "SE"],
+         sd(i11H04b$waic$local.waic))) %>%
+  mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
+  arrange(waic)
+```
+Conclusion: `inla` seems to be a very good model with less `se` for both models.
+
+
+```{r}
+summ <- list()
+# precis(m11H04b, depth = 2)
+# levels(dataGrants$discipline)
+# levels(dataGrants$discipline)[-1]
+summ$quap <- precis(m11H04b, depth = 2) %>%
+  data.frame() %>%
+  tibble::rownames_to_column(var = "var") %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline))) %>%
+  select(var, mean, sd) %>%
+  mutate(fit = "quap")
+summ$brm <- fixef(b11H04b) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "var") %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline))) %>%
+  select(var, mean = Estimate, sd = Est.Error) %>%
+  mutate(fit = "brm")
+summ$inla <- i11H04b$summary.fixed %>%
+  tibble::rownames_to_column(var = "var") %>%
+  mutate(var = c(levels(dataGrants$gender), levels(dataGrants$discipline)[-1])) %>%
+  select(var, mean, sd) %>%
+  mutate(fit = "inla")
+# str(summ$quap)
+# str(summ$brm)
+# str(summ$inla)
+summ$all <- do.call(rbind, list(quap = summ$quap, brm = summ$brm, inla = summ$inla)) %>%
+  pivot_longer(cols = c("mean", "sd"), names_to = "moment", values_to = "value") %>%
+  pivot_wider(id_cols = "var", names_from = c("moment" ,"fit"), values_from = "value")
+# str(summ$all)
+```
+
+
+
+```{r}
+summ$gt <- summ$all %>% 
+  gt::gt(rowname_col = "var") %>%
+  tab_header(title = "Comparing values from quap, brm and inla",
+             subtitle = "Practice 11H4") %>%
+  tab_spanner_delim(delim = "_", columns = everything(), split = "first") %>%
+  cols_align(align = "center", columns = everything()) %>%
+  fmt_number(columns = everything(), decimals = 2) %>%
+  data_color(columns = everything(), colors = "mintcream") %>%
+  tab_style(style = cell_borders(
+    sides = c("left"),
+    color = "grey90",
+    weight = px(1.5),
+    style = "solid"),
+    locations = cells_body(
+      columns = "sd_quap"
+    )) %>%
+  # tab_style(style = cell_borders(
+  #   sides = c("left"),
+  #   color = "grey90",
+  #   weight = px(1.5),
+  #   style = "solid"),
+  #   locations = cells_column_spanners(
+  #     spanners = c("sd")
+  #   )) %>%
+  tab_style(style = cell_borders(
+    sides = c("left"),
+    color = "grey90",
+    weight = px(1.5),
+    style = "solid"),
+    locations = cells_column_labels(
+      columns = c("sd_quap")
+    )) %>%
+  tab_options(heading.background.color = "darkslategray",
+    heading.title.font.weight = "bold",
+    heading.subtitle.font.weight = "bold",
+    column_labels.background.color = "seashell",
+    column_labels.font.weight = "bold",
+    stub.background.color = "seashell")
+# summ$gt
+```
+
+### Inferences {-}
+
+See section 11.1.4, in particular p. 342-345, for discussion and guidelines
+by McElreath.
+
+We will use the result from the `brm` fit to answer the questions.
+
+The total effect, that is, including any confound is covered by the model
+`m11H04b` which is ploted just below
+
+```{r}
+predict <- list()
+predict <- within(predict, {
+  data <- predicted_draws(b11H04a, newdata = dataGrants) %>%
+    as.data.frame() %>%
+    select(discipline, gender, .prediction) %>%
+    # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
+    # select(discipline, gender, applications, awards) %>%
+    group_by(discipline, gender) %>%
+    ggdist::mean_qi() %>%
+    mutate(applications = dataGrants$applications,
+           prop = .prediction / applications,
+           prop.lower = .lower / applications,
+           prop.upper = .upper / applications)
+})
+# glimpse(predict$data)
+# head(predict$data)
+summary(b11H04a)
+# dataGrants
+```
+
+Using only gender, the predicted rates are prety much always outside of the 
+observed range. 
+
+```{r}
+ggplot(predict$data %>% filter(discipline != "Human"), 
+       aes(x = gender, y = prop, ymin = prop.lower, ymax = prop.upper,
+                         color = gender)) +
+  geom_pointinterval(shape = 1, size = 1, fatten_point = 3, position = "dodge") +
+  geom_point(dataGrants %>% filter(discipline != "Human"), 
+             mapping = aes(x = gender, y = prop, color = gender),
+             inherit.aes = FALSE, position = "dodge", shape = 19) +
+  scale_color_manual(values = c("f" = "purple", "m" = "navyblue")) +
+  theme(legend.position = "none") +
+  labs(title = "Admission rate considering only gender (excluding Humanities)",
+       subtitle = "Model b11H04a", x = NULL) +
+  facet_wrap(. ~ discipline)
+```
+
+
+Using $discipline$ as well as $gender$ improves the predicition
+
+```{r}
+summary(b11H04a)
+```
+
+
+
+```{r}
+predict <- list()
+predict <- within(predict, {
+  data <- predicted_draws(b11H04b, newdata = dataGrants) %>%
+    as.data.frame() %>%
+    select(discipline, gender, .prediction) %>%
+    # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
+    # select(discipline, gender, applications, awards) %>%
+    group_by(discipline, gender) %>%
+    ggdist::mean_qi() %>%
+    mutate(applications = dataGrants$applications,
+           prop = .prediction / applications,
+           prop.lower = .lower / applications,
+           prop.upper = .upper / applications)
+})
+# glimpse(predict$data)
+head(predict$data)
+# summary(b11H04b)
+# dataGrants
+```
+
+and the plots
+
+
+```{r}
+ggplot(predict$data %>% filter(discipline != "Human"), 
+       aes(x = gender, y = prop, ymin = prop.lower, ymax = prop.upper,
+                         color = gender)) +
+  geom_pointinterval(shape = 1, size = 1, fatten_point = 3, position = "dodge") +
+  geom_point(dataGrants %>% filter(discipline != "Human"), 
+             mapping = aes(x = gender, y = prop, color = gender),
+             inherit.aes = FALSE, position = "dodge", shape = 19) +
+  scale_color_manual(values = c("f" = "purple", "m" = "navyblue")) +
+  theme(legend.position = "none") +
+  labs(title = "Admission rate considering gender and discipline",
+       subtitle = "Model b11H04b", x = NULL) +
+  facet_wrap(. ~ discipline)
+```
+
+
+#### Conclusions {-}
+
+Using $discipline$ and $gender$ has little impact on the overall results. As
+a matter of fact, the model summary shows clearly that $gender$ is the most
+influential coefficient with $gender = female$ being having a more negative
+effect on being awarded a grant.
+
+
+```{r}
+summary(b11H04b)
+```
+
+In addition, the sd of the discipline coefficient
+is high with respect to their mean probably caused by the fact that many
+different combinations of coefficients are possible with the same outcome.
+This is confirmed when comparing waic.  Both model are equivalent.
+
+
+```{r}
+loo_compare(b11H04a, b11H04b, criterion = "waic")
+```
 
