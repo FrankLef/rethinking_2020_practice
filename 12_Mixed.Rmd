@@ -1,19 +1,174 @@
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(paletteer)
-library(bayesplot)
+library(INLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(loo)
+library(simstudy)
+library(dagitty, quietly = TRUE)
+library(ggdag, quietly = TRUE)
+library(posterior)
+library(ggdist, quietly = TRUE)
+library(ggmcmc, quietly = TRUE)
+library(bayesplot, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+library(gt)
 ```
 
 
 # Monsters and Mixtures {#Mixed}
 
+We set the current theme used for plotting
 
-## 12E1 {-}
-
-```{r echo=FALSE}
-message("TODO")
+```{r}
+theme_set(
+  ggthemes::theme_hc(base_size = 12, base_family = "sans", style = "darkunica") +
+  theme(title = element_text(color = "floralwhite"),
+        axis.title.y = element_text(angle = 90),
+        strip.background = element_rect(fill = "darkgrey"))
+  )
 ```
+
+
+
+## 12E1 {-#prac12E1}
+
+See introduction to section 12.3, p. 380 for reference.
+
+* *Unordered categorical variable*: Variable with discrete values such as 
+categories of products or classes of clients.
+* *Ordered categorical variable*: Variables with discrete values whose ranking
+is meaningful but the distance between the different values is unequal. For
+example the popularity of a product could be categorized as very low, low,
+medium, high, very high.
+
+
+## 12E2 {-#prac12E2}
+
+See introduction to section 12.3, p. 380, for reference.
+
+
+Use the *cumulative link* function. In differ from the logit link in that it 
+represents the probability of the value *and any smaller values*.
+
+That is, whereas the logit link is the probability of category 3 happening, the
+cumulative link function is the probability of categories 1, 2 or 3 happening.
+
+
+## 12E3 {-#prac12E3}
+
+See introduction to section 12.2, p. 376, for reference.
+
+Zero-inflated model are caused by 2 different factor: Either the process didn't 
+generate and event because of a low rate or simply because the process failed
+altogether.
+
+Therefore the inferential error will be to understimate the process rate.
+
+
+## 12E4 {-#prac12E4}
+
+
+See introduction to section 12.1, p. 369-370, for reference.
+
+Over-dispersion is when the values are more variable than the pure process. *It
+implies that some omitted variable is producing additional variations*. For
+example it happens often with sales data as some locations sell more than 
+expected for undeclared reason.
+
+Under-dispersion is when the values are less variable than the pure process.
+For example it happens in produciton when the rate of production is more constant
+when the volume is high, i.e. there are many jobs in the queue. This is described
+by the *Conway-Maxwell-Poisson* distribution.
+
+
+## 12M1 {-#prac12M1}
+
+The log-cumulative-odds $\alpha_k$ is defined in equation 12.1, section 12.3.2, 
+p. 383, as
+
+$$
+\begin{align*}
+\alpha_k = log{\frac{Pr(y_i \le k)}{1 - Pr(y_i \le k)}}
+\end{align*}
+$$
+
+see R. code 12.15 on p. 383 to see an example on how to do this. The last
+value is `Inf` since probability of the last value is always 1.
+
+```{r}
+x <- c(12, 36, 7, 41)  # the counts
+probs <- cumsum(x) / sum(x)  # the cumulative probabilities
+odds <- probs / (1 - probs)  # the cumulative odds
+cumlogit <- log(odds)  # the log of cumulative odds
+cumlogit
+```
+
+## 12M2 {-#prac12M2}
+
+
+Figure 12.5 is in 12.3.1, p. 384.
+
+
+```{r}
+p <- list()
+p$df <- data.frame(response = 1:4,
+                   cnt = x,
+                   probs = probs,
+                   diff = x / sum(x),
+                   previous = c(0, probs[-4]))
+ggplot(p$df, aes(x = response, y = probs)) +
+  geom_linerange(aes(x = response, ymin = 0, ymax = probs), 
+                 color = "indianred1", size = 3) +
+  geom_linerange(aes(x = response + 0.05, ymin = previous, ymax = probs), 
+                 color = "darkorange", size = 3) +
+  geom_line(color = "lightcoral", size = 1) +
+  geom_point(color = "lightblue", size = 4, shape = 19) +
+  labs(title = "Cumulative probabilities and ordered likelihood",
+       subtitle = "Practice 12M2", y = "cumulative proportion")
+```
+
+## 12M3 {-#prac12M3}
+
+
+See section 12.2.1 for Zero-inflated Poisson.
+
+The Zero-inflated binomial would be using the same pattern with $p_0$ the 
+probability that the process did not start and thus we have a zero.
+
+We also have $p_y$ which is the probability of success when the process operates
+normally and we have $n$ trials.
+
+So the probability of obtaining a zero is $p_0$ + the probability of normally
+a zero with the process is $(1-p_0)(1-p)^n$, that is
+
+$$
+Pr(y = 0 \mid p_0, p_y, n) = p_0 + (1-p_0) \cdot (1-p_y)^n
+$$
+And the probability of obtaining $y_i = k, k \gt 0$ depends on the probability of the
+process not failing $1-p_0$ and the usual binomial probability of the process
+$\binom{n}{k}(1-p_y)^{n-k}p_y^k$, therefore
+
+$$
+Pr(y = k \mid p_0, p_y, n) = (1-p_0) \cdot \binom{n}{k}(1-p_y)^{n-k}p_y^k
+$$
+
+which can be formulated as a model as follows
+
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{ZIBinomial(p_{0,i}, p_{y,i})} \\
+logit(p_{0,i}) &= \alpha_{p0} + \beta_{p0}x_i \\
+logit(p_{y,i}) &= \alpha_{py} + \beta_{py}x_i
+\end{align*}
+$$
+
+
+## 12H1 {-#prac12H1}
+
+
+

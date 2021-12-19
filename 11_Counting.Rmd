@@ -1,10 +1,10 @@
 ```{r include=FALSE}
-library(dplyr, quietly = TRUE)
-library(tidyr, quietly = TRUE)
-library(tidybayes, quietly = TRUE)
 library(rethinking)
 library(brms)
 library(INLA)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
 library(loo)
 library(simstudy)
 library(dagitty, quietly = TRUE)
