@@ -5,6 +5,7 @@ library(INLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
+library(modelr)
 library(loo)
 library(simstudy)
 library(dagitty, quietly = TRUE)
@@ -113,7 +114,7 @@ cumlogit
 Figure 12.5 is in 12.3.1, p. 384.
 
 
-```{r}
+```{r out.width="80%"}
 p <- list()
 p$df <- data.frame(response = 1:4,
                    cnt = x,
@@ -127,6 +128,7 @@ ggplot(p$df, aes(x = response, y = probs)) +
                  color = "darkorange", size = 3) +
   geom_line(color = "lightcoral", size = 1) +
   geom_point(color = "lightblue", size = 4, shape = 19) +
+  scale_y_continuous(labels = scales::label_percent()) +
   labs(title = "Cumulative probabilities and ordered likelihood",
        subtitle = "Practice 12M2", y = "cumulative proportion")
 ```
@@ -170,5 +172,551 @@ $$
 
 ## 12H1 {-#prac12H1}
 
+We don't transform $femiminity$ as its scale is from 1 to 10 and no bias
+can be caused by large predictors's values.
 
 
+```{r}
+data("Hurricanes")
+dataHurricanes <- Hurricanes
+skimr::skim(dataHurricanes)
+rm(Hurricanes)
+```
+
+which we can illustrate as follows
+
+```{r}
+ggplot(dataHurricanes, aes(x = femininity, y = deaths)) +
+  geom_point(color = "ivory") +
+  scale_y_continuous(breaks = scales::breaks_width(width = 25))
+```
+
+
+
+### a) Femininity {-}
+
+#### Model {-}
+
+McElreath requires the **simplest Poisson model** of $deaths$ using $feminity$ 
+as a predictor.
+
+
+$$
+\begin{align*}
+deaths_i &\sim \mathcal{Poisson(\lambda_i)} \\
+\log{\lambda_i} &= \alpha + \beta_i femininity_i \\
+\alpha &\sim \mathcal{N(mean=4, sd=1)} \\
+\beta_i &\sim \mathcal{N(mean=1, sd=0.25)}
+\end{align*}
+$$
+
+
+#### Priors {-}
+
+
+We note that since $\log{\lambda_i} &= \alpha$ then $\lambda_i$ is lognormal
+distributed and we could have use the $rlnorm()$ function for sampling.
+We choose to use `simstudy` for consistency with part a of this practice
+
+"Prior predictive distribution of mean deaths (lambda)"
+
+```{r}
+sim <- list(nsamples = 100)
+sim <- within(sim, {
+  # define the model
+  defs <- defData(varname = "a", dist = "normal", formula = "..m",
+                  variance = "..v")
+  defs <- defData(defs, varname = "lambda", dist = "nonrandom", 
+                  formula = "a", link = "log")
+  
+  # generate data using the grid f specs
+  grid <- expand.grid(mean = c(2, 3, 4), 
+                      sd = c(0.5, 1, 2)) %>%
+    mutate(model = sprintf("m=%.1f, s=%.1f", mean, sd))
+  
+  lst <- lapply(seq_len(nrow(grid)), FUN = function(i) {
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    v <- s^2
+    set.seed(as.integer(as.Date("2021-12-27")))
+    genData(n = nsamples, dtDefs = defs) %>%
+      as.data.frame() %>%
+      mutate(mean = paste("mu == ", m), 
+             sd = paste("sigma == ", s), 
+             model = grid$model[i])
+    })
+  names(lst) <- grid$model
+  
+  data <- do.call(rbind, lst)
+})
+glimpse(sim$data)
+p <- list()
+p$title <- expression(paste('Prior predictive of ', lambda *': '* 
+                              log(lambda) == alpha *', '* alpha %~% 
+                              Normal(mu *', '* sigma)))
+p$plot <- ggplot(sim$data, aes(x = lambda, fill = as.factor(mean), color = as.factor(mean))) +
+  geom_density(aes(y = ..scaled..)) +
+  scale_fill_paletteer_d("khroma::vibrant") +
+  scale_color_paletteer_d("khroma::vibrant") +
+  coord_cartesian(xlim = c(0, 100)) +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = p$title, x = NULL, y = NULL) +
+  facet_grid(sd ~ mean, labeller = label_parsed)
+p$plot
+```
+
+
+We choose to use $\alpha \sim \mathcal{N(mean=4, sd=1)}$ as prior.
+
+See section 11.2., p. 351, on details about the priors for Poisson.
+
+
+```{r}
+sim <- list(nsamples = 25, npreds = 25)
+sim <- within(sim, {
+  defs = defData(varname = "a", dist = "normal", formula = 4, variance = 1^2)
+  defs <- defData(defs, varname = "b", dist = "normal",
+                  formula = "..m", variance = "..v")
+  grid <- expand.grid(mean = c(0.5, 1, 1.5), sd = c(0.10, 0.25, 0.5)) %>%
+    mutate(params = paste("mu ==", mean, "~ sigma ==", sd))
+  lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
+    prm <- grid$params[i]
+    m <- grid$mean[i]
+    s <- grid$sd[i]
+    v <- s^2
+    set.seed(as.integer(as.Date("2021-12-24")))
+    genData(n = nsamples, dtDefs = defs) %>%
+      tidyr::expand(nesting(id, a, b, m, s),
+                    x = seq_range(x = log(dataHurricanes$femininity), n = npreds)) %>%
+      mutate(lambda = exp(a + b * x),
+             params = prm)
+    })
+  names(lst) <- grid$params
+
+  data <- do.call(rbind, lst)
+  })
+glimpse(sim$grid)
+glimpse(sim$data)
+glimpse(sim$lst[[1]])
+
+
+p <- list()
+p$y_lim <- c(0, 500)
+p$h_line <- 300
+p$pal <- paletteer::paletteer_d("fishualize::Hypsypops_rubicundus")
+p$pal <- scales::col_factor(palette = unclass(p$pal),
+                            domain = sort(unique(sim$data$params)),
+                            na.color = "grey")
+p$pal <- p$pal(unique(sim$data$params))
+names(p$pal) <- unique(sim$data$params)
+# p$pal
+p$log <- ggplot(sim$data, aes(x = x, y = lambda, group = id, color = params)) +
+  geom_line() +
+  scale_fill_manual(values = p$pal) +
+  scale_color_manual(values = p$pal) +
+  coord_cartesian(ylim = p$y_lim) +
+  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "Prior distribution of lambda",
+       x = "log of feminity", y = "mean (lambda) deaths") +
+  facet_wrap(. ~ params, labeller = label_parsed)
+p$log
+
+p$nat <- ggplot(sim$data, aes(x = exp(x), y = lambda, group = id, color = params)) +
+  geom_line() +
+  geom_hline(yintercept = p$h_line, size = 1, linetype = "dashed", color = "green") +
+  # scale_fill_manual(values = p$pal) +
+  scale_color_manual(values = p$pal) +
+  coord_cartesian(ylim = p$y_lim) +
+  theme(legend.position = "none") +
+  # theme(legend.position = "none",
+  #       axis.text.y = element_blank(),
+  #       axis.ticks.y = element_blank()) +
+  labs(title = "Prior distribution of lambda", 
+       x = "feminity", y = "mean (lambda) deaths") +
+  facet_wrap(. ~ params, labeller = label_parsed)
+p$nat
+```
+
+We select $\beta_i \sim \mathcal{N(mean=1.5, sd=0.25)}$ as the prior.
+
+
+#### Fits {-}
+
+
+##### `quap` {-}
+
+
+```{r}
+a_file <- here::here("fits", "m12H01a.rds")
+m12H01a <- readRDS(file = a_file)
+# m12H01a <- quap(
+#   data = dataHurricanes,
+#   flist = alist(
+#     deaths ~ dpois(lambda),
+#     log(lambda) <- a + b * femininity,
+#     a ~ dnorm(4, 1),
+#     b ~ dnorm(1.5, 0.25))
+#   )
+# saveRDS(m12H01a, file = a_file)
+```
+
+the summary is
+
+```{r}
+precis(m12H01a)
+```
+
+
+
+
+##### `brm` {-}
+
+
+```{r}
+a_file <- here::here("fits", "b12H01a.rds")
+b12H01a <- readRDS(file = a_file)
+# b12H01a <- brm(data = dataHurricanes,
+#                    family = poisson,
+#                    formula = deaths ~ 1 + femininity,
+#                    prior = c(prior(normal(4, 1), class = Intercept),
+#                              prior(normal(1, 0.25), class = b)),
+#                    cores = detectCores())
+# b12H01a <- brms::add_criterion(b12H01a, criterion = c("waic", "loo"))
+saveRDS(b12H01a, file = a_file)
+```
+
+the summary is
+
+```{r}
+summary(b12H01a)
+```
+
+
+
+##### `inla` {-}
+
+
+
+```{r}
+a_file <- here::here("fits", "i12H01a.rds")
+i12H01a <- readRDS(file = a_file)
+# i12H01a <- inla(data = dataHurricanes,
+#                 formula =  deaths ~ femininity,
+#                 family = "poisson",
+#                 control.family = list(link = "log"),
+#                 control.fixed = list(mean.intercept = 4, prec.intercept = 1 / 1^2,
+#                                      mean = 1, prec = 1 / 0.25^2),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i12H01a, file = a_file)
+```
+
+and the summary is
+
+```{r}
+summary(i12H01a)
+```
+
+
+
+### b) Intercept only {-}
+
+
+#### Model {-}
+
+
+$$
+\begin{align*}
+deaths_i &\sim \mathcal{Poisson(\lambda_i)} \\
+\log{\lambda_i} &= \alpha \\
+\alpha &\sim \mathcal{N(mean=4, sd=1)}
+\end{align*}
+$$
+
+
+#### Fits {-}
+
+
+##### `quap` {-}
+
+
+```{r}
+a_file <- here::here("fits", "m12H01b.rds")
+m12H01b <- readRDS(file = a_file)
+# m12H01b <- quap(
+#   data = dataHurricanes,
+#   flist = alist(
+#     deaths ~ dpois(lambda),
+#     log(lambda) <- a,
+#     a ~ dnorm(4, 1))
+#   )
+# saveRDS(m12H01b, file = a_file)
+```
+
+the summary
+
+```{r}
+summary(m12H01b)
+```
+
+
+
+##### `brm` {-}
+
+
+```{r}
+a_file <- here::here("fits", "b12H01b.rds")
+b12H01b <- readRDS(file = a_file)
+# b12H01b <- brm(data = dataHurricanes,
+#                    family = poisson,
+#                    formula = deaths ~ 1,
+#                    prior = prior(normal(4, 1), class = Intercept),
+#                    cores = detectCores())
+# b12H01b <- brms::add_criterion(b12H01b, criterion = c("waic", "loo"))
+# saveRDS(b12H01b, file = a_file)
+```
+
+the summary
+
+```{r}
+summary(b12H01b)
+```
+
+
+
+##### `inla` {-}
+
+
+
+```{r}
+a_file <- here::here("fits", "i12H01b.rds")
+i12H01b <- readRDS(file = a_file)
+# i12H01b <- inla(data = dataHurricanes,
+#                 formula =  deaths ~ 1,
+#                 family = "poisson",
+#                 control.family = list(link = "log"),
+#                 control.fixed = list(mean.intercept = 4, prec.intercept = (1 / 1^2)),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i12H01b, file = a_file)
+```
+
+and the summary is
+
+```{r}
+summary(i12H01b)
+```
+
+
+### Inferences {-}
+
+
+#### How strong is femininity relation to death
+
+
+```{r}
+print(loo_compare(b12H01a, b12H01b), simplify = FALSE)
+```
+
+The model *b12H01b* which is uses femininity as a predictor seems to be a better 
+fit. However the $elpd_diff$ of -23.5 has a sd of 76.2 whihc is more than
+3 times the coefficient itself and therefore uncertain.
+
+
+#### Which storms does it fit poorly
+
+Th fit seems to be particularly poor for Camille, Diane, Ike and Sandy as shown 
+when we plot the WAIC penalty vs the paerot K measure from loo.
+
+
+```{r}
+p <- list()
+p$df <- data.frame(paretoK = b12H01a$criteria$loo$diagnostics$pareto_k,
+                   penaltyWAIC = b12H01a$criteria$waic$pointwise[, "p_waic"],
+                   name = pull(dataHurricanes, name),
+                   deaths = pull(dataHurricanes, deaths)) %>%
+  mutate(out = paretoK >= 0.5)
+p$out <- ggplot(p$df, aes(x = paretoK, y = penaltyWAIC, color = out)) +
+  geom_point() +
+  geom_vline(xintercept = 0.5, linetype = "dashed", color = "violetred", size = 1) +
+  ggrepel::geom_text_repel(aes(label = name), size = 4) +
+  scale_x_continuous(breaks = scales::breaks_width(width = 0.25)) +
+  scale_color_manual(values = c("TRUE" = "violetred", "FALSE" = "royalblue")) +
+  theme(legend.position = "none") +
+  labs(title = "Outlier diagnostic", subtitle = "Fit b12H01a")
+p$out
+```
+
+
+
+## 12H2 {-#prac12H2}
+
+
+### Model {-}
+
+
+$$
+\begin{align*}
+deaths_i &\sim \mathcal{Gamma-Poisson(\lambda_i, \phi)} \\
+\log{\lambda_i} &= \beta_i femininity_i \\
+\beta_i &\sim \mathcal{N(mean=3, sd=0.50)} \\
+\phi &\sim \mathcal{Exp(rate = 1)}
+\end{align*}
+$$
+
+
+### Priors {-}
+
+We use the same prior for $\beta_i$ as in the previous practice.  Since $\phi$
+represents the variance of the Gamma-Poisson (p. 374 of section 12.1.2) then
+we use $\phi \sim \mathcal{Exp(rate = 1)}$.
+
+
+### Fits {-}
+
+
+#### `quap` {-}
+
+See the documentation of `rethinking::dgampois()` which uses this practice as
+an example, I use different priors (see 12H1 for details)
+
+See [more rethinking](http://xcelab.net/R/rethinking_package.pdf) for additional
+details on how to use rethinking.
+
+
+```{r}
+a_file <- here::here("fits", "m12H02.rds")
+m12H02 <- readRDS(file = a_file)
+# m12H02 <- quap(
+#   data = dataHurricanes,
+#   flist = alist(
+#     deaths ~ dgampois(lambda, phi),
+#     log(lambda) <- a + b * femininity,
+#     a ~ dnorm(4, 1),
+#     b ~ dnorm(1, 0.25),
+#     phi ~ dexp(1))
+#   )
+# saveRDS(m12H02, file = a_file)
+```
+
+the summary
+
+```{r}
+precis(m12H02)
+str(precis(m12H02))
+```
+
+
+#### `brm` {-}
+
+
+
+```{r}
+a_file <- here::here("fits", "b12H02.rds")
+b12H02 <- readRDS(file = a_file)
+# b12H02 <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + femininity,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H02 <- brms::add_criterion(b12H02, criterion = c("waic", "loo"))
+# saveRDS(object = b12H02, file = a_file)
+```
+
+the summary
+
+```{r}
+summary(b12H02)
+```
+
+### Inference {-}
+
+The posterior distribution of the coefficients using the model `b12H01a`
+(Poisson) and `b12H02` (Poisson-Gamma) is
+
+```{r}
+samples <- list(probs = c(0.055, 0.945))
+samples <- within(samples, {
+  x <- seq_range(dataHurricanes$femininity, n = 50, pretty = TRUE)
+  pois <- as_draws_df(b12H01a) %>%
+    summarise_draws(mean, median, mode = ggdist::Mode, sd, mad, 
+                    ~quantile2(., probs = probs)) %>%
+    mutate(fit = "b12H01a Poisson") %>%
+    filter(variable != "lp__")
+  pgam <- as_draws_df(b12H02) %>%
+    summarise_draws(mean, median, mode = ggdist::Mode, sd, mad, 
+                    ~quantile2(., probs = probs)) %>%
+    mutate(fit = "b12H02 Poisson-Gamma") %>%
+    filter(!(variable %in% c("shape", "lp__")))
+  data <- rbind(pois, pgam)
+})
+# glimpse(samples$pois)
+p <- list()
+p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+                                    y = variable, color = fit)) +
+  geom_pointinterval(fatten_point = 3, size = 2,
+                     position = position_dodge(width = 0.5)) +
+  theme(legend.title = element_blank()) +
+  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+  labs(title = "Posterior 89% range of coefficients",
+        x = "mean with 89% interval")
+p$coefs
+```
+
+
+We can see that the coefficients, in particular the $\beta_i$ is more variable
+with the gamma-poisson fit than the poisson fit.
+
+This is caused by the fact that the poisson fit assume a standard deviation
+equal to its mean whereas the gamma-poisson fit allows the standard deviation
+$\sigma$ to using the gamma distribution.
+
+
+We can also show the same result with the predictive distribution
+
+```{r}
+predict <- list(probs = c(0.055, 0.945))
+predict <- within(predict, {
+  x <- data.frame(femininity = seq_range(dataHurricanes$femininity, n = 50, pretty = TRUE))
+  pois <- predicted_draws(b12H01a, newdata = x) %>%
+    ungroup() %>%
+    select(-.row, -.chain, -.iteration, -.draw) %>%
+    summarise_draws(mean, median, sd, mad,
+                    ~quantile2(., probs = probs)) %>%
+    filter(variable == ".prediction") %>%
+    mutate(fit = "b12H01a Poisson")
+    # filter(variable != "lp__")
+  pgam <- predicted_draws(b12H02, newdata = x) %>%
+    ungroup() %>%
+    select(-.row, -.chain, -.iteration, -.draw) %>%
+    summarise_draws(mean, median, sd, mad,
+                    ~quantile2(., probs = probs)) %>%
+    filter(variable == ".prediction") %>%
+    mutate(fit = "b12H02 Gamma-Poisson")
+  data <- rbind(pois, pgam)
+})
+# glimpse(predict$pois)
+p <- list()
+p$coefs <- ggplot(predict$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+                                    y = variable, color = fit)) +
+  geom_pointinterval(fatten_point = 5, size = 3,
+                     position = position_dodge(width = 0.5)) +
+  theme(legend.title = element_blank()) +
+  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+  labs(title = "Posterior 89% range of coefficients",
+        x = "mean with 89% interval")
+p$coefs
+```
+
+
+
+## 12H3 {-#prac12H3}

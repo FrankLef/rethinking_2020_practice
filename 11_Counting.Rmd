@@ -973,7 +973,7 @@ tools, lets do it with `simstudy`.
 ```{r}
 sim <- list(nsamples = 100)
 sim <- within(sim, {
-  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..s^2")
+  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..v")
   defs <- defData(defs, varname = "lambda", dist = "nonrandom",
                 formula = "a", link = "log")
   grid <- expand.grid(mean = c(1, 2, 3), sd = c(0.5, 1, 1.5)) %>%
@@ -981,11 +981,12 @@ sim <- within(sim, {
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     m <- grid$mean[i]
     s <- grid$sd[i]
+    v <- s^2
     set.seed(as.integer(as.Date("2021-12-11")))
     genData(n = nsamples, dtDefs = defs) %>%
       as.data.frame() %>%
-      mutate(mean = grid$mean[i],
-             sd = grid$sd[i],
+      mutate(mean = m,
+             sd = s,
              params = grid$params[i])
     })
   
@@ -1021,7 +1022,7 @@ sim <- within(sim, {
   defs <- defData(varname = "a", dist = "normal", formula = 2,
                   variance = 0.5^2)
   defs <- defData(defs, varname = "b", dist = "normal", 
-                  formula = "..m", variance = "..s^2")
+                  formula = "..m", variance = "..v")
   
   # generate data using the grid f specs
   grid <- expand.grid(mean = 0, 
@@ -1032,10 +1033,11 @@ sim <- within(sim, {
     set.seed(as.integer(as.Date("2021-12-11")))
     m <- grid$mean[i]
     s <- grid$sd[i]
+    v <- s^2
     genData(n = nsamples, dtDefs = defs) %>%
       as.data.frame() %>%
-      mutate(mean = grid$mean[i],
-             sd = grid$sd[i],
+      mutate(mean = m,
+             sd = s,
              params = grid$params[i]) %>%
       tidyr::expand(nesting(id, a, b, mean, sd, params),
            log_predictor = seq(from = log(1), to = log(100), length.out = npreds)) %>%
@@ -1245,7 +1247,7 @@ coverage above 75%.  Probably caused by the fact that all data is gathered above
 ```{r}
 sim <- list(nsamples = 100)
 sim <- within(sim, {
-  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..s^2")
+  defs <- defData(varname = "a", dist = "normal", formula = "..m", variance = "..v")
   defs <- defData(defs, varname = "lambda", dist = "nonrandom",
                 formula = "a", link = "log")
   grid <- expand.grid(mean = log(c(25, 50, 75)), sd = log(c(1.5, 2, 3))) %>%
@@ -1253,11 +1255,12 @@ sim <- within(sim, {
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     m <- grid$mean[i]
     s <- grid$sd[i]
+    v <- s^2
     set.seed(as.integer(as.Date("2021-12-11")))
     genData(n = nsamples, dtDefs = defs) %>%
       as.data.frame() %>%
-      mutate(mean = grid$mean[i],
-             sd = grid$sd[i],
+      mutate(mean = m,
+             sd = s,
              params = grid$params[i])
     })
   
@@ -1290,7 +1293,7 @@ sim <- within(sim, {
   defs <- defData(varname = "a", dist = "normal", formula = 4,
                   variance = 0.5^2)
   defs <- defData(defs, varname = "b", dist = "normal", 
-                  formula = "..m", variance = "..s^2")
+                  formula = "..m", variance = "..v")
   
   # generate data using the grid f specs
   grid <- expand.grid(mean = 0, 
@@ -1301,10 +1304,11 @@ sim <- within(sim, {
     set.seed(as.integer(as.Date("2021-12-11")))
     m <- grid$mean[i]
     s <- grid$sd[i]
+    v <- s^2
     genData(n = nsamples, dtDefs = defs) %>%
       as.data.frame() %>%
-      mutate(mean = grid$mean[i],
-             sd = grid$sd[i],
+      mutate(mean = m,
+             sd = s,
              params = grid$params[i]) %>%
       tidyr::expand(nesting(id, a, b, mean, sd, params),
            log_predictor = seq(from = log(2), to = log(700), length.out = npreds)) %>%
@@ -1547,7 +1551,7 @@ in section 11.1.4. We choose $\sim \mathcal{N(0, 1.5)}$.
 sim <- list(nsamples = 100, npreds = 25)
 sim <- within(sim, {
   defs <- defData(varname = "a", dist = "normal", formula = "..m", 
-                  variance = "..s")
+                  variance = "..v")
   defs <- defData(defs, varname = "p", dist = "nonrandom", formula = "a",
                   link = "logit")
   
@@ -1556,11 +1560,12 @@ sim <- within(sim, {
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     m <- grid$mean[i]
     s <- grid$sd[i]
+    v <- s^2
     set.seed(as.integer(as.Date("2021-12-12")))
     genData(n = nsamples, dtDefs = defs) %>%
       as.data.frame() %>%
-      mutate(mean = grid$mean[i],
-             sd = grid$sd[i],
+      mutate(mean = m,
+             sd = s,
              params = grid$params[i])
     })
   
@@ -1577,6 +1582,7 @@ ggplot(sim$data, aes(x = p, fill = params, color = params)) +
   labs(title = "Prior probability", x = NULL, y = NULL) +
   facet_grid(sprintf("sd = %.1f", sd) ~ sprintf("mean = %.1f", mean))
 ```
+
 ### Fits {-}
 
 As explained by McElreath in section 11.1.4, p. 345, using indexed predictors in
