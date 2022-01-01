@@ -1006,9 +1006,44 @@ most important predictor of deaths.
 
 
 
-
-
 ## 12H4 {-#prac12H4}
 
+The fit with damage used directly is
 
+
+```{r}
+a_file <- here::here("fits", "b12H04.rds")
+b12H04 <- readRDS(file = a_file)
+# b12H04 <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + damage_norm,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H04 <- brms::add_criterion(b12H04, criterion = c("waic", "loo"))
+# saveRDS(object = b12H04, file = a_file)
+```
+
+
+and the summary is
+
+```{r}
+summary(b12H04)
+```
+
+and the WAIC as well a PSIS
+
+```{r}
+print(loo_compare(b12H03_d, b12H04, criterion = "waic"), simplify = FALSE)
+print(loo_compare(b12H03_d, b12H04, criterion = "loo"), simplify = FALSE)
+```
+
+Conclusion: The model using log of damage is a better fit and confirms the
+data transformation used in 12H4 just above.
+
+
+## 12H5 {-#prac12H5}
 

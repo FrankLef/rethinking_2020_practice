@@ -28,11 +28,17 @@ paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "awto
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "futurevisions"]
 paletteer::palettes_d_names$palette[paletteer::palettes_d_names$package == "Manu"]
 
-tmp$pal <- paletteer::paletteer_d("khroma::soil")
+tmp$pal <- paletteer::paletteer_d("ggsci::light_uchicago")
+scales::show_col(tmp$pal)
+
+tmp$pal <- paletteer::paletteer_d("fishualize::Synchiropus_splendidus")
+scales::show_col(tmp$pal)
+
+tmp$pal <- paletteer::paletteer_d("fishualize::Stethojulis_bandanensis")
 scales::show_col(tmp$pal)
 
 
-tmp$pal <- paletteer::paletteer_d("awtools::bpalette")
+tmp$pal <- paletteer::paletteer_d("awtools::a_palette")
 scales::show_col(tmp$pal)
 
 tmp$pal <- paletteer::paletteer_d("futurevisions::cancri")
@@ -56,8 +62,7 @@ scales::show_col(tmp$pal)
 tmp$pal <- paletteer::paletteer_d("LaCroixColoR::PassionFruit")
 scales::show_col(tmp$pal)
 
-tmp$pal <- paletteer::paletteer_d("awtools::a_palette")
-scales::show_col(tmp$pal)
+
 
 tmp$pal <- paletteer::paletteer_d("pals::alphabet")
 scales::show_col(tmp$pal)
