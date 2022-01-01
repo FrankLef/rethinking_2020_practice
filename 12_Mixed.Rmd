@@ -6,6 +6,7 @@ library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
 library(modelr)
+library(scales)
 library(loo)
 library(simstudy)
 library(dagitty, quietly = TRUE)
@@ -178,17 +179,37 @@ can be caused by large predictors's values.
 
 ```{r}
 data("Hurricanes")
-dataHurricanes <- Hurricanes
+dataHurricanes <- Hurricanes %>%
+  mutate(pressure = rescale(min_pressure, to = c(1, 10)),
+         damage = log(damage_norm))
 skimr::skim(dataHurricanes)
 rm(Hurricanes)
 ```
+
+The transformations are as follows
+
+* $pressure = rescale(min\_pressure, c(1, 10))$: The $min\_pressure$ rescaled 
+to `c(1, 10)` since
+  * The pressure is always strictly positive
+  * Avoid the distortion of coefficient with the high observed range
+  * `c(1, 10)` is a scale similar to $femininity$ and facilitate the comparison
+* $damage = log(damage\_norm)$: The log of $damage\_norm$ since
+  * The distribution is heavily right-skewed and the log will centralize it
+  * The lower value being 1 the log will give a non-negative scale which simplifies
+  * It puts the data on a scale similar to $femininity$ which facilitates comparison
+
 
 which we can illustrate as follows
 
 ```{r}
 ggplot(dataHurricanes, aes(x = femininity, y = deaths)) +
   geom_point(color = "ivory") +
-  scale_y_continuous(breaks = scales::breaks_width(width = 25))
+  ggrepel::geom_text_repel(data = dataHurricanes %>% filter(deaths >= 50),
+                           aes(x = femininity, y = deaths, label = name),
+                           color = "gold") +
+  scale_y_continuous(breaks = scales::breaks_width(width = 50)) +
+  labs(title = "Nb of deaths vs femininity",
+       subtitle = sprintf("%d storms", nrow(dataHurricanes)))
 ```
 
 
@@ -249,7 +270,8 @@ sim <- within(sim, {
   
   data <- do.call(rbind, lst)
 })
-glimpse(sim$data)
+# glimpse(sim$data)
+
 p <- list()
 p$title <- expression(paste('Prior predictive of ', lambda *': '* 
                               log(lambda) == alpha *', '* alpha %~% 
@@ -280,7 +302,7 @@ sim <- within(sim, {
   defs <- defData(defs, varname = "b", dist = "normal",
                   formula = "..m", variance = "..v")
   grid <- expand.grid(mean = c(0.5, 1, 1.5), sd = c(0.10, 0.25, 0.5)) %>%
-    mutate(params = paste("mu ==", mean, "~ sigma ==", sd))
+    mutate(params = paste("mu ==", mean, "*','* ~ sigma ==", sd))
   lst <- lapply(X = seq_len(nrow(grid)), FUN = function(i) {
     prm <- grid$params[i]
     m <- grid$mean[i]
@@ -297,9 +319,7 @@ sim <- within(sim, {
 
   data <- do.call(rbind, lst)
   })
-glimpse(sim$grid)
-glimpse(sim$data)
-glimpse(sim$lst[[1]])
+# glimpse(sim$data)
 
 
 p <- list()
@@ -321,10 +341,9 @@ p$log <- ggplot(sim$data, aes(x = x, y = lambda, group = id, color = params)) +
   theme(legend.position = "none",
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank()) +
-  labs(title = "Prior distribution of lambda",
-       x = "log of feminity", y = "mean (lambda) deaths") +
+  labs(x = "log of feminity", y = expression(paste("mean (", lambda, ") deaths"))) +
   facet_wrap(. ~ params, labeller = label_parsed)
-p$log
+# p$log
 
 p$nat <- ggplot(sim$data, aes(x = exp(x), y = lambda, group = id, color = params)) +
   geom_line() +
@@ -336,10 +355,11 @@ p$nat <- ggplot(sim$data, aes(x = exp(x), y = lambda, group = id, color = params
   # theme(legend.position = "none",
   #       axis.text.y = element_blank(),
   #       axis.ticks.y = element_blank()) +
-  labs(title = "Prior distribution of lambda", 
-       x = "feminity", y = "mean (lambda) deaths") +
+  labs(x = "feminity", y = expression(paste("mean (", lambda, ") deaths"))) +
   facet_wrap(. ~ params, labeller = label_parsed)
-p$nat
+# p$nat
+wrap_plots(p$nat, p$log) +
+  plot_annotation(title = expression(paste("Prior distribution of ", lambda)))
 ```
 
 We select $\beta_i \sim \mathcal{N(mean=1.5, sd=0.25)}$ as the prior.
@@ -516,22 +536,22 @@ summary(i12H01b)
 ### Inferences {-}
 
 
-#### How strong is femininity relation to death
+**How strong is femininity relation to death?**
 
 
 ```{r}
 print(loo_compare(b12H01a, b12H01b), simplify = FALSE)
 ```
 
-The model *b12H01b* which is uses femininity as a predictor seems to be a better 
-fit. However the $elpd_diff$ of -23.5 has a sd of 76.2 whihc is more than
+The model `b12H01b` which is uses femininity as a predictor seems to be a better 
+fit. However the elpd_diff of -23.5 has a sd of 76.2 whihc is more than
 3 times the coefficient itself and therefore uncertain.
 
 
-#### Which storms does it fit poorly
+**Which storms does it fit poorly?**
 
 Th fit seems to be particularly poor for Camille, Diane, Ike and Sandy as shown 
-when we plot the WAIC penalty vs the paerot K measure from loo.
+when we plot the WAIC penalty vs the pareto K measure from loo.
 
 
 ```{r}
@@ -572,7 +592,7 @@ $$
 
 ### Priors {-}
 
-We use the same prior for $\beta_i$ as in the previous practice.  Since $\phi$
+We use the same prior for $\beta_i$ as in the previous practice 12H1.  Since $\phi$
 represents the variance of the Gamma-Poisson (p. 374 of section 12.1.2) then
 we use $\phi \sim \mathcal{Exp(rate = 1)}$.
 
@@ -608,7 +628,6 @@ the summary
 
 ```{r}
 precis(m12H02)
-str(precis(m12H02))
 ```
 
 
@@ -665,10 +684,11 @@ p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5,
                                     y = variable, color = fit)) +
   geom_pointinterval(fatten_point = 3, size = 2,
                      position = position_dodge(width = 0.5)) +
-  theme(legend.title = element_blank()) +
   geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+  theme(legend.title = element_blank()) +
   labs(title = "Posterior 89% range of coefficients",
-        x = "mean with 89% interval")
+        x = NULL, y = NULL)
 p$coefs
 ```
 
@@ -676,9 +696,10 @@ p$coefs
 We can see that the coefficients, in particular the $\beta_i$ is more variable
 with the gamma-poisson fit than the poisson fit.
 
-This is caused by the fact that the poisson fit assume a standard deviation
-equal to its mean whereas the gamma-poisson fit allows the standard deviation
-$\sigma$ to using the gamma distribution.
+This is caused by the fact that the Poisson fit has a standard deviation
+equal to its mean whereas the Gamma-Poisson fit allows the standard deviation
+$\sigma$ to using the gamma distribution. See the point made by McElreath
+in the last sentence of the first paragraph of section 12.1.2 on p. 373.
 
 
 We can also show the same result with the predictive distribution
@@ -710,13 +731,178 @@ p$coefs <- ggplot(predict$data, aes(x = mean, xmin = q5.5, xmax = q94.5,
                                     y = variable, color = fit)) +
   geom_pointinterval(fatten_point = 5, size = 3,
                      position = position_dodge(width = 0.5)) +
-  theme(legend.title = element_blank()) +
   geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
-  labs(title = "Posterior 89% range of coefficients",
-        x = "mean with 89% interval")
+  scale_x_continuous(breaks = scales::breaks_extended(n = 5)) +
+  theme(legend.title = element_blank()) +
+  labs(title = "Posterior 89% range of predicted deaths",
+        x = NULL, y = NULL)
 p$coefs
 ```
 
 
 
 ## 12H3 {-#prac12H3}
+
+As mentioned in practice 2H1 *the explanation given is that people
+unconsciously rate female hurricanes as less dangerous and so are less likely
+to evacuate* which increases the probability of deaths.
+
+### dag {-}
+
+The structural causal model is build on the following assumptions
+
+* $pressure$ cannot cause $deaths$ by itself but through $damage$ such as falling debris
+or $femininity$ because people are less likely to evacuate with a more feminine name. 
+Hence $pressure$ is a cause of both $damage$ and $femininity$.
+* $damage$ is a cause of deaths (e.g. falling/flying debris)
+* The $femininity$ of the name is a cause of $deaths$ because people are less
+likely to evacuate (see 12H1)
+* $damage$ is known **after** $femininity$ and therefore $damage$ cannot
+possibly influence $femininity$
+* $femininity$ is known **before** $damage$ and, thus, could presumably cause it
+
+
+```{r}
+scm <- list()
+scm <- within(scm, {
+  dag <- dagify(
+  deaths ~ damage + femininity,
+  damage ~ pressure + femininity,
+  femininity ~ pressure,
+  outcome = "deaths")
+  
+  p <- dag %>% 
+    tidy_dagitty(layout = "sugiyama") %>%
+    ggdag::ggdag(node = FALSE) +
+    geom_dag_text(size = 5, color = "tomato4") +
+    geom_dag_edges(edge_color = "tomato4") +
+    ggdag::theme_dag(panel.background = element_rect(fill = "cornsilk", color = "cornsilk")) +
+    theme(title = element_text(color = "midnightblue")) +
+    labs(title = "Structural causal model for Hurricanes",
+         subtitle = "Practice 12H3")
+})
+scm$p
+```
+
+the conditional independences are
+
+```{r}
+impliedConditionalIndependencies(scm$dag)
+```
+
+### priors {-}
+
+Since we used the transformed variable $pressure$ and $damage$ which are on
+a scale `c(1, 10)` similar to $femininity$ then we use the same priors
+for all variables as in practice 12H1.
+
+
+```{r}
+# femininity
+a_file <- here::here("fits", "b12H03_f.rds")
+b12H03_f <- readRDS(file = a_file)
+# b12H03_f <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + femininity,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_f <- brms::add_criterion(b12H03_f, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_f, file = a_file)
+
+# damage
+a_file <- here::here("fits", "b12H03_d.rds")
+b12H03_d <- readRDS(file = a_file)
+# b12H03_d <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + damage,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_d <- brms::add_criterion(b12H03_d, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_d, file = a_file)
+
+# pressure
+a_file <- here::here("fits", "b12H03_p.rds")
+b12H03_p <- readRDS(file = a_file)
+# b12H03_p <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + pressure,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_p <- brms::add_criterion(b12H03_p, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_p, file = a_file)
+
+# femininity and damage
+a_file <- here::here("fits", "b12H03_fd.rds")
+b12H03_fd <- readRDS(file = a_file)
+# b12H03_fd <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + femininity + damage,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_fd <- brms::add_criterion(b12H03_fd, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_fd, file = a_file)
+
+# femininity and pressure
+a_file <- here::here("fits", "b12H03_fp.rds")
+b12H03_fp <- readRDS(file = a_file)
+# b12H03_fp <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + femininity + pressure,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_fp <- brms::add_criterion(b12H03_fp, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_fp, file = a_file)
+
+# damage and pressure
+a_file <- here::here("fits", "b12H03_dp.rds")
+b12H03_dp <- readRDS(file = a_file)
+# b12H03_dp <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + damage + pressure,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_dp <- brms::add_criterion(b12H03_dp, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_dp, file = a_file)
+
+# femininity, damage and pressure
+a_file <- here::here("fits", "b12H03_fdp.rds")
+b12H03_fdp <- readRDS(file = a_file)
+# b12H03_fdp <- brm(data = dataHurricanes,
+#       family = negbinomial,
+#       deaths ~ 1 + femininity + damage + pressure,
+#       prior = c(prior(normal(4, 1), class = Intercept),
+#                 prior(normal(1, 0.25), class = b),
+#                 prior(gamma(0.01, 0.01), class = shape)),
+#       cores = detectCores(),
+#       seed = 12)
+# # NOTE: be careful when using waic with gamma-poisson
+# b12H03_fdp <- brms::add_criterion(b12H03_fdp, criterion = c("waic", "loo"))
+# saveRDS(object = b12H03_fdp, file = a_file)
+```
+
+
+

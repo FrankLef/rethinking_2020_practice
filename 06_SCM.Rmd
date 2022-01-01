@@ -25,7 +25,7 @@ library(paletteer, quietly = TRUE)
 # Structural Causal Models {#SCM}
 
 The graph layout are available at [layout](https://rdrr.io/cran/ggraph/man/layout_tbl_graph_igraph.html).
-See laso documentation og `ggraph::Layouts`.
+See also the documentation of `ggraph::Layouts`.
 
 The recommended layout is *sugiyama* for DAG. However there are cases where the 
 *kk* layout gives a more desirable, i.e. planar, layout.  See 6M1 for example.
