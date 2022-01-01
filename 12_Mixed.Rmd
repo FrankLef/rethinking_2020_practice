@@ -747,7 +747,7 @@ As mentioned in practice 2H1 *the explanation given is that people
 unconsciously rate female hurricanes as less dangerous and so are less likely
 to evacuate* which increases the probability of deaths.
 
-### dag {-}
+### DAG {-}
 
 The structural causal model is build on the following assumptions
 
@@ -790,12 +790,13 @@ the conditional independences are
 impliedConditionalIndependencies(scm$dag)
 ```
 
-### priors {-}
+### Priors {-}
 
 Since we used the transformed variable $pressure$ and $damage$ which are on
 a scale `c(1, 10)` similar to $femininity$ then we use the same priors
 for all variables as in practice 12H1.
 
+### Fits {-}
 
 ```{r}
 # femininity
@@ -903,6 +904,111 @@ b12H03_fdp <- readRDS(file = a_file)
 # b12H03_fdp <- brms::add_criterion(b12H03_fdp, criterion = c("waic", "loo"))
 # saveRDS(object = b12H03_fdp, file = a_file)
 ```
+
+
+### Inference {-}
+
+get the posterior intervals
+
+```{r}
+samples <- list(probs = c(0.055, 0.945))
+
+samples$fits <- list(
+  "fmnn" = b12H03_f,
+  "damg" = b12H03_d,
+  "prss" = b12H03_p,
+  "fmnn-damg" = b12H03_fd,
+  "fmnn-prss" = b12H03_fp,
+  "damg-prss" = b12H03_dp,
+  "fmnn-damg-prss" = b12H03_fdp
+)
+
+samples$data <- purrr::map_dfr(.x = samples$fits, .f = function(x) {
+  as_draws(x) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    filter(!(variable %in% c("lp__", "shape"))) %>%
+    mutate(across(.cols = where(is.numeric), .fns = round, 4))
+  },
+  .id = "fit"
+  )
+# glimpse(samples$data)
+```
+
+
+when comparing the fits we have
+
+```{r}
+print(loo_compare(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
+            b12H03_dp, b12H03_fdp, criterion = "waic"),
+      simplify = FALSE)
+```
+
+```{r}
+round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
+            b12H03_dp, b12H03_fdp), 3)
+```
+
+
+
+
+```{r}
+p <- list()
+p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+                                    y = variable, color = fit)) +
+  geom_pointinterval(fatten_point = 3, size = 2,
+                     position = position_dodge(width = 0.5)) +
+  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+  scale_color_paletteer_d("awtools::ppalette") +
+  theme(legend.title = element_blank()) +
+  labs(title = "Posterior distribution of coefficients with 89% interval",
+        x = NULL, y = NULL)
+p$coefs
+```
+
+We observe that
+
+* one group which always include the damage and has a negative 
+intercept on deaths but with much variability
+* one group which seems to be mostly influenced, strongly, by pressure with
+a positive intercept
+* when pressure and damage are used together, the variability is very large
+* femininity seems to have little to no impact on the patterns observed
+
+We note that damage and pressure create 2 clusters of coefficients and that
+they seem to have col linearity between them which causes large variability
+when used together.
+
+In conclusion it seems that the structural causal model above is justified
+and that, in terms of actual effect, damage and pressure are much more important
+than femininity which has little influence, if any, on the death rate.
+
+
+The best fit seems to be with damage when using waic. The worst one is with
+femininity!
+
+when comparing the fits we have
+
+```{r}
+print(loo_compare(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
+            b12H03_dp, b12H03_fdp, criterion = "waic"),
+      simplify = FALSE)
+```
+
+The weight attributed to `b12H03_d` is 87.5%.  Again, damage sems to be the
+most important predictor of deaths.
+
+```{r}
+# takes a few seconds to run
+# round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
+#             b12H03_dp, b12H03_fdp), 3)
+```
+
+
+
+
+
+## 12H4 {-#prac12H4}
 
 
 
