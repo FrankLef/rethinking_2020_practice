@@ -38,7 +38,7 @@ tmp$pal <- paletteer::paletteer_d("fishualize::Stethojulis_bandanensis")
 scales::show_col(tmp$pal)
 
 
-tmp$pal <- paletteer::paletteer_d("awtools::a_palette")
+tmp$pal <- paletteer::paletteer_d("awtools::spalette")
 scales::show_col(tmp$pal)
 
 tmp$pal <- paletteer::paletteer_d("futurevisions::cancri")

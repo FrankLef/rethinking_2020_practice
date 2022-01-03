@@ -583,8 +583,8 @@ summary(b11H01c)
 
 The model with general intercept ("null model") and treatment-only intercepts
 have about the same performance.  The model with actor and treatment intercept
-is the most informative as the treatment is directly related to what the actor
-choose.
+is the best fit. An interpretation of this could be that the actor is more
+relevant to understand the observations than the treatment.
 
 
 ```{r}
@@ -793,18 +793,19 @@ others. Given the speed of `quap` with the same results, it would be the favorit
 choice in a practical setting (my opinion).
 
 The reason why `inla` is doing worse seems to be illustrated in the following table
-which shows that its estimates are outside of the range determined by `quap` and
-`brm`. It also shows that `inla` has estimates closer to the observed values
+which shows that its estimates **are outside of the range determined by `quap` and
+`brm`**. It also shows that `inla` has estimates closer to the observed values
 which might indicate overfitting . . . hence the worse WAIC.
 
 
 ```{r}
 # Make sure the data.frame is sorted in increasing order of "cond"
 # to match the fitted data
-dataEagles %>%
+fits <- list()
+fits$df <- dataEagles %>%
   select(y, n, cond) %>%
   arrange(cond) %>%  # important: make sure data is arrange by cond
-  mutate(p_y = y / n,
+  mutate(p_obs = y / n,
          p_quap = gt$m11H02a_link$value,
          p_brm = gtools::inv.logit(gt$b11H02a_linpred$.linpred),
          p_inla = i11H02a$summary.fitted.values$mean) %>%
@@ -813,6 +814,19 @@ dataEagles %>%
          mu_inla = p_inla * n) %>%
   mutate(across(.cols = starts_with("p"), .fns = ~round(., digits = 2)),
          across(.cols = starts_with("mu"), .fns = ~round(., digits = 0)))
+fits$lng <- fits$df %>%
+  select(cond, p_obs, p_quap, p_brm, p_inla) %>%
+  pivot_longer(cols = starts_with("p_"), names_to = "fit", values_to = "p")
+ggplot(fits$lng, aes(x = cond, y = p, color = fit, shape = fit)) +
+  geom_point(size = 2) +
+  ggrepel::geom_text_repel(mapping = aes(label = p), size = 3) +
+  scale_color_paletteer_d("awtools::spalette", direction = -1) +
+  scale_shape_ordinal() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(title = "p values by fit", y = NULL)
 ```
 
 
@@ -919,7 +933,7 @@ See section 11.2.1 for details on how to do this practice.
 * We keep the variable $PCTCOVER$ as is since it is arguably already scaled
 as a percentage. 
 * We log transform $FORESTAGE$ to reduce the large variations.
-* We log transform $SALAMAN$ after adding 1 to avoid $log(0$ with `log1p()`
+* We log transform $SALAMAN$ after adding 1 to avoid $log(0)$ with `log1p()`
 * We remove 1 line, site 30, that has **zero everywhere** and has the only
 $FORESTAGE = 0$. It is clearly an invalid row of data.
 
@@ -940,11 +954,13 @@ p <- list()
 p$points <- ggplot(dataSalam, aes(x = PCTCOVER, y = SALAMAN, color = FORESTAGE)) +
   geom_point() +
   scale_color_paletteer_c("pals::coolwarm") +
-  theme(legend.position = c(0.2,0.7))
+  theme(legend.position = c(0.2,0.7)) +
+  labs(title = "Salamander vs pct cover")
 p$count <- ggplot(dataSalam, aes(x = SALAMAN)) +
   geom_histogram(aes(fill = ..count..)) +
   scale_fill_paletteer_c("pals::warmcool") +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  labs(title = "Count of salamnder")
 wrap_plots(p)
 ```
 
@@ -1089,7 +1105,7 @@ m11H03a <- readRDS(file = a_file)
 #   flist = alist(
 #     SALAMAN ~ dpois(lambda),
 #     log(lambda) <- a + b * cover,
-#     a ~ dnorm(0, 2),
+#     a ~ dnorm(2, 0.5),
 #     b ~ dnorm(0, 0.5))
 #   )
 # saveRDS(m11H03a, file = a_file)
@@ -1106,11 +1122,11 @@ b11H03a <- readRDS(a_file)
 # b11H03a <- brm(data = dataSalam,
 #              family = poisson,
 #              formula = SALAMAN ~ 1 + cover,
-#              prior = c(prior(normal(0, 2), class = Intercept),
+#              prior = c(prior(normal(2, 0.5), class = Intercept),
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H03a <- brms::add_criterion(b11H03a, criterion = c("waic", "loo"))
-saveRDS(b11H03a, file = a_file)
+# saveRDS(b11H03a, file = a_file)
 ```
 
 
@@ -1129,7 +1145,7 @@ i11H03a <- readRDS(file = a_file)
 #                 formula =  SALAMAN ~ 1 + cover,
 #                 family = "poisson",
 #                 control.family = list(link = "log"),
-#                 control.fixed = list(mean.intercept = 0, prec.intercept = (1 / 2^2),
+#                 control.fixed = list(mean.intercept = 2, prec.intercept = (1 / 0.5^2),
 #                                      mean = 0, prec = 1 / 0.5^2),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
@@ -1143,9 +1159,9 @@ and the summary is very similar to what `quap` and `brm` gave
 summary(i11H03a)
 ```
 
-#### `quap`, `brm`, `inla`
+#### `quap`, `brm`, `inla` {-}
 
-They give the same result and `inla` seems to be much less variable. Given
+`quap` and `brm` give the same result and `inla` seems to be much less variable. Given
 `inla` speed and precision it would be my personal choice here.
 
 ```{r}
@@ -1176,14 +1192,15 @@ see section 7.5.2, p. 232 for more details on this
 
 ```{r}
 p <- list()
+p$bound <- 0.4
 p$df <- data.frame(paretoK = b11H03a$criteria$loo$diagnostics$pareto_k,
                    penaltyWAIC = b11H03a$criteria$waic$pointwise[, "p_waic"],
                    SITE = pull(dataSalam, SITE),
                    SALAMAN = pull(dataSalam, SALAMAN)) %>%
-  mutate(out = paretoK >= 0.5)
+  mutate(out = paretoK >= 0.4)
 p$out <- ggplot(p$df, aes(x = paretoK, y = penaltyWAIC, color = out)) +
   geom_point() +
-  geom_vline(xintercept = 0.5, linetype = "dashed", color = "violetred") +
+  geom_vline(xintercept = 0.4, linetype = "dashed", color = "violetred") +
   ggrepel::geom_text_repel(aes(label = SITE), size = 3) +
   scale_x_continuous(breaks = scales::breaks_width(width = 0.1)) +
   scale_color_manual(values = c("TRUE" = "violetred", "FALSE" = "royalblue")) +
@@ -1192,13 +1209,13 @@ p$out <- ggplot(p$df, aes(x = paretoK, y = penaltyWAIC, color = out)) +
 p$out
 ```
 
-Conclusion: Site # 17 seems to be highly influental (high psis) and unlikely
+Conclusion: Site # 17 seems to be highly influental (high PSIS) and unlikely
 to occur (high WAIC penalty term). It has 2 salamanders, normally it should be 
 zero.
 
 ```{r}
 loo(b11H03a) %>% 
-  pareto_k_ids(threshold = 0.5)
+  pareto_k_ids(threshold = 0.4)
 ```
 
 ```{r}
@@ -1238,6 +1255,18 @@ coverage above 75%.  Probably caused by the fact that all data is gathered above
 
 
 ### (b) {-}
+
+Using FORESTAGE as a predictor we have the model
+
+$$
+\begin{align*}
+salamanders_i &\sim \mathcal{Poisson(\lambda_i)} \\
+\log{\lambda_i} &= \alpha + \beta \log(FORESTAGE_i) \\
+\alpha &\sim \mathcal{N(mean=4, sd=0.5)} \\
+\beta &\sim \mathcal{N(mean=0, sd=0.5)}
+\end{align*}
+$$
+
 
 #### priors {-}
 
@@ -1349,7 +1378,7 @@ For the prior of the slope we select $b \sim \mathcal{N(mean=0, sd=0.5)}$
 which seems to offer a reasonably good coverage.
 
 
-#### `brm` {}
+#### `brm` {-}
 
 ```{r}
 a_file <- here::here("fits", "b11H03b.rds")
@@ -1369,13 +1398,13 @@ b11H03b <- readRDS(a_file)
 print(loo_compare(b11H03a, b11H03b), simplify = FALSE)
 ```
 
-#### Conclusion {-}
+#### Inference {-}
 
-Conclusion: Adding $FORESTAGE$ does not help since $FORESTAGE$ and $PCTCOVER$ 
-seem to be collinear as described in section 6.1 of the textbook.  That
-is, the older the forest is, the more covergae percentage we have.
+Adding $FORESTAGE$ does not help since $FORESTAGE$ and $PCTCOVER$ 
+seem to be colinear as described in section 6.1 of the textbook.  That
+is, the older the forest is, the more coverage percentage we have.
 
-Also, beyond the fact that salamnders appear when coverage is above 75%,
+Also, beyond the fact that salamanders appear when coverage is above 75%,
 there seems to be little relationship between $SALAMAN$ and $PCTCOVER$ or
 $FORESTAGE$ as shown in the following plots
 
@@ -1389,10 +1418,6 @@ and comparing to log yields about the same results
 GGally::ggscatmat(dataSalam %>% select(-SITE, -PCTCOVER, -FORESTAGE))
 ```
 
-
-
-
-One way to improve it would be to use a different rate for each $SITE$.
 
 
 ```{r}
@@ -1414,6 +1439,8 @@ p$logage_logsalam <- ggplot(dataSalam, aes(x = log(FORESTAGE), y = log(SALAMAN))
 wrap_plots(p, ncol = 2)
 ```
 
+
+One way to improve the model could be to use a different rate for each $SITE$.
 
 ```{r}
 a_file <- here::here("fits", "b11H03c.rds")
@@ -1493,18 +1520,18 @@ dataGrants <- NWOGrants %>%
          prop = round(awards / applications, 4))
 rm(NWOGrants)
 skimr::skim(dataGrants)
-levels(dataGrants$discipline)
-dataGrants
+# levels(dataGrants$discipline)
+# dataGrants
 ```
-
+We consider  a mediation path through $discipline$ as requested in the question
 
 ```{r}
-dag <- list()
-dag <- within(dag, {
+scm <- list()
+scm <- within(scm, {
   dag <- dagify(
     discipline ~ gender,
-    pct ~ discipline,
-  outcome = "pct",
+    award ~ discipline,
+  outcome = "award",
   exposure = "gender")
   
   plot <- dag %>% 
@@ -1524,7 +1551,7 @@ dag <- within(dag, {
     theme(legend.position = "none") +
     labs(title = "11H4 DAG")
 })
-dag$plot
+scm$plot
 ```
 
 
@@ -1598,34 +1625,55 @@ was with indexed predictors.
 The model used to get the total effect of gender, both direct and indirect.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11H04a.rds")
-m11H04a <- readRDS(a_file)
-# m11H04a <- quap(
+a_file <- here::here(getwd(), "fits", "m11H04_g.rds")
+m11H04_g <- readRDS(a_file)
+# m11H04_g <- quap(
+#  dataGrants,
+#  flist = alist(
+#    awards ~ dbinom(applications, p),
+#    logit(p) <- a[gender],
+#    a[gender] ~ dnorm(0, 1.5)))
+# saveRDS(m11H04_g, file = a_file)
+precis(m11H04_g, depth = 2)
+```
+
+
+The model used to get the total effect of discipline, both direct and indirect.
+
+```{r}
+a_file <- here::here(getwd(), "fits", "m11H04_d.rds")
+m11H04_d <- readRDS(a_file)
+# m11H04_d <- quap(
 #   dataGrants,
 #   flist = alist(
 #     awards ~ dbinom(applications, p),
-#     logit(p) <- a[gender],
-#     a[gender] ~ dnorm(0, 1.5)))
-# saveRDS(m11H04a, file = a_file)
-precis(m11H04a, depth = 2)
+#     logit(p) <- a[disc],
+#     a[disc] ~ dnorm(0, 1.5)))
+# saveRDS(m11H04_d, file = a_file)
+precis(m11H04_d, depth = 2)
 ```
 
+
+
 The model used to get the direct effect of $gender$ taking into account
-the disciplines effect.
+the $discipline$ effect.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11H04b.rds")
-m11H04b <- readRDS(a_file)
-# m11H04b <- quap(
+a_file <- here::here(getwd(), "fits", "m11H04_gd.rds")
+m11H04_gd <- readRDS(a_file)
+# m11H04_gd <- quap(
 #   dataGrants,
 #   flist = alist(
 #     awards ~ dbinom(applications, p),
 #     logit(p) <- bG[gender] + bD[disc],
 #     bG[gender] ~ dnorm(0, 1.5),
-#     bD[discipline] ~ dnorm(0, 1.5)))
-# saveRDS(m11H04b, file = a_file)
-precis(m11H04b, depth = 2)
+#     bD[disc] ~ dnorm(0, 1.5)))
+# saveRDS(m11H04_gd, file = a_file)
+precis(m11H04_gd, depth = 2)
 ```
+
+
+
 
 #### `brm` {-}
 
@@ -1633,68 +1681,96 @@ precis(m11H04b, depth = 2)
 
 
 ```{r}
-a_file <- here::here("fits", "b11H04a.rds")
-b11H04a <- readRDS(a_file)
-# b11H04a <- brm(data = dataGrants,
+a_file <- here::here("fits", "b11H04_g.rds")
+b11H04_g <- readRDS(a_file)
+# b11H04_g <- brm(data = dataGrants,
 #       family = binomial,
 #       formula = awards | trials(applications) ~ 0 + gender,
 #       prior = prior(normal(0, 1.5), class = b),
 #       cores = detectCores(), seed = 11)
-# b11H04a <- brms::add_criterion(b11H04a, criterion = c("waic", "loo"))
-# saveRDS(b11H04a, file = a_file)
-summary(b11H04a)
+# b11H04_g <- brms::add_criterion(b11H04_g, criterion = c("waic", "loo"))
+# saveRDS(b11H04_g, file = a_file)
+summary(b11H04_g)
 ```
 
 
 
+```{r}
+a_file <- here::here("fits", "b11H04_d.rds")
+b11H04_d <- readRDS(a_file)
+# b11H04_d <- brm(data = dataGrants,
+#       family = binomial,
+#       formula = awards | trials(applications) ~ 0 + disc,
+#       prior= c(prior(normal(0, 1.5), class = b)),
+#       cores = detectCores(), seed = 11)
+# b11H04_d <- brms::add_criterion(b11H04_d, criterion = c("waic", "loo"))
+# saveRDS(b11H04_d, file = a_file)
+summary(b11H04_d)
+```
+
+
 
 ```{r}
-a_file <- here::here("fits", "b11H04b.rds")
-b11H04b <- readRDS(a_file)
-# b11H04b <- brm(data = dataGrants,
+a_file <- here::here("fits", "b11H04_gd.rds")
+b11H04_gd <- readRDS(a_file)
+# b11H04_gd <- brm(data = dataGrants,
 #       family = binomial,
 #       formula = awards | trials(applications) ~ 0 + gender + disc,
 #       prior= c(prior(normal(0, 1.5), class = b)),
 #       cores = detectCores(), seed = 11)
-# b11H04b <- brms::add_criterion(b11H04b, criterion = c("waic", "loo"))
-saveRDS(b11H04b, file = a_file)
-summary(b11H04b)
+# b11H04_gd <- brms::add_criterion(b11H04_gd, criterion = c("waic", "loo"))
+# saveRDS(b11H04_gd, file = a_file)
+summary(b11H04_gd)
 ```
 
 #### `inla` {-}
 
 ```{r}
-a_file <- here::here("fits", "i11H04a.rds")
-i11H04a <- readRDS(file = a_file)
-# i11H04a <- inla(data = dataGrants,
+a_file <- here::here("fits", "i11H04_g.rds")
+i11H04_g <- readRDS(file = a_file)
+# i11H04_g <- inla(data = dataGrants,
 #                 formula =  awards ~ -1 + gender,
 #                 family = "binomial",
 #                 Ntrials = applications,
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H04a, file = a_file)
-summary(i11H04a)
+# saveRDS(i11H04_g, file = a_file)
+summary(i11H04_g)
 ```
 
 
 ```{r}
-# f(-1 + gender, model = "linear")
-a_file <- here::here("fits", "i11H04b.rds")
-i11H04b <- readRDS(file = a_file)
-# i11H04b <- inla(data = dataGrants,
+a_file <- here::here("fits", "i11H04_d.rds")
+i11H04_d <- readRDS(file = a_file)
+# i11H04_d <- inla(data = dataGrants,
+#                 formula =  awards ~ -1 + disc,
+#                 family = "binomial",
+#                 Ntrials = applications,
+#                 control.family = list(link = "logit"),
+#                 control.predictor = list(link = 1, compute = TRUE),
+#                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
+# saveRDS(i11H04_d, file = a_file)
+summary(i11H04_d)
+```
+
+
+
+
+
+```{r}
+a_file <- here::here("fits", "i11H04_gd.rds")
+i11H04_gd <- readRDS(file = a_file)
+# i11H04_gd <- inla(data = dataGrants,
 #                 formula =  awards ~ -1 + gender + disc,
 #                 family = "binomial",
 #                 Ntrials = applications,
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H04b, file = a_file)
-summary(i11H04b)
-i11H04b$summary.fixed
-# i11H04b$summary.random
-# i11H04b$summary.fitted.values
-# i11H04b$summary.linear.predictor
+# saveRDS(i11H04_gd, file = a_file)
+summary(i11H04_gd)
+i11H04_gd$summary.fixed
 ```
 
 ### `quap`, `brm`, `inla` {-}
@@ -1702,12 +1778,12 @@ i11H04b$summary.fixed
 ```{r}
 data.frame(
   fit = c("quap", "brm", "inla"),
-  waic = c(as.double(rethinking::WAIC(m11H04a)["WAIC"]), 
-           brms::WAIC(b11H04a)$estimates["waic", "Estimate"],
-           i11H04a$waic$waic),
-  se = c(as.double(rethinking::WAIC(m11H04a)["std_err"]),
-         brms::WAIC(b11H04a)$estimates["waic", "SE"],
-         sd(i11H04a$waic$local.waic))) %>%
+  waic = c(as.double(rethinking::WAIC(m11H04_g)["WAIC"]), 
+           brms::WAIC(b11H04_g)$estimates["waic", "Estimate"],
+           i11H04_g$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H04_g)["std_err"]),
+         brms::WAIC(b11H04_g)$estimates["waic", "SE"],
+         sd(i11H04_g$waic$local.waic))) %>%
   mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
   arrange(waic)
 ```
@@ -1717,36 +1793,33 @@ data.frame(
 ```{r}
 data.frame(
   fit = c("quap", "brm", "inla"),
-  waic = c(as.double(rethinking::WAIC(m11H04b)["WAIC"]), 
-           brms::WAIC(b11H04b)$estimates["waic", "Estimate"],
-           i11H04b$waic$waic),
-  se = c(as.double(rethinking::WAIC(m11H04b)["std_err"]),
-         brms::WAIC(b11H04b)$estimates["waic", "SE"],
-         sd(i11H04b$waic$local.waic))) %>%
+  waic = c(as.double(rethinking::WAIC(m11H04_d)["WAIC"]), 
+           brms::WAIC(b11H04_d)$estimates["waic", "Estimate"],
+           i11H04_d$waic$waic),
+  se = c(as.double(rethinking::WAIC(m11H04_d)["std_err"]),
+         brms::WAIC(b11H04_d)$estimates["waic", "SE"],
+         sd(i11H04_d$waic$local.waic))) %>%
   mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
   arrange(waic)
 ```
-Conclusion: `inla` seems to be a very good model with less `se` for both models.
+Conclusion: `inla` seems to be a very good model with less `se`.
 
 
 ```{r}
 summ <- list()
-# precis(m11H04b, depth = 2)
-# levels(dataGrants$discipline)
-# levels(dataGrants$discipline)[-1]
-summ$quap <- precis(m11H04b, depth = 2) %>%
+summ$quap <- precis(m11H04_gd, depth = 2) %>%
   data.frame() %>%
   tibble::rownames_to_column(var = "var") %>%
   mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc))) %>%
   select(var, mean, sd) %>%
   mutate(fit = "quap")
-summ$brm <- fixef(b11H04b) %>%
+summ$brm <- fixef(b11H04_gd) %>%
   as.data.frame() %>%
   tibble::rownames_to_column(var = "var") %>%
   mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc)[-1])) %>%
   select(var, mean = Estimate, sd = Est.Error) %>%
   mutate(fit = "brm")
-summ$inla <- i11H04b$summary.fixed %>%
+summ$inla <- i11H04_gd$summary.fixed %>%
   tibble::rownames_to_column(var = "var") %>%
   mutate(var = c(levels(dataGrants$gender), levels(dataGrants$disc)[-1])) %>%
   select(var, mean, sd) %>%
@@ -1812,12 +1885,19 @@ by McElreath.
 We will use the result from the `brm` fit to answer the questions.
 
 The total effect, that is, including any confound is covered by the model
-`m11H04b` which is ploted just below
+`b11H04_g`
+
+```{r}
+summary(b11H04_g)
+```
+
+Using the total effect of gender, the predicted rates are pretty much always outside of the 
+observed range. 
 
 ```{r}
 predict <- list()
 predict <- within(predict, {
-  data <- predicted_draws(b11H04a, newdata = dataGrants) %>%
+  data <- predicted_draws(b11H04_g, newdata = dataGrants) %>%
     as.data.frame() %>%
     select(disc, gender, .prediction) %>%
     # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
@@ -1829,16 +1909,6 @@ predict <- within(predict, {
            prop.lower = .lower / applications,
            prop.upper = .upper / applications)
 })
-# glimpse(predict$data)
-# head(predict$data)
-summary(b11H04a)
-# dataGrants
-```
-
-Using only gender, the predicted rates are prety much always outside of the 
-observed range. 
-
-```{r}
 ggplot(predict$data %>% filter(disc != "Human"), 
        aes(x = gender, y = prop, ymin = prop.lower, ymax = prop.upper,
                          color = gender)) +
@@ -1847,25 +1917,35 @@ ggplot(predict$data %>% filter(disc != "Human"),
              mapping = aes(x = gender, y = prop, color = gender),
              inherit.aes = FALSE, position = "dodge", shape = 19) +
   scale_color_manual(values = c("f" = "purple", "m" = "navyblue")) +
-  theme(legend.position = "none") +
+  theme(legend.position = "bottom") +
   labs(title = "Admission rate considering only gender (excluding Humanities)",
-       subtitle = "Model b11H04a", x = NULL) +
+       subtitle = "Model b11H04a, observed values are full circle, predictions are round circle", 
+       x = NULL) +
   facet_wrap(. ~ disc)
 ```
 
 
-Using $discipline$ as well as $gender$ improves the predicition
+Using $discipline$ as well as $gender$, `b11H04_gd` does not improve the model. It
+actually makes it worse.  Actually, given the se it seems all 3 models have similar
+performances.
+
 
 ```{r}
-summary(b11H04a)
+loo_compare(b11H04_g, b11H04_d, b11H04_gd)
 ```
 
+The summary for `b11H04_gd` is
 
+```{r}
+summary(b11H04_gd)
+```
+
+and the plot of `b11H04_gd` is virtually identical to `b11H04_g`
 
 ```{r}
 predict <- list()
 predict <- within(predict, {
-  data <- predicted_draws(b11H04b, newdata = dataGrants) %>%
+  data <- predicted_draws(b11H04_gd, newdata = dataGrants) %>%
     as.data.frame() %>%
     select(disc, gender, .prediction) %>%
     # summarize_draws(mean, ~quantile2(.,  probs = c(0.05, 0.95)))
@@ -1905,22 +1985,108 @@ ggplot(predict$data %>% filter(disc != "Human"),
 #### Conclusions {-}
 
 Using $discipline$ and $gender$ has little impact on the overall results. As
-a matter of fact, the model summary shows clearly that $gender$ is the most
-influential coefficient with $gender = female$ being having a more negative
+a matter of fact, both models with gender only `b11H04_g` and gender as well as
+discipline `b11H04_gd` show $gender$ is the most
+influential coefficient with $gender = female$ having negative
 effect on being awarded a grant.
 
 
 ```{r}
-summary(b11H04b)
+summary(b11H04_gd)
 ```
 
-In addition, the sd of the discipline coefficient
-is high with respect to their mean probably caused by the fact that many
-different combinations of coefficients are possible with the same outcome.
-This is confirmed when comparing waic.  Both model are equivalent.
+
+We observe that all model have about the same waic. This could point to
+the existence of a counfound with a significant relation with both
+gender and discipline.
 
 
 ```{r}
-loo_compare(b11H04a, b11H04b, criterion = "waic")
+loo_compare(b11H04_g, b11H04_d, b11H04_gd, criterion = "waic")
 ```
 
+
+## 11H5 {-#prac11H5}
+
+
+
+```{r}
+scm <- list()
+scm <- within(scm, {
+  dag <- dagify(
+    gender ~ stage,
+    discipline ~ gender + stage,
+    award ~ discipline + gender,
+  outcome = "award",
+  exposure = "gender")
+  
+  plot <- dag %>% 
+    tidy_dagitty(seed = as.integer(as.Date("2021-12-12")), layout = "sugiyama") %>%
+    ggdag_status(color = status, text = TRUE, 
+                       node_size = 14, text_size = 4, 
+                       text_col = "black") +
+    scale_color_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                       na.value = "honeydew3") +
+    scale_fill_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                      na.value = "honeydew3") +
+    ggdag::theme_dag_blank(panel.background = element_rect(fill="snow", color="snow")) +
+    theme(legend.position = "none") +
+    labs(title = "11H5 DAG")
+})
+scm$plot
+```
+
+**What happens when we condition on discipline?**
+
+By conditioning on $discipline$, $award$ is still dependent of $gender$ as the 
+backdoor through $stage$. The backdoor is shown in the conditional
+independencies of the DAG
+
+```{r}
+impliedConditionalIndependencies(scm$dag)
+```
+
+ans as a result only conditioning on $stage$ could make $award$ independent of
+$gender$
+
+```{r}
+adjustmentSets(scm$dag, exposure = "gender", outcome = "award")
+```
+
+
+**Is it possible for gender a direct effect by regressing on both gender and
+discipline?**
+
+No because both $gender$ and $discipline$ are not independent as theyr are
+influenced by $stage$.
+
+This is shown by the model in the previous model with gender only
+
+```{r}
+b11H04_g
+```
+
+which remains very similarly determined by gender even once we include
+$discipline$ as the previous practive model showed
+
+```{r}
+b11H04_gd
+```
+
+
+
+## 11H6 {-#prac11H6}
+
+
+```{r}
+data(Primates301)
+dataPrimates <- Primates301
+rm(Primates301)
+skimr::skim(dataPrimates)
+```
+
+## a) {-}
