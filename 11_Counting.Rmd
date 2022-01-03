@@ -4,6 +4,7 @@ library(brms)
 library(INLA)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
+library(modelr)
 library(tidybayes, quietly = TRUE)
 library(loo)
 library(simstudy)
@@ -2081,12 +2082,148 @@ b11H04_gd
 
 ## 11H6 {-#prac11H6}
 
+The data a lot of missing data. To avoid issues the rows
+with missing social_learning, brain or research_effort are removed.
+
 
 ```{r}
 data(Primates301)
-dataPrimates <- Primates301
+dataPrimates <- Primates301 %>%
+  drop_na(social_learning, brain, research_effort) %>%
+  mutate(brain_log = log(brain),
+         research_log = log(research_effort))
 rm(Primates301)
 skimr::skim(dataPrimates)
 ```
 
+
 ## a) {-}
+
+
+```{r}
+a_file <- here::here("fits", "b11H06a.rds")
+b11H06a <- readRDS(a_file)
+# b11H06a <- brm(data = dataPrimates,
+#              family = poisson,
+#              formula = social_learning ~ 1 + brain_log,
+#              prior = c(prior(normal(0, 0.5), class = Intercept),
+#                        prior(normal(0, 0.5), class = b)),
+#              cores = detectCores())
+# b11H06a <- brms::add_criterion(b11H06a, criterion = c("waic", "loo"))
+# saveRDS(b11H06a, file = a_file)
+```
+
+
+```{r}
+summary(b11H06a)
+```
+
+
+```{r}
+fitted <- list()
+fitted <- within(predict, {
+  newdata <- data.frame(brain_log = seq_range(dataPrimates$brain_log, n = 50))
+  data <- epred_draws(object = b11H06a, newdata = newdata)
+  p <- ggplot(dataPrimates, aes(x = brain_log, y = social_learning)) +
+    stat_lineribbon(data, mapping = aes(x = brain_log, y = .epred),
+                    point_interval = median_qi, .width = c(0.055, 0.945),
+                    fill = "lightblue", color = "blue", size = 1) +
+    geom_point(color = "darkorchid4") +
+    scale_x_continuous(breaks = scales::breaks_extended(7),
+                       labels = function(x) {
+                         scales::label_number_si(accuracy = 1)(exp(x))
+                         }) +
+    labs(title = "Social Learning vs Brain Size",
+         subtitle = "11H6 a)", x = "brain size")
+    
+})
+fitted$p
+```
+
+Interpretation: brain size has little efect until it reach 100, then its effect
+exponential.
+
+
+## b) {-}
+
+
+
+```{r}
+a_file <- here::here("fits", "b11H06b.rds")
+b11H06b <- readRDS(a_file)
+# b11H06b <- brm(data = dataPrimates,
+#              family = poisson,
+#              formula = social_learning ~ 1 + research_log,
+#              prior = c(prior(normal(0, 0.5), class = Intercept),
+#                        prior(normal(0, 0.5), class = b)),
+#              cores = detectCores())
+# b11H06b <- brms::add_criterion(b11H06b, criterion = c("waic", "loo"))
+saveRDS(b11H06b, file = a_file)
+```
+
+
+```{r}
+summary(b11H06b)
+```
+
+
+```{r}
+fitted <- list()
+fitted <- within(predict, {
+  newdata <- data.frame(research_log = seq_range(dataPrimates$research_log, n = 50))
+  data <- epred_draws(object = b11H06b, newdata = newdata)
+  p <- ggplot(dataPrimates, aes(x = research_log, y = social_learning)) +
+    stat_lineribbon(data, mapping = aes(x = research_log, y = .epred),
+                    point_interval = median_qi, .width = c(0.055, 0.945),
+                    fill = "bisque", color = "bisque4", size = 1) +
+    geom_point(color = "darkorchid4") +
+    scale_x_continuous(breaks = scales::breaks_extended(7),
+                       labels = function(x) {
+                         scales::label_number_si(accuracy = 1)(exp(x))
+                         }) +
+    labs(title = "Social Learning vs Research Effort",
+         subtitle = "11H6 b)", x = "research effort")
+    
+})
+fitted$p
+```
+
+Conclusion: There is little difference between this model and the previous one
+statistically speaking.  However the model `11H06b`, with research effort as a
+predictor seems to be a **collider bias** as described in the introduction
+of chapter 6, p. 161-162.Thta is, it can be interpreted as the fact that species with more 
+social learning are selected by more researcher which causes a collider effect.
+See the DAG in part c) below.
+
+c) {-}
+
+
+```{r}
+scm <- list()
+scm <- within(scm, {
+  dag <- dagify(
+    social_learning ~ research_effort,
+    social_learning ~ brain_size,
+  outcome = "social_learning",
+  exposure = c("research_effort", "brain_size"))
+  
+  plot <- dag %>% 
+    tidy_dagitty(layout = "sugiyama") %>%
+    ggdag_status(color = status, text = TRUE, 
+                       node_size = 14, text_size = 4, 
+                       text_col = "black") +
+    scale_color_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                       na.value = "honeydew3") +
+    scale_fill_manual(values = list(latent="mediumvioletred", 
+                              exposure="lightcoral", 
+                              outcome="cornflowerblue"), 
+                      na.value = "honeydew3") +
+    ggdag::theme_dag_blank(panel.background = element_rect(fill="snow", color="snow")) +
+    theme(legend.position = "none") +
+    labs(title = "11H6 c) DAG")
+})
+scm$plot
+```
+
