@@ -2227,3 +2227,78 @@ scm <- within(scm, {
 scm$plot
 ```
 
+to illustrate the collider, let take into account both $brain size$ and
+$reserarch effort$
+
+
+
+```{r}
+a_file <- here::here("fits", "b11H06c.rds")
+b11H06c <- readRDS(a_file)
+b11H06c <- brm(data = dataPrimates,
+             family = poisson,
+             formula = social_learning ~ 1 + brain_log + research_log,
+             prior = c(prior(normal(0, 0.5), class = Intercept),
+                       prior(normal(0, 0.5), class = b)),
+             cores = detectCores())
+b11H06c <- brms::add_criterion(b11H06c, criterion = c("waic", "loo"))
+saveRDS(b11H06c, file = a_file)
+```
+
+
+right away we can tell there is a counfounding effect as the WAIC varies greatly
+with `b11H06b` (predictor is research effort) and `b11H06c` )with both research
+effort and brain size) having the same quality of fit.
+
+```{r}
+loo_compare(b11H06a, b11H06b, b11H06c, criterion = "waic")
+```
+
+```{r}
+round(model_weights(b11H06a, b11H06b, b11H06c), 3)
+```
+
+
+
+and if we look at the posterior distribution of the coefficients which are identical
+for all 3 models. Therefore no model is really more informative.  All 3 variables
+are correlated because of the collider bias.
+
+```{r}
+samples <- list(probs = c(0.055, 0.945))
+samples$fits <- list(
+    "brain_size" = "b11H06a",
+    "research_effort" = "b11H06b",
+    "all" = "b11H06c")
+
+samples$data <- purrr::map_dfr(.x = samples$fits, .f = function(x) {
+  as_draws(get(x)) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    filter(!(variable %in% c("lp__"))) %>%
+    mutate(across(.cols = where(is.numeric), .fns = round, 2))
+  },
+  .id = "fit"
+  )
+# glimpse(samples$data)
+```
+
+
+
+```{r}
+p <- list()
+p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+                                    y = variable, color = fit)) +
+  geom_pointinterval(fatten_point = 3, size = 2,
+                     position = position_dodge(width = 0.5)) +
+  geom_vline(xintercept = 0, color = "darkblue", linetype = "dashed") +
+  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+  scale_color_paletteer_d("ggthemes::Classic_10") +
+  theme(legend.position = "bottom",
+        legend.title = element_blank()) +
+  labs(title = "Posterior distribution of coefficients with 89% interval",
+       subtitle = "116H6 c)",
+        x = NULL, y = NULL)
+p$coefs
+```
+
+

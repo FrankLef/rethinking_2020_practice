@@ -174,7 +174,10 @@ $$
 ## 12H1 {-#prac12H1}
 
 We don't transform $femiminity$ as its scale is from 1 to 10 and no bias
-can be caused by large predictors's values.
+can be caused by large predictors' values.  With the transformations
+described below, all the predictors are on a scale from 1 to 10.  The analysis
+below shows that there is no reason to tranform more than that.  The official
+answer standardized the data which makes it more difficult to interpret.
 
 
 ```{r}
@@ -192,24 +195,27 @@ The transformations are as follows
 to `c(1, 10)` since
   * The pressure is always strictly positive
   * Avoid the distortion of coefficient with the high observed range
-  * `c(1, 10)` is a scale similar to $femininity$ and facilitate the comparison
+  * `c(1, 10)` is a scale similar to $femininity$ and facilitates the comparison
 * $damage = log(damage\_norm)$: The log of $damage\_norm$ since
   * The distribution is heavily right-skewed and the log will centralize it
   * The lower value being 1 the log will give a non-negative scale which simplifies
+  the interpretation
   * It puts the data on a scale similar to $femininity$ which facilitates comparison
 
 
 which we can illustrate as follows
 
 ```{r}
-ggplot(dataHurricanes, aes(x = femininity, y = deaths)) +
-  geom_point(color = "ivory") +
+plotHurricanes <- ggplot(dataHurricanes, aes(x = femininity, y = deaths)) +
+  geom_point(color = "cornflowerblue", size = 1) +
   ggrepel::geom_text_repel(data = dataHurricanes %>% filter(deaths >= 50),
                            aes(x = femininity, y = deaths, label = name),
                            color = "gold") +
   scale_y_continuous(breaks = scales::breaks_width(width = 50)) +
   labs(title = "Nb of deaths vs femininity",
-       subtitle = sprintf("%d storms", nrow(dataHurricanes)))
+       subtitle = sprintf("%d storms", nrow(dataHurricanes)),
+       x = "femininity", y = "deaths")
+plotHurricanes
 ```
 
 
@@ -543,15 +549,39 @@ summary(i12H01b)
 print(loo_compare(b12H01a, b12H01b), simplify = FALSE)
 ```
 
-The model `b12H01b` which is uses femininity as a predictor seems to be a better 
-fit. However the elpd_diff of -23.5 has a sd of 76.2 whihc is more than
-3 times the coefficient itself and therefore uncertain.
+The model `b12H01a` which is uses femininity as a predictor seems to be a better 
+fit. However the elpd_diff of -23.5 has a sd of 76.2 which is more than
+3 times the coefficient itself. Therefore femininity is probably unreliable as 
+a predictor.
+
+
+And we plot the fit
+
+```{r}
+predict <- list(probs = c(0.055, 0.945))
+predict <- within(fitted, {
+  newdata <- data.frame(femininity = seq_range(dataHurricanes$femininity, n = 20))
+  data <- predicted_draws(b12H01b, newdata = newdata) %>%
+    select(!matches("[.]chain|[.]iteration|[.]draw")) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    mutate(across(.cols = where(is.numeric), .fns = round, 3))
+  p <- plotHurricanes + 
+    geom_lineribbon(data, 
+                    mapping = aes(x = femininity, y = mean, ymin = q5.5, ymax = q94.5),
+                    fill = "wheat", color = "brown", size = 1, alpha = 0.5) +
+    labs(title = "Prediction with 89% interval")
+  })
+# glimpse(predict$data)
+predict$p
+```
+
+
 
 
 **Which storms does it fit poorly?**
 
-Th fit seems to be particularly poor for Camille, Diane, Ike and Sandy as shown 
-when we plot the WAIC penalty vs the pareto K measure from loo.
+The fit seems to be particularly poor for Camille, Diane, Ike and Sandy as shown 
+when we plot the WAIC penalty vs the Pareto K measure from loo.
 
 
 ```{r}
@@ -665,31 +695,26 @@ The posterior distribution of the coefficients using the model `b12H01a`
 ```{r}
 samples <- list(probs = c(0.055, 0.945))
 samples <- within(samples, {
-  x <- seq_range(dataHurricanes$femininity, n = 50, pretty = TRUE)
-  pois <- as_draws_df(b12H01a) %>%
-    summarise_draws(mean, median, mode = ggdist::Mode, sd, mad, 
-                    ~quantile2(., probs = probs)) %>%
-    mutate(fit = "b12H01a Poisson") %>%
-    filter(variable != "lp__")
-  pgam <- as_draws_df(b12H02) %>%
-    summarise_draws(mean, median, mode = ggdist::Mode, sd, mad, 
-                    ~quantile2(., probs = probs)) %>%
-    mutate(fit = "b12H02 Poisson-Gamma") %>%
-    filter(!(variable %in% c("shape", "lp__")))
-  data <- rbind(pois, pgam)
-})
-# glimpse(samples$pois)
-p <- list()
-p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+  fits <- list("b12H01a Poisson" = b12H01a, "b12H02 Poisson-Gamma" = b12H02)
+  data <- purrr::map_dfr(fits, .f = function(x) {
+    as_draws(x) %>%
+      summarise_draws(mean, mode = ggdist::Mode, 
+                      ~quantile2(., probs = probs)) %>%
+      filter(variable != "lp__")
+  },
+  .id = "fit")
+  
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
                                     y = variable, color = fit)) +
-  geom_pointinterval(fatten_point = 3, size = 2,
+    geom_pointinterval(fatten_point = 3, size = 2,
                      position = position_dodge(width = 0.5)) +
-  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
-  theme(legend.title = element_blank()) +
-  labs(title = "Posterior 89% range of coefficients",
-        x = NULL, y = NULL)
-p$coefs
+    geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+    scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+    theme(legend.title = element_blank()) +
+    labs(title = "Posterior 89% range of coefficients", x = NULL, y = NULL)
+})
+# glimpse(samples$data)
+samples$p
 ```
 
 
@@ -698,7 +723,7 @@ with the gamma-poisson fit than the poisson fit.
 
 This is caused by the fact that the Poisson fit has a standard deviation
 equal to its mean whereas the Gamma-Poisson fit allows the standard deviation
-$\sigma$ to using the gamma distribution. See the point made by McElreath
+$\sigma$ to vary freely over the gamma distribution. See the point made by McElreath
 in the last sentence of the first paragraph of section 12.1.2 on p. 373.
 
 
@@ -707,37 +732,33 @@ We can also show the same result with the predictive distribution
 ```{r}
 predict <- list(probs = c(0.055, 0.945))
 predict <- within(predict, {
-  x <- data.frame(femininity = seq_range(dataHurricanes$femininity, n = 50, pretty = TRUE))
-  pois <- predicted_draws(b12H01a, newdata = x) %>%
-    ungroup() %>%
-    select(-.row, -.chain, -.iteration, -.draw) %>%
-    summarise_draws(mean, median, sd, mad,
-                    ~quantile2(., probs = probs)) %>%
-    filter(variable == ".prediction") %>%
-    mutate(fit = "b12H01a Poisson")
-    # filter(variable != "lp__")
-  pgam <- predicted_draws(b12H02, newdata = x) %>%
-    ungroup() %>%
-    select(-.row, -.chain, -.iteration, -.draw) %>%
-    summarise_draws(mean, median, sd, mad,
-                    ~quantile2(., probs = probs)) %>%
-    filter(variable == ".prediction") %>%
-    mutate(fit = "b12H02 Gamma-Poisson")
-  data <- rbind(pois, pgam)
-})
-# glimpse(predict$pois)
-p <- list()
-p$coefs <- ggplot(predict$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+  newdata <- data.frame(femininity = seq_range(dataHurricanes$femininity, 
+                                               n = 50, pretty = TRUE))
+  fits <- list("b12H01a Poisson" = b12H01a, "b12H02 Poisson-Gamma" = b12H02)
+  data <- purrr::map_dfr(fits, .f = function(x) {
+    predicted_draws(x, newdata = newdata) %>%
+      ungroup() %>%
+      select(.prediction) %>%
+      summarise_draws(mean, mode = ggdist::Mode,
+                      ~quantile2(., probs = probs))
+  },
+  .id = "fit")
+  
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5,
                                     y = variable, color = fit)) +
-  geom_pointinterval(fatten_point = 5, size = 3,
+    geom_pointinterval(fatten_point = 5, size = 3,
                      position = position_dodge(width = 0.5)) +
-  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 5)) +
-  theme(legend.title = element_blank()) +
-  labs(title = "Posterior 89% range of predicted deaths",
-        x = NULL, y = NULL)
-p$coefs
+    geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+    scale_x_continuous(breaks = scales::breaks_extended(n = 5)) +
+    theme(legend.title = element_blank()) +
+    labs(title = "Posterior 89% range of predicted deaths",
+         x = NULL, y = NULL)
+})
+# glimpse(predict$data)
+predict$p
 ```
+
+
 
 
 
@@ -911,27 +932,41 @@ b12H03_fdp <- readRDS(file = a_file)
 get the posterior intervals
 
 ```{r}
-samples <- list(probs = c(0.055, 0.945))
-
-samples$fits <- list(
+samples <- list()
+samples <- within(samples, {
+  probs = c(0.055, 0.945)
+  fits <- list(
   "fmnn" = b12H03_f,
   "damg" = b12H03_d,
   "prss" = b12H03_p,
   "fmnn-damg" = b12H03_fd,
   "fmnn-prss" = b12H03_fp,
   "damg-prss" = b12H03_dp,
-  "fmnn-damg-prss" = b12H03_fdp
-)
-
-samples$data <- purrr::map_dfr(.x = samples$fits, .f = function(x) {
-  as_draws(x) %>%
-    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
-    filter(!(variable %in% c("lp__", "shape"))) %>%
-    mutate(across(.cols = where(is.numeric), .fns = round, 4))
+  "fmnn-damg-prss" = b12H03_fdp)
+  
+  data <- purrr::map_dfr(.x = fits, .f = function(x) {
+    as_draws(x) %>%
+      summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
+      filter(!(variable %in% c("lp__", "shape"))) %>%
+      mutate(across(.cols = where(is.numeric), .fns = round, 4))
   },
   .id = "fit"
   )
+  
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+                                    y = variable, color = fit)) +
+    geom_pointinterval(fatten_point = 3, size = 2, 
+                       position = position_dodge(width = 0.5)) +
+    geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+    scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+    scale_color_paletteer_d("awtools::ppalette") +
+    theme(legend.title = element_blank()) +
+    labs(title = "Posterior distribution of coefficients with 89% interval",
+         x = NULL, y = NULL)
+})
 # glimpse(samples$data)
+samples$p
+
 ```
 
 
@@ -949,28 +984,11 @@ round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp,
 ```
 
 
-
-
-```{r}
-p <- list()
-p$coefs <- ggplot(samples$data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
-                                    y = variable, color = fit)) +
-  geom_pointinterval(fatten_point = 3, size = 2,
-                     position = position_dodge(width = 0.5)) +
-  geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
-  scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
-  scale_color_paletteer_d("awtools::ppalette") +
-  theme(legend.title = element_blank()) +
-  labs(title = "Posterior distribution of coefficients with 89% interval",
-        x = NULL, y = NULL)
-p$coefs
-```
-
 We observe that
 
-* one group which always include the damage and has a negative 
-intercept on deaths but with much variability
-* one group which seems to be mostly influenced, strongly, by pressure with
+* there is one group of coefficients which always include the damage and 
+has a negative intercept on deaths but with much variability
+* another group which seems to be mostly influenced, strongly, by pressure with
 a positive intercept
 * when pressure and damage are used together, the variability is very large
 * femininity seems to have little to no impact on the patterns observed
@@ -984,24 +1002,32 @@ and that, in terms of actual effect, damage and pressure are much more important
 than femininity which has little influence, if any, on the death rate.
 
 
-The best fit seems to be with damage when using waic. The worst one is with
+The best fit seems to be with damage when using WAIC. The worst one is with
 femininity!
 
-when comparing the fits we have
+And we plott the prediction using the model with damage as it seems to be the
+best fit
+
+And we plot the fit
 
 ```{r}
-print(loo_compare(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
-            b12H03_dp, b12H03_fdp, criterion = "waic"),
-      simplify = FALSE)
-```
-
-The weight attributed to `b12H03_d` is 87.5%.  Again, damage sems to be the
-most important predictor of deaths.
-
-```{r}
-# takes a few seconds to run
-# round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
-#             b12H03_dp, b12H03_fdp), 3)
+predict <- list()
+predict <- within(fitted, {
+  probs = c(0.055, 0.945)
+  newdata <- data.frame(damage = seq_range(dataHurricanes$damage, n = 20))
+  data <- predicted_draws(b12H03_d, newdata = newdata) %>%
+    select(!matches("[.]chain|[.]iteration|[.]draw")) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    mutate(across(.cols = where(is.numeric), .fns = round, 3))
+  p <- plotHurricanes + 
+    geom_lineribbon(data, 
+                    mapping = aes(x = damage, y = mean, ymin = q5.5, ymax = q94.5),
+                    fill = "wheat", color = "brown", size = 1, alpha = 0.5) +
+    scale_x_continuous(labels = ~scales::number_format(accuracy = 1)(exp(.))) +
+    labs(title = "Prediction with 89% interval", x = "damage")
+  })
+# glimpse(predict$data)
+predict$p
 ```
 
 
@@ -1046,4 +1072,12 @@ data transformation used in 12H4 just above.
 
 
 ## 12H5 {-#prac12H5}
+
+See section 12.3.1 for details on the `Trolley` daa.
+
+```{r}
+data(Trolley)
+dataTrolley <- Trolley
+rm(Trolley)
+```
 
