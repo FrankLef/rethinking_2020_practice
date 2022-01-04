@@ -558,12 +558,13 @@ a predictor.
 And we plot the fit
 
 ```{r}
-predict <- list(probs = c(0.055, 0.945))
-predict <- within(fitted, {
+predict <- list()
+predict <- within(predict, {
+  probs = c(0.055, 0.945)
   newdata <- data.frame(femininity = seq_range(dataHurricanes$femininity, n = 20))
   data <- predicted_draws(b12H01b, newdata = newdata) %>%
     select(!matches("[.]chain|[.]iteration|[.]draw")) %>%
-    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
     mutate(across(.cols = where(is.numeric), .fns = round, 3))
   p <- plotHurricanes + 
     geom_lineribbon(data, 
@@ -791,8 +792,8 @@ scm <- within(scm, {
   damage ~ pressure + femininity,
   femininity ~ pressure,
   outcome = "deaths")
-  
-  p <- dag %>% 
+
+  p <- dag %>%
     tidy_dagitty(layout = "sugiyama") %>%
     ggdag::ggdag(node = FALSE) +
     geom_dag_text(size = 5, color = "tomato4") +
@@ -943,7 +944,7 @@ samples <- within(samples, {
   "fmnn-prss" = b12H03_fp,
   "damg-prss" = b12H03_dp,
   "fmnn-damg-prss" = b12H03_fdp)
-  
+
   data <- purrr::map_dfr(.x = fits, .f = function(x) {
     as_draws(x) %>%
       summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
@@ -952,10 +953,10 @@ samples <- within(samples, {
   },
   .id = "fit"
   )
-  
-  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, 
+
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5,
                                     y = variable, color = fit)) +
-    geom_pointinterval(fatten_point = 3, size = 2, 
+    geom_pointinterval(fatten_point = 3, size = 2,
                        position = position_dodge(width = 0.5)) +
     geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
     scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
@@ -979,8 +980,8 @@ print(loo_compare(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp,
 ```
 
 ```{r}
-round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
-            b12H03_dp, b12H03_fdp), 3)
+# round(model_weights(b12H03_f, b12H03_d, b12H03_p, b12H03_fd, b12H03_fp, 
+#             b12H03_dp, b12H03_fdp), 3)
 ```
 
 
@@ -1011,23 +1012,23 @@ best fit
 And we plot the fit
 
 ```{r}
-predict <- list()
-predict <- within(fitted, {
+preds <- list()
+preds <- within(preds, {
   probs = c(0.055, 0.945)
   newdata <- data.frame(damage = seq_range(dataHurricanes$damage, n = 20))
   data <- predicted_draws(b12H03_d, newdata = newdata) %>%
     select(!matches("[.]chain|[.]iteration|[.]draw")) %>%
-    summarise_draws(mean, median, ~quantile2(., probs = samples$probs)) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
     mutate(across(.cols = where(is.numeric), .fns = round, 3))
-  p <- plotHurricanes + 
-    geom_lineribbon(data, 
+  p <- plotHurricanes +
+    geom_lineribbon(data,
                     mapping = aes(x = damage, y = mean, ymin = q5.5, ymax = q94.5),
                     fill = "wheat", color = "brown", size = 1, alpha = 0.5) +
     scale_x_continuous(labels = ~scales::number_format(accuracy = 1)(exp(.))) +
     labs(title = "Prediction with 89% interval", x = "damage")
   })
 # glimpse(predict$data)
-predict$p
+preds$p
 ```
 
 
@@ -1068,16 +1069,157 @@ print(loo_compare(b12H03_d, b12H04, criterion = "loo"), simplify = FALSE)
 ```
 
 Conclusion: The model using log of damage is a better fit and confirms the
-data transformation used in 12H4 just above.
+data transformation $log(damage)$ used in 12H1 to 12H3 above.
 
 
 ## 12H5 {-#prac12H5}
 
-See section 12.3.1 for details on the `Trolley` daa.
+See section 12.3.1 for details on the `Trolley` data. We add the indicator
+$gender = 1 for male, 2 for female$ to be able to use an indexed variable in the model.
 
 ```{r}
 data(Trolley)
-dataTrolley <- Trolley
+dataTrolley <- Trolley %>%
+  mutate(gender = 2 - male)
 rm(Trolley)
+skimr::skim(dataTrolley)
 ```
 
+### Model {-}
+
+Since we need to find the effect of contact segregated by gender we consider
+contact as affected by gender.  We also note that *contact always implies
+action*, see section 12.3.3 top half of p. 387, therefore we include
+action as well as contact in the model.  This should have been noted
+in the details of 12H5.  It is annoying having to search and find a little
+5-word sentence in the middle of a page to realize that.
+
+$$
+\begin{align*}
+response_i &\sim Categorical(\overrightarrow{p}) \\
+logit(Pr(y_i \leq k)) &= \frac{Pr(y_i \leq k)}{1 - Pr(y_i \leq k)}  = \alpha_k - \phi_i \\
+\phi_i &= \beta_{action[gender]} \cdot action_i +  \beta_{contact[gender]} \cdot contact_i \\
+\alpha_k &\sim \mathcal{N}(0, 1.5) \\
+\beta_{\bullet[gender]} &\sim \mathcal{N}(0, 0.5)
+\end{align*}
+$$
+
+### Fit {-}
+
+```{r}
+a_file <- here::here("fits", "b12H05.rds")
+b12H05 <- readRDS(file = a_file)
+# message("This takes at least 10 min.")
+# b12H05 <- brms::brm(data = dataTrolley,
+#                    family = cumulative,
+#                    formula = bf(response ~ 1 + a + b * contact + c * action,
+#                                 a ~ 0 + gender,
+#                                 b ~ 0 + gender,
+#                                 c ~ 0 + gender,
+#                                 nl = TRUE),
+#                    prior = c(prior(normal(0, 1.5), class = Intercept),
+#                              prior(normal(0, 0.5), class = b, nlpar = a),
+#                              # prior(normal(0, 0.5), class = b, coef = gender2, nlpar = a),
+#                              prior(normal(0, 0.5), class = b, nlpar = b),
+#                              # prior(normal(0, 0.5), class = b, coef = gender2, nlpar = b),
+#                              # prior(normal(0, 0.5), class = b, coef = gender1, nlpar = c),
+#                              prior(normal(0, 0.5), class = b, nlpar = c)),
+#                    cores = detectCores(),
+#                    seed = 12)
+# # message(ÈThis takes at least 2 minutes)
+# b12H05 <- add_criterion(b12H05, c("loo", "waic"))
+saveRDS(object = b12H05, file = a_file)
+summary(b12H05)
+```
+
+### Inference {-}
+
+Since the response is increasing, from 1 to 7, 1 being **NOT** morally permissible
+and 7 being morally permissible, and since male = 1 and female = 2 for gender,
+then the fact that all slope coefficients $a_gender$, $b_gender$ and $c_gender$
+are negative supports the women are more bothered by contact (and action) than men.
+Said otherwise, the gender $female$ reduces the probability that the response
+will be in the higher range of outcomes.
+
+### Plotting {-}
+
+Plotting an ordered categorical response is not a small task. See @kurtz2020b
+for some wonderful and not so simple code on how to do that.
+
+But we can still plot the coefficients
+
+```{r}
+samples <- list()
+samples <- within(samples, {
+  probs = c(0.055, 0.945)
+  data <- as_draws(b12H05) %>%
+    summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
+    filter(grepl(pattern = ".+gender", variable)) %>%
+    mutate(across(.cols = where(is.numeric), .fns = round, 4))
+
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, y = variable)) +
+    geom_pointinterval(fatten_point = 5, size = 3, color = "lightblue") +
+    ggrepel::geom_text_repel(aes(label = mean), color = "lightblue") +
+    geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
+    scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+    theme(legend.title = element_blank()) +
+    labs(title = "Posterior distribution of coefficients with 89% interval",
+         x = NULL, y = NULL)
+})
+# samples$data
+samples$p
+```
+
+
+
+## 12H6 {-#prac12H6}
+
+```{r}
+data(Fish)
+dataFish <- Fish
+rm(Fish)
+skimr::skim(dataFish)
+```
+
+### Model {-}
+
+Important: See section 11.2.3 for details on the exposure and offset.  
+$log(hours)$ is the offset.
+
+```{r}
+message("TODO: Prior is Beta? Important to read Kurtz")
+```
+
+
+
+$$
+\begin{align*}
+caught_i &\sim \mathcal{ZIPoisson}(p_i, \lambda_i) \\
+logit(p_i) &= \alpha_p + \beta_p \cdot camper_i\\
+log(\lambda_i) &=  \alpha_\lambda + log(hours_i) + \beta_{child} \cdot child_i + \beta_{livebait} \cdot livebait_i \\
+\alpha_p &\sim \mathcal{Beta}(1, 1) \\
+\beta_p &\sim \mathcal{N}(0, 0.5) \\
+\alpha_\lambda &\sim \mathcal{N}(0, 1) \\
+\beta_{child} &\sim \mathcal{N}(0, 0.5) \\ 
+\end{align*}
+$$
+
+
+### Fit {-}
+
+
+```{r}
+# a_file <- here::here("fits", "b12H06.rds")
+# b12H06 <- readRDS(file = a_file)
+# b12H06 <- brm(data = dataFish,
+#       family = zero_inflated_poisson,
+#       output ~ 1,
+#       prior = c(prior(normal(1, 0.5), class = Intercept),
+#                 prior(beta(2, 6), class = zi)),  # the brms default is beta(1, 1)
+#       cores = detectCores(),
+#       seed = 12)
+# saveRDS(object = b12H06, file = a_file)
+```
+
+
+### Inference {-}
