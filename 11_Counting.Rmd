@@ -537,8 +537,8 @@ b11H01b <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01b <- brms::add_criterion(b11H01b, criterion = c("waic", "loo"))
-saveRDS(b11H01b, file = a_file)
-# summary(b11H01b)
+# saveRDS(b11H01b, file = a_file)
+summary(b11H01b)
 ```
 
 
@@ -574,7 +574,7 @@ b11H01c <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01c <- brms::add_criterion(b11H01c, criterion = c("waic", "loo"))
-saveRDS(b11H01c, file = a_file)
+# saveRDS(b11H01c, file = a_file)
 summary(b11H01c)
 ```
 
@@ -618,7 +618,6 @@ dataEagles <- eagles %>%
          desc = factor(desc)) %>%
   relocate(id)
 rm(eagles)
-glimpse(dataEagles)
 skimr::skim(dataEagles)
 ```
 
@@ -2158,7 +2157,7 @@ b11H06b <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H06b <- brms::add_criterion(b11H06b, criterion = c("waic", "loo"))
-saveRDS(b11H06b, file = a_file)
+# saveRDS(b11H06b, file = a_file)
 ```
 
 
@@ -2235,14 +2234,14 @@ $reserarch effort$
 ```{r}
 a_file <- here::here("fits", "b11H06c.rds")
 b11H06c <- readRDS(a_file)
-b11H06c <- brm(data = dataPrimates,
-             family = poisson,
-             formula = social_learning ~ 1 + brain_log + research_log,
-             prior = c(prior(normal(0, 0.5), class = Intercept),
-                       prior(normal(0, 0.5), class = b)),
-             cores = detectCores())
-b11H06c <- brms::add_criterion(b11H06c, criterion = c("waic", "loo"))
-saveRDS(b11H06c, file = a_file)
+# b11H06c <- brm(data = dataPrimates,
+#              family = poisson,
+#              formula = social_learning ~ 1 + brain_log + research_log,
+#              prior = c(prior(normal(0, 0.5), class = Intercept),
+#                        prior(normal(0, 0.5), class = b)),
+#              cores = detectCores())
+# b11H06c <- brms::add_criterion(b11H06c, criterion = c("waic", "loo"))
+# saveRDS(b11H06c, file = a_file)
 ```
 
 
