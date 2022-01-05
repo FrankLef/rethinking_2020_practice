@@ -1080,7 +1080,9 @@ $gender = 1 for male, 2 for female$ to be able to use an indexed variable in the
 ```{r}
 data(Trolley)
 dataTrolley <- Trolley %>%
-  mutate(gender = 2 - male)
+  mutate(gender = factor(if_else(male == 1, "male", "female")))
+  # mutate(gender = 2 - male,
+  #        gender = factor(gender, levels = c("male", "female")))
 rm(Trolley)
 skimr::skim(dataTrolley)
 ```
@@ -1107,8 +1109,10 @@ $$
 ### Fit {-}
 
 ```{r}
-a_file <- here::here("fits", "b12H05.rds")
-b12H05 <- readRDS(file = a_file)
+message("This fit is invalid.  Gender should be a factor.  
+        See b12H05a below. TO DELETE later.")
+# a_file <- here::here("fits", "b12H05.rds")
+# b12H05 <- readRDS(file = a_file)
 # message("This takes at least 10 min.")
 # b12H05 <- brms::brm(data = dataTrolley,
 #                    family = cumulative,
@@ -1119,27 +1123,58 @@ b12H05 <- readRDS(file = a_file)
 #                                 nl = TRUE),
 #                    prior = c(prior(normal(0, 1.5), class = Intercept),
 #                              prior(normal(0, 0.5), class = b, nlpar = a),
-#                              # prior(normal(0, 0.5), class = b, coef = gender2, nlpar = a),
 #                              prior(normal(0, 0.5), class = b, nlpar = b),
-#                              # prior(normal(0, 0.5), class = b, coef = gender2, nlpar = b),
-#                              # prior(normal(0, 0.5), class = b, coef = gender1, nlpar = c),
 #                              prior(normal(0, 0.5), class = b, nlpar = c)),
 #                    cores = detectCores(),
 #                    seed = 12)
-# # message(ÈThis takes at least 2 minutes)
+# # message("This takes at least 2 minutes")
 # b12H05 <- add_criterion(b12H05, c("loo", "waic"))
-saveRDS(object = b12H05, file = a_file)
-summary(b12H05)
+# saveRDS(object = b12H05, file = a_file)
+# summary(b12H05)
 ```
+
+```{r}
+message("This is the same as b12H05 but with gender as a factor.
+        It takes 1.5 hr to run.")
+a_file <- here::here("fits", "b12H05a.rds")
+b12H05a <- readRDS(file = a_file)
+# message("This takes at least 1.5 hr.")
+# startTime <- Sys.time()
+# b12H05a <- brms::brm(data = dataTrolley,
+#                    family = cumulative,
+#                    formula = bf(response ~ 1 + a + b * contact + c * action,
+#                                 a ~ 0 + gender,
+#                                 b ~ 0 + gender,
+#                                 c ~ 0 + gender,
+#                                 nl = TRUE),
+#                    prior = c(prior(normal(0, 1.5), class = Intercept),
+#                              prior(normal(0, 0.5), class = b, nlpar = a),
+#                              prior(normal(0, 0.5), class = b, nlpar = b),
+#                              prior(normal(0, 0.5), class = b, nlpar = c)),
+#                    cores = detectCores(),
+#                    seed = 12)
+# endTime <- Sys.time()
+# print(endTime - startTime)
+# beepr::beep("fanfare")
+# saveRDS(object = b12H05a, file = a_file)
+summary(b12H05a)
+```
+
+
+
 
 ### Inference {-}
 
-Since the response is increasing, from 1 to 7, 1 being **NOT** morally permissible
-and 7 being morally permissible, and since male = 1 and female = 2 for gender,
-then the fact that all slope coefficients $a_gender$, $b_gender$ and $c_gender$
-are negative supports the women are more bothered by contact (and action) than men.
-Said otherwise, the gender $female$ reduces the probability that the response
-will be in the higher range of outcomes.
+We observe that the coefficients for contact is -0.7 for female and -1.04 for 
+male. This leads us to conclude that men see contact as **NOT** 
+morally permissible.  The intercept for men indicates they consider action
+and contact as more permissible but the intercepts
+overlaps with the women's intercept and makes it difficult to make a definite
+conclusion.
+
+It is not very clear that women consider action and contact
+as more permissible unless interpreted in a very general sense.
+
 
 ### Plotting {-}
 
@@ -1152,16 +1187,28 @@ But we can still plot the coefficients
 samples <- list()
 samples <- within(samples, {
   probs = c(0.055, 0.945)
-  data <- as_draws(b12H05) %>%
+  data <- as_draws(b12H05a) %>%
     summarise_draws(mean, median, ~quantile2(., probs = probs)) %>%
     filter(grepl(pattern = ".+gender", variable)) %>%
-    mutate(across(.cols = where(is.numeric), .fns = round, 4))
+    mutate(across(.cols = where(is.numeric), .fns = round, 2)) %>%
+    mutate(caption = case_when(
+             variable == "b_a_gendermale" ~ "intercept male",
+             variable == "b_a_genderfemale" ~ "intercept female",
+             variable == "b_b_gendermale" ~ "contact male",
+             variable == "b_b_genderfemale" ~ "contact female",
+             variable == "b_c_gendermale" ~ "action male",
+             variable == "b_c_genderfemale" ~ "action female",
+             TRUE ~ as.character(variable)
+             ),
+           gender = if_else(grepl("gendermale", variable), "male", "female"))
 
-  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, y = variable)) +
-    geom_pointinterval(fatten_point = 5, size = 3, color = "lightblue") +
-    ggrepel::geom_text_repel(aes(label = mean), color = "lightblue") +
+  p <- ggplot(data, aes(x = mean, xmin = q5.5, xmax = q94.5, y = caption,
+                        color = gender)) +
+    geom_pointinterval(fatten_point = 5, size = 3) +
+    ggrepel::geom_text_repel(aes(label = mean)) +
     geom_vline(xintercept = 0, color = "white", linetype = "dashed") +
-    scale_x_continuous(breaks = scales::breaks_extended(n = 7)) +
+    scale_x_continuous(breaks = scales::breaks_extended(n = 3)) +
+    scale_color_manual(values = c("male" = "lightblue", "female" = "lightpink")) +
     theme(legend.title = element_blank()) +
     labs(title = "Posterior distribution of coefficients with 89% interval",
          x = NULL, y = NULL)
@@ -1174,9 +1221,18 @@ samples$p
 
 ## 12H6 {-#prac12H6}
 
+The fish example seems to com from [Zero-Inflated Models](https://cran.r-project.org/web/packages/brms/vignettes/brms_distreg.html)
+where Bruckner (creator of `brms`) shows how to use `brms` for zero-inflated
+models.
+
+
 ```{r}
+# In brm we get message 'Parameter names should not contain dots or underscores.'
+# so make sure there is no underscore or dot
 data(Fish)
-dataFish <- Fish
+dataFish <- Fish %>%
+  mutate(hourslog = log(hours)) %>%
+  rename(fish = fish_caught)
 rm(Fish)
 skimr::skim(dataFish)
 ```
@@ -1194,32 +1250,79 @@ message("TODO: Prior is Beta? Important to read Kurtz")
 
 $$
 \begin{align*}
-caught_i &\sim \mathcal{ZIPoisson}(p_i, \lambda_i) \\
-logit(p_i) &= \alpha_p + \beta_p \cdot camper_i\\
-log(\lambda_i) &=  \alpha_\lambda + log(hours_i) + \beta_{child} \cdot child_i + \beta_{livebait} \cdot livebait_i \\
+fish\_caught_i &\sim \mathcal{ZIPoisson}(p_i, \lambda_i) \\
+logit(p_i) &= \alpha_p + \beta_{camper} \cdot camper_i\\
+log(\lambda_i) &=  \alpha_\lambda + log(hours_i) + \beta_{child} \cdot child_i + \beta_{persons} \cdot persons_i \\
 \alpha_p &\sim \mathcal{Beta}(1, 1) \\
-\beta_p &\sim \mathcal{N}(0, 0.5) \\
+\beta_{camper} &\sim \mathcal{N}(0, 0.5) \\
 \alpha_\lambda &\sim \mathcal{N}(0, 1) \\
-\beta_{child} &\sim \mathcal{N}(0, 0.5) \\ 
+\beta_{child}, \beta_{persons} &\sim \mathcal{N}(0, 0.5)
 \end{align*}
 $$
 
 
 ### Fit {-}
 
+See [Bruckner](https://cran.r-project.org/web/packages/brms/vignettes/brms_distreg.html)
+for details on how to use the zero-inflated fit.  The details however are missing
+a few points worth noting
+
+* If you use `zi` with only intercept then you have to mention its prior with
+beta distribution as `prior(beta(1, 1), class = zi)` as shown in fit `b12H06a`
+* Always specify `zi` in the second part of the formula as shown in `b12H06b`
+otherwise you keep getting error message such as `The parameter 'fish' is not a valid distributional or non-linear parameter. Did you forget to set 'nl = TRUE'`
+* The parameters' name must not contain underscore or dot.
+
 
 ```{r}
-# a_file <- here::here("fits", "b12H06.rds")
-# b12H06 <- readRDS(file = a_file)
-# b12H06 <- brm(data = dataFish,
-#       family = zero_inflated_poisson,
-#       output ~ 1,
-#       prior = c(prior(normal(1, 0.5), class = Intercept),
-#                 prior(beta(2, 6), class = zi)),  # the brms default is beta(1, 1)
+a_file <- here::here("fits", "b12H06a.rds")
+b12H06a <- readRDS(file = a_file)
+# b12H06a <- brm(data = dataFish,
+#       family = zero_inflated_poisson(),
+#       formula = bf(
+#         fish ~ persons + child + camper),
+#       prior = c(prior(normal(0, 1), class = Intercept),
+#                 prior(normal(0, 0.5), class = b),
+#                 prior(beta(1, 1), class = zi)),
 #       cores = detectCores(),
 #       seed = 12)
-# saveRDS(object = b12H06, file = a_file)
+# saveRDS(object = b12H06a, file = a_file)
 ```
 
 
-### Inference {-}
+
+
+
+```{r}
+a_file <- here::here("fits", "b12H06b.rds")
+b12H06b <- readRDS(file = a_file)
+# b12H06b <- brm(data = dataFish,
+#       family = zero_inflated_poisson(),
+#       formula = bf(
+#         fish ~   + offset(hourslog) + persons + child + camper,
+#         zi ~ 1 + camper),
+#       prior = c(prior(normal(0, 1), class = Intercept),
+#                 prior(normal(0, 0.5), class = b)),
+#       cores = detectCores(),
+#       seed = 12)
+# saveRDS(object = b12H06b, file = a_file)
+summary(b12H06b)
+```
+
+
+## 12H7 {-#prac12H7}
+
+
+```{r echo=FALSE}
+message("Not done")
+```
+
+
+## 12H8 {-#prac12H8}
+
+
+
+```{r echo=FALSE}
+message("Not done")
+```
+
