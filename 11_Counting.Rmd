@@ -491,8 +491,8 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "b11H01a.rds")
-b11H01a <- readRDS(file = a_file)
+a_file <- here::here("fits", "b11H01a.qs")
+b11H01a <- qread(file = a_file)
 # b11H01a <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = pulled_left | trials(1) ~ 1,
@@ -502,7 +502,7 @@ b11H01a <- readRDS(file = a_file)
 #               seed = 11, cores = detectCores()
 #               )
 # b11H01a <- brms::add_criterion(b11H01a, criterion = c("waic", "loo"))
-# saveRDS(b11H01a, file = a_file)
+# qsave(b11H01a, a_file)
 summary(b11H01a)
 ```
 
@@ -521,8 +521,8 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "b11H01b.rds")
-b11H01b <- readRDS(file = a_file)
+a_file <- here::here("fits", "b11H01b.qs")
+b11H01b <- qread(file = a_file)
 # b11H01b <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = bf(pulled_left | trials(1) ~ a + b,
@@ -538,7 +538,7 @@ b11H01b <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01b <- brms::add_criterion(b11H01b, criterion = c("waic", "loo"))
-# saveRDS(b11H01b, file = a_file)
+# qsave(b11H01b, a_file)
 summary(b11H01b)
 ```
 
@@ -558,8 +558,8 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "b11H01c.rds")
-b11H01c <- readRDS(file = a_file)
+a_file <- here::here("fits", "b11H01c.qs")
+b11H01c <- qread(file = a_file)
 # b11H01c <- brm(data = dataChimp,
 #               family = binomial,
 #               formula = bf(pulled_left | trials(1) ~ a + b,
@@ -575,7 +575,7 @@ b11H01c <- readRDS(file = a_file)
 #                 ),
 #              cores = detectCores(), seed = 11)
 # b11H01c <- brms::add_criterion(b11H01c, criterion = c("waic", "loo"))
-# saveRDS(b11H01c, file = a_file)
+# qsave(b11H01c, a_file)
 summary(b11H01c)
 ```
 
@@ -641,8 +641,8 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "m11H02a.rds")
-m11H02a <- readRDS(file = a_file)
+a_file <- here::here("fits", "m11H02a.qs")
+m11H02a <- qread(file = a_file)
 # m11H02a <- quap(
 #   dataEagles,
 #   flist = alist(
@@ -651,7 +651,7 @@ m11H02a <- readRDS(file = a_file)
 #     a ~ dnorm(0, 1.5),
 #     bP[cond] ~ dnorm(0, 0.5))
 # )
-# saveRDS(m11H02a, file = a_file)
+# qsave(m11H02a, a_file)
 precis(m11H02a, depth = 2)
 ```
 
@@ -681,8 +681,8 @@ gt$m11H02a_sim <- rethinking::sim(m11H02a) %>%
 see b11.2 in @kurtz2020b on how to do this.
 
 ```{r}
-a_file <- here::here("fits", "b11H02a.rds")
-b11H02a <- readRDS(file = a_file)
+a_file <- here::here("fits", "b11H02a.qs")
+b11H02a <- qread(file = a_file)
 # b11H02a <- brm(data = dataEagles,
 #                    family = binomial,
 #                    formula = bf(y | trials(n) ~ a + b,
@@ -694,7 +694,7 @@ b11H02a <- readRDS(file = a_file)
 #                      prior(normal(0, 0.5), nlpar = b)),
 #                    cores = detectCores(), seed = 12)
 # b11H02a <- brms::add_criterion(b11H02a, criterion = c("waic", "loo"))
-# saveRDS(b11H02a, file = a_file)
+# qsave(b11H02a, a_file)
 summary(b11H02a)
 ```
 
@@ -744,8 +744,8 @@ inv_logit_scaled(fixef(b11H02a)[,"Estimate"])
 
 
 ```{r}
-a_file <- here::here("fits", "i11H02a.rds")
-i11H02a <- readRDS(file = a_file)
+a_file <- here::here("fits", "i11H02a.qs")
+i11H02a <- qread(file = a_file)
 # i11H02a <- inla(data = dataEagles,
 #                 formula =  y ~ 1 + f(idx, model = "iid",  
 #                                      hyper = list(prec = list(param = c(0.001, 0.001)))),
@@ -754,7 +754,7 @@ i11H02a <- readRDS(file = a_file)
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H02a, file = a_file)
+# qsave(i11H02a, file = a_file)
 summary(i11H02a)
 ```
 
@@ -894,8 +894,8 @@ differences in a) above.
 
 
 ```{r}
-a_file <- here::here("fits", "b11H02b.rds")
-b11H02b <- readRDS(file = a_file)
+a_file <- here::here("fits", "b11H02b.qs")
+b11H02b <- qread(file = a_file)
 # b11H02b <- brm(data = dataEagles,
 #                    family = binomial,
 #                    formula = bf(y | trials(n) ~ a + b + A*P,
@@ -907,7 +907,7 @@ b11H02b <- readRDS(file = a_file)
 #                      prior(normal(0, 0.5), nlpar = b)),
 #                    cores = detectCores(), seed = 12)
 # b11H02b <- brms::add_criterion(b11H02b, criterion = c("waic", "loo"))
-# saveRDS(b11H02b, file = a_file)
+# qsave(b11H02b, file = a_file)
 summary(b11H02b)
 ```
 
@@ -1099,8 +1099,8 @@ which seems to offer a reasonably good coverage.
 #### `quap` {-}
 
 ```{r}
-a_file <- here::here("fits", "m11H03a.rds")
-m11H03a <- readRDS(file = a_file)
+a_file <- here::here("fits", "m11H03a.qs")
+m11H03a <- qread(file = a_file)
 # m11H03a <- quap(
 #   data = dataSalam,
 #   flist = alist(
@@ -1109,7 +1109,7 @@ m11H03a <- readRDS(file = a_file)
 #     a ~ dnorm(2, 0.5),
 #     b ~ dnorm(0, 0.5))
 #   )
-# saveRDS(m11H03a, file = a_file)
+# qsave(m11H03a, file = a_file)
 precis(m11H03a)
 ```
 
@@ -1118,8 +1118,8 @@ precis(m11H03a)
 
 
 ```{r}
-a_file <- here::here("fits", "b11H03a.rds")
-b11H03a <- readRDS(a_file)
+a_file <- here::here("fits", "b11H03a.qs")
+b11H03a <- qread(file = a_file)
 # b11H03a <- brm(data = dataSalam,
 #              family = poisson,
 #              formula = SALAMAN ~ 1 + cover,
@@ -1127,7 +1127,7 @@ b11H03a <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H03a <- brms::add_criterion(b11H03a, criterion = c("waic", "loo"))
-# saveRDS(b11H03a, file = a_file)
+# qsave(b11H03a, file = a_file)
 ```
 
 
@@ -1140,8 +1140,8 @@ summary(b11H03a)
 
 
 ```{r}
-a_file <- here::here("fits", "i11H03a.rds")
-i11H03a <- readRDS(file = a_file)
+a_file <- here::here("fits", "i11H03a.qs")
+i11H03a <- qread(file = a_file)
 # i11H03a <- inla(data = dataSalam,
 #                 formula =  SALAMAN ~ 1 + cover,
 #                 family = "poisson",
@@ -1150,7 +1150,7 @@ i11H03a <- readRDS(file = a_file)
 #                                      mean = 0, prec = 1 / 0.5^2),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H03a, file = a_file)
+# qsave(i11H03a, file = a_file)
 ```
 
 
@@ -1382,8 +1382,8 @@ which seems to offer a reasonably good coverage.
 #### `brm` {-}
 
 ```{r}
-a_file <- here::here("fits", "b11H03b.rds")
-b11H03b <- readRDS(a_file)
+a_file <- here::here("fits", "b11H03b.qs")
+b11H03b <- qread(file = a_file)
 # b11H03b <- brm(data = dataSalam,
 #              family = poisson,
 #              formula = SALAMAN ~ 1 + age,
@@ -1391,7 +1391,7 @@ b11H03b <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H03b <- brms::add_criterion(b11H03b, criterion = c("waic", "loo"))
-# saveRDS(b11H03b, file = a_file)
+# qsave(b11H03b, file = a_file)
 ```
 
 
@@ -1444,8 +1444,8 @@ wrap_plots(p, ncol = 2)
 One way to improve the model could be to use a different rate for each $SITE$.
 
 ```{r}
-a_file <- here::here("fits", "b11H03c.rds")
-b11H03c <- readRDS(a_file)
+a_file <- here::here("fits", "b11H03c.qs")
+b11H03c <- qread(file = a_file)
 # b11H03c <- brm(data = dataSalam,
 #              family = poisson,
 #              formula = bf(SALAMAN ~ a + b * cover,
@@ -1455,7 +1455,7 @@ b11H03c <- readRDS(a_file)
 #                        prior(normal(0, 0.5), nlpar = b)),
 #              cores = detectCores())
 # b11H03c <- brms::add_criterion(b11H03c, criterion = c("waic", "loo"))
-# saveRDS(b11H03c, file = a_file)
+# qsave(b11H03c, file = a_file)
 ```
 
 
@@ -1626,31 +1626,31 @@ was with indexed predictors.
 The model used to get the total effect of gender, both direct and indirect.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11H04_g.rds")
-m11H04_g <- readRDS(a_file)
+a_file <- here::here("fits", "m11H04_g.qs")
+m11H04_g <- qread(file = a_file)
 # m11H04_g <- quap(
 #  dataGrants,
 #  flist = alist(
 #    awards ~ dbinom(applications, p),
 #    logit(p) <- a[gender],
 #    a[gender] ~ dnorm(0, 1.5)))
-# saveRDS(m11H04_g, file = a_file)
-precis(m11H04_g, depth = 2)
+# qsave(m11H04_g, file = a_file)
+head(precis(m11H04_g, depth = 2))
 ```
 
 
 The model used to get the total effect of discipline, both direct and indirect.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11H04_d.rds")
-m11H04_d <- readRDS(a_file)
+a_file <- here::here("fits", "m11H04_d.qs")
+m11H04_d <- qread(file = a_file)
 # m11H04_d <- quap(
 #   dataGrants,
 #   flist = alist(
 #     awards ~ dbinom(applications, p),
 #     logit(p) <- a[disc],
 #     a[disc] ~ dnorm(0, 1.5)))
-# saveRDS(m11H04_d, file = a_file)
+# qsave(m11H04_d, file = a_file)
 precis(m11H04_d, depth = 2)
 ```
 
@@ -1660,8 +1660,8 @@ The model used to get the direct effect of $gender$ taking into account
 the $discipline$ effect.
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11H04_gd.rds")
-m11H04_gd <- readRDS(a_file)
+a_file <- here::here("fits", "m11H04_gd.qs")
+m11H04_gd <- qread(file = a_file)
 # m11H04_gd <- quap(
 #   dataGrants,
 #   flist = alist(
@@ -1669,66 +1669,63 @@ m11H04_gd <- readRDS(a_file)
 #     logit(p) <- bG[gender] + bD[disc],
 #     bG[gender] ~ dnorm(0, 1.5),
 #     bD[disc] ~ dnorm(0, 1.5)))
-# saveRDS(m11H04_gd, file = a_file)
+# qsave(m11H04_gd, file = a_file)
 precis(m11H04_gd, depth = 2)
 ```
-
 
 
 
 #### `brm` {-}
 
 
-
-
 ```{r}
-a_file <- here::here("fits", "b11H04_g.rds")
-b11H04_g <- readRDS(a_file)
+a_file <- here::here("fits", "b11H04_g.qs")
+b11H04_g <- qread(file = a_file)
 # b11H04_g <- brm(data = dataGrants,
 #       family = binomial,
 #       formula = awards | trials(applications) ~ 0 + gender,
 #       prior = prior(normal(0, 1.5), class = b),
 #       cores = detectCores(), seed = 11)
 # b11H04_g <- brms::add_criterion(b11H04_g, criterion = c("waic", "loo"))
-# saveRDS(b11H04_g, file = a_file)
+# qsave(b11H04_g, file = a_file)
 summary(b11H04_g)
 ```
 
 
 
 ```{r}
-a_file <- here::here("fits", "b11H04_d.rds")
-b11H04_d <- readRDS(a_file)
+a_file <- here::here("fits", "b11H04_d.qs")
+b11H04_d <- qread(file = a_file)
 # b11H04_d <- brm(data = dataGrants,
 #       family = binomial,
 #       formula = awards | trials(applications) ~ 0 + disc,
 #       prior= c(prior(normal(0, 1.5), class = b)),
 #       cores = detectCores(), seed = 11)
 # b11H04_d <- brms::add_criterion(b11H04_d, criterion = c("waic", "loo"))
-# saveRDS(b11H04_d, file = a_file)
+# qsave(b11H04_d, file = a_file)
 summary(b11H04_d)
 ```
 
 
 
 ```{r}
-a_file <- here::here("fits", "b11H04_gd.rds")
-b11H04_gd <- readRDS(a_file)
+a_file <- here::here("fits", "b11H04_gd.qs")
+b11H04_gd <- qread(file = a_file)
 # b11H04_gd <- brm(data = dataGrants,
 #       family = binomial,
 #       formula = awards | trials(applications) ~ 0 + gender + disc,
 #       prior= c(prior(normal(0, 1.5), class = b)),
 #       cores = detectCores(), seed = 11)
 # b11H04_gd <- brms::add_criterion(b11H04_gd, criterion = c("waic", "loo"))
-# saveRDS(b11H04_gd, file = a_file)
+# qsave(b11H04_gd, file = a_file)
 summary(b11H04_gd)
 ```
 
 #### `inla` {-}
 
 ```{r}
-a_file <- here::here("fits", "i11H04_g.rds")
-i11H04_g <- readRDS(file = a_file)
+a_file <- here::here("fits", "i11H04_g.qs")
+i11H04_g <- qread(file = a_file)
 # i11H04_g <- inla(data = dataGrants,
 #                 formula =  awards ~ -1 + gender,
 #                 family = "binomial",
@@ -1736,14 +1733,14 @@ i11H04_g <- readRDS(file = a_file)
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H04_g, file = a_file)
+# qsave(i11H04_g, file = a_file)
 summary(i11H04_g)
 ```
 
 
 ```{r}
-a_file <- here::here("fits", "i11H04_d.rds")
-i11H04_d <- readRDS(file = a_file)
+a_file <- here::here("fits", "i11H04_d.qs")
+i11H04_d <- qread(file = a_file)
 # i11H04_d <- inla(data = dataGrants,
 #                 formula =  awards ~ -1 + disc,
 #                 family = "binomial",
@@ -1751,7 +1748,7 @@ i11H04_d <- readRDS(file = a_file)
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H04_d, file = a_file)
+# qsave(i11H04_d, file = a_file)
 summary(i11H04_d)
 ```
 
@@ -1760,8 +1757,8 @@ summary(i11H04_d)
 
 
 ```{r}
-a_file <- here::here("fits", "i11H04_gd.rds")
-i11H04_gd <- readRDS(file = a_file)
+a_file <- here::here("fits", "i11H04_gd.qs")
+i11H04_gd <- qread(file = a_file)
 # i11H04_gd <- inla(data = dataGrants,
 #                 formula =  awards ~ -1 + gender + disc,
 #                 family = "binomial",
@@ -1769,7 +1766,7 @@ i11H04_gd <- readRDS(file = a_file)
 #                 control.family = list(link = "logit"),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i11H04_gd, file = a_file)
+# qsave(i11H04_gd, file = a_file)
 summary(i11H04_gd)
 i11H04_gd$summary.fixed
 ```
@@ -1788,7 +1785,6 @@ data.frame(
   mutate(across(where(is.double), .fns = ~round(., digits = 2))) %>%
   arrange(waic)
 ```
-
 
 
 ```{r}
@@ -2101,8 +2097,8 @@ skimr::skim(dataPrimates)
 
 
 ```{r}
-a_file <- here::here("fits", "b11H06a.rds")
-b11H06a <- readRDS(a_file)
+a_file <- here::here("fits", "b11H06a.qs")
+b11H06a <- qread(a_file)
 # b11H06a <- brm(data = dataPrimates,
 #              family = poisson,
 #              formula = social_learning ~ 1 + brain_log,
@@ -2110,7 +2106,7 @@ b11H06a <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H06a <- brms::add_criterion(b11H06a, criterion = c("waic", "loo"))
-# saveRDS(b11H06a, file = a_file)
+# qsave(b11H06a, file = a_file)
 ```
 
 
@@ -2149,8 +2145,8 @@ exponential.
 
 
 ```{r}
-a_file <- here::here("fits", "b11H06b.rds")
-b11H06b <- readRDS(a_file)
+a_file <- here::here("fits", "b11H06b.qs")
+b11H06b <- qread(a_file)
 # b11H06b <- brm(data = dataPrimates,
 #              family = poisson,
 #              formula = social_learning ~ 1 + research_log,
@@ -2158,7 +2154,7 @@ b11H06b <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H06b <- brms::add_criterion(b11H06b, criterion = c("waic", "loo"))
-# saveRDS(b11H06b, file = a_file)
+# qsave(b11H06b, file = a_file)
 ```
 
 
@@ -2233,8 +2229,8 @@ $reserarch effort$
 
 
 ```{r}
-a_file <- here::here("fits", "b11H06c.rds")
-b11H06c <- readRDS(a_file)
+a_file <- here::here("fits", "b11H06c.qs")
+b11H06c <- qread(a_file)
 # b11H06c <- brm(data = dataPrimates,
 #              family = poisson,
 #              formula = social_learning ~ 1 + brain_log + research_log,
@@ -2242,7 +2238,7 @@ b11H06c <- readRDS(a_file)
 #                        prior(normal(0, 0.5), class = b)),
 #              cores = detectCores())
 # b11H06c <- brms::add_criterion(b11H06c, criterion = c("waic", "loo"))
-# saveRDS(b11H06c, file = a_file)
+# qsave(b11H06c, file = a_file)
 ```
 
 

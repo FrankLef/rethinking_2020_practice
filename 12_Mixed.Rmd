@@ -2,6 +2,7 @@
 library(rethinking)
 library(brms)
 library(INLA)
+library(qs)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(tidybayes, quietly = TRUE)
@@ -378,8 +379,8 @@ We select $\beta_i \sim \mathcal{N(mean=1.5, sd=0.25)}$ as the prior.
 
 
 ```{r}
-a_file <- here::here("fits", "m12H01a.rds")
-m12H01a <- readRDS(file = a_file)
+a_file <- here::here("fits", "m12H01a.qs")
+m12H01a <- qread(file = a_file)
 # m12H01a <- quap(
 #   data = dataHurricanes,
 #   flist = alist(
@@ -388,7 +389,7 @@ m12H01a <- readRDS(file = a_file)
 #     a ~ dnorm(4, 1),
 #     b ~ dnorm(1.5, 0.25))
 #   )
-# saveRDS(m12H01a, file = a_file)
+# qsave(m12H01a, file = a_file)
 ```
 
 the summary is
@@ -404,8 +405,8 @@ precis(m12H01a)
 
 
 ```{r}
-a_file <- here::here("fits", "b12H01a.rds")
-b12H01a <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H01a.qs")
+b12H01a <- qread(file = a_file)
 # b12H01a <- brm(data = dataHurricanes,
 #                    family = poisson,
 #                    formula = deaths ~ 1 + femininity,
@@ -413,7 +414,7 @@ b12H01a <- readRDS(file = a_file)
 #                              prior(normal(1, 0.25), class = b)),
 #                    cores = detectCores())
 # b12H01a <- brms::add_criterion(b12H01a, criterion = c("waic", "loo"))
-saveRDS(b12H01a, file = a_file)
+# qsave(b12H01a, file = a_file)
 ```
 
 the summary is
@@ -429,8 +430,8 @@ summary(b12H01a)
 
 
 ```{r}
-a_file <- here::here("fits", "i12H01a.rds")
-i12H01a <- readRDS(file = a_file)
+a_file <- here::here("fits", "i12H01a.qs")
+i12H01a <- qread(file = a_file)
 # i12H01a <- inla(data = dataHurricanes,
 #                 formula =  deaths ~ femininity,
 #                 family = "poisson",
@@ -439,7 +440,7 @@ i12H01a <- readRDS(file = a_file)
 #                                      mean = 1, prec = 1 / 0.25^2),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i12H01a, file = a_file)
+# qsave(i12H01a, file = a_file)
 ```
 
 and the summary is
@@ -472,8 +473,8 @@ $$
 
 
 ```{r}
-a_file <- here::here("fits", "m12H01b.rds")
-m12H01b <- readRDS(file = a_file)
+a_file <- here::here("fits", "m12H01b.qs")
+m12H01b <- qread(file = a_file)
 # m12H01b <- quap(
 #   data = dataHurricanes,
 #   flist = alist(
@@ -481,7 +482,7 @@ m12H01b <- readRDS(file = a_file)
 #     log(lambda) <- a,
 #     a ~ dnorm(4, 1))
 #   )
-# saveRDS(m12H01b, file = a_file)
+# qsave(m12H01b, file = a_file)
 ```
 
 the summary
@@ -496,15 +497,15 @@ summary(m12H01b)
 
 
 ```{r}
-a_file <- here::here("fits", "b12H01b.rds")
-b12H01b <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H01b.qs")
+b12H01b <- qread(file = a_file)
 # b12H01b <- brm(data = dataHurricanes,
 #                    family = poisson,
 #                    formula = deaths ~ 1,
 #                    prior = prior(normal(4, 1), class = Intercept),
 #                    cores = detectCores())
 # b12H01b <- brms::add_criterion(b12H01b, criterion = c("waic", "loo"))
-# saveRDS(b12H01b, file = a_file)
+# qsave(b12H01b, file = a_file)
 ```
 
 the summary
@@ -520,8 +521,8 @@ summary(b12H01b)
 
 
 ```{r}
-a_file <- here::here("fits", "i12H01b.rds")
-i12H01b <- readRDS(file = a_file)
+a_file <- here::here("fits", "i12H01b.qs")
+i12H01b <- qread(file = a_file)
 # i12H01b <- inla(data = dataHurricanes,
 #                 formula =  deaths ~ 1,
 #                 family = "poisson",
@@ -529,7 +530,7 @@ i12H01b <- readRDS(file = a_file)
 #                 control.fixed = list(mean.intercept = 4, prec.intercept = (1 / 1^2)),
 #                 control.predictor = list(link = 1, compute = TRUE),
 #                 control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE))
-# saveRDS(i12H01b, file = a_file)
+# qsave(i12H01b, file = a_file)
 ```
 
 and the summary is
@@ -641,8 +642,8 @@ details on how to use rethinking.
 
 
 ```{r}
-a_file <- here::here("fits", "m12H02.rds")
-m12H02 <- readRDS(file = a_file)
+a_file <- here::here("fits", "m12H02.qs")
+m12H02 <- qread(file = a_file)
 # m12H02 <- quap(
 #   data = dataHurricanes,
 #   flist = alist(
@@ -652,7 +653,7 @@ m12H02 <- readRDS(file = a_file)
 #     b ~ dnorm(1, 0.25),
 #     phi ~ dexp(1))
 #   )
-# saveRDS(m12H02, file = a_file)
+# qsave(m12H02, file = a_file)
 ```
 
 the summary
@@ -667,8 +668,8 @@ precis(m12H02)
 
 
 ```{r}
-a_file <- here::here("fits", "b12H02.rds")
-b12H02 <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H02.qs")
+b12H02 <- qread(file = a_file)
 # b12H02 <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + femininity,
@@ -679,14 +680,10 @@ b12H02 <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H02 <- brms::add_criterion(b12H02, criterion = c("waic", "loo"))
-# saveRDS(object = b12H02, file = a_file)
-```
-
-the summary
-
-```{r}
+# qsave(b12H02, a_file)
 summary(b12H02)
 ```
+
 
 ### Inference {-}
 
@@ -822,8 +819,8 @@ for all variables as in practice 12H1.
 
 ```{r}
 # femininity
-a_file <- here::here("fits", "b12H03_f.rds")
-b12H03_f <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_f.qs")
+b12H03_f <- qread(file = a_file)
 # b12H03_f <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + femininity,
@@ -834,11 +831,11 @@ b12H03_f <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_f <- brms::add_criterion(b12H03_f, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_f, file = a_file)
+# qsave(b12H03_f, a_file)
 
 # damage
-a_file <- here::here("fits", "b12H03_d.rds")
-b12H03_d <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_d.qs")
+b12H03_d <- qread(file = a_file)
 # b12H03_d <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + damage,
@@ -849,11 +846,11 @@ b12H03_d <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_d <- brms::add_criterion(b12H03_d, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_d, file = a_file)
+# qsave(b12H03_d, a_file)
 
 # pressure
-a_file <- here::here("fits", "b12H03_p.rds")
-b12H03_p <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_p.qs")
+b12H03_p <- qread(file = a_file)
 # b12H03_p <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + pressure,
@@ -864,11 +861,11 @@ b12H03_p <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_p <- brms::add_criterion(b12H03_p, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_p, file = a_file)
+# qsave(b12H03_p, a_file)
 
 # femininity and damage
-a_file <- here::here("fits", "b12H03_fd.rds")
-b12H03_fd <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_fd.qs")
+b12H03_fd <- qread(file = a_file)
 # b12H03_fd <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + femininity + damage,
@@ -879,11 +876,11 @@ b12H03_fd <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_fd <- brms::add_criterion(b12H03_fd, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_fd, file = a_file)
+# qsave(b12H03_fd, a_file)
 
 # femininity and pressure
-a_file <- here::here("fits", "b12H03_fp.rds")
-b12H03_fp <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_fp.qs")
+b12H03_fp <- qread(file = a_file)
 # b12H03_fp <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + femininity + pressure,
@@ -894,11 +891,11 @@ b12H03_fp <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_fp <- brms::add_criterion(b12H03_fp, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_fp, file = a_file)
+qsave(b12H03_fp, a_file)
 
 # damage and pressure
-a_file <- here::here("fits", "b12H03_dp.rds")
-b12H03_dp <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_dp.qs")
+b12H03_dp <- qread(file = a_file)
 # b12H03_dp <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + damage + pressure,
@@ -909,11 +906,11 @@ b12H03_dp <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_dp <- brms::add_criterion(b12H03_dp, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_dp, file = a_file)
+# qsave(b12H03_dp, a_file)
 
 # femininity, damage and pressure
-a_file <- here::here("fits", "b12H03_fdp.rds")
-b12H03_fdp <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H03_fdp.qs")
+b12H03_fdp <- qread(file = a_file)
 # b12H03_fdp <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + femininity + damage + pressure,
@@ -924,7 +921,7 @@ b12H03_fdp <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H03_fdp <- brms::add_criterion(b12H03_fdp, criterion = c("waic", "loo"))
-# saveRDS(object = b12H03_fdp, file = a_file)
+qsave(b12H03_fdp, a_file)
 ```
 
 
@@ -1039,8 +1036,8 @@ The fit with damage used directly is
 
 
 ```{r}
-a_file <- here::here("fits", "b12H04.rds")
-b12H04 <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H04.qs")
+b12H04 <- qread(file = a_file)
 # b12H04 <- brm(data = dataHurricanes,
 #       family = negbinomial,
 #       deaths ~ 1 + damage_norm,
@@ -1051,7 +1048,7 @@ b12H04 <- readRDS(file = a_file)
 #       seed = 12)
 # # NOTE: be careful when using waic with gamma-poisson
 # b12H04 <- brms::add_criterion(b12H04, criterion = c("waic", "loo"))
-# saveRDS(object = b12H04, file = a_file)
+# qsave(b12H04, a_file)
 ```
 
 
@@ -1109,35 +1106,8 @@ $$
 ### Fit {-}
 
 ```{r}
-message("This fit is invalid.  Gender should be a factor.  
-        See b12H05a below. TO DELETE later.")
-# a_file <- here::here("fits", "b12H05.rds")
-# b12H05 <- readRDS(file = a_file)
-# message("This takes at least 10 min.")
-# b12H05 <- brms::brm(data = dataTrolley,
-#                    family = cumulative,
-#                    formula = bf(response ~ 1 + a + b * contact + c * action,
-#                                 a ~ 0 + gender,
-#                                 b ~ 0 + gender,
-#                                 c ~ 0 + gender,
-#                                 nl = TRUE),
-#                    prior = c(prior(normal(0, 1.5), class = Intercept),
-#                              prior(normal(0, 0.5), class = b, nlpar = a),
-#                              prior(normal(0, 0.5), class = b, nlpar = b),
-#                              prior(normal(0, 0.5), class = b, nlpar = c)),
-#                    cores = detectCores(),
-#                    seed = 12)
-# # message("This takes at least 2 minutes")
-# b12H05 <- add_criterion(b12H05, c("loo", "waic"))
-# saveRDS(object = b12H05, file = a_file)
-# summary(b12H05)
-```
-
-```{r}
-message("This is the same as b12H05 but with gender as a factor.
-        It takes 1.5 hr to run.")
-a_file <- here::here("fits", "b12H05a.rds")
-b12H05a <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H05a.qs")
+b12H05a <- qread(file = a_file)
 # message("This takes at least 1.5 hr.")
 # startTime <- Sys.time()
 # b12H05a <- brms::brm(data = dataTrolley,
@@ -1156,7 +1126,7 @@ b12H05a <- readRDS(file = a_file)
 # endTime <- Sys.time()
 # print(endTime - startTime)
 # beepr::beep("fanfare")
-# saveRDS(object = b12H05a, file = a_file)
+# qsave(b12H05a, a_file)
 summary(b12H05a)
 ```
 
@@ -1275,8 +1245,8 @@ otherwise you keep getting error message such as `The parameter 'fish' is not a 
 
 
 ```{r}
-a_file <- here::here("fits", "b12H06a.rds")
-b12H06a <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H06a.qs")
+b12H06a <- qread(file = a_file)
 # b12H06a <- brm(data = dataFish,
 #       family = zero_inflated_poisson(),
 #       formula = bf(
@@ -1286,7 +1256,7 @@ b12H06a <- readRDS(file = a_file)
 #                 prior(beta(1, 1), class = zi)),
 #       cores = detectCores(),
 #       seed = 12)
-# saveRDS(object = b12H06a, file = a_file)
+# qsave(b12H06a, a_file)
 ```
 
 
@@ -1294,8 +1264,8 @@ b12H06a <- readRDS(file = a_file)
 
 
 ```{r}
-a_file <- here::here("fits", "b12H06b.rds")
-b12H06b <- readRDS(file = a_file)
+a_file <- here::here("fits", "b12H06b.qs")
+b12H06b <- qread(file = a_file)
 # b12H06b <- brm(data = dataFish,
 #       family = zero_inflated_poisson(),
 #       formula = bf(
@@ -1305,7 +1275,7 @@ b12H06b <- readRDS(file = a_file)
 #                 prior(normal(0, 0.5), class = b)),
 #       cores = detectCores(),
 #       seed = 12)
-# saveRDS(object = b12H06b, file = a_file)
+# qsave(b12H06b, a_file)
 summary(b12H06b)
 ```
 
