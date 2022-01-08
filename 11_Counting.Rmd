@@ -2,6 +2,7 @@
 library(rethinking)
 library(brms)
 library(INLA)
+library(qs)
 library(dplyr, quietly = TRUE)
 library(tidyr, quietly = TRUE)
 library(modelr)
@@ -262,8 +263,8 @@ $$
 The fit with hamiltonian MCMC
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11M07a.rds")
-m11M07a <- readRDS(a_file)
+a_file <- here::here("fits", "m11M07a.qs")
+m11M07a <- qread(a_file)
 # m11M07a <- ulam(
 #   data = dataChimp,
 #   flist = alist(
@@ -273,15 +274,15 @@ m11M07a <- readRDS(a_file)
 #     b[treatment] ~ dnorm(0, 0.5)),
 #   chains = 4, log_lik = TRUE
 #   )
-# saveRDS(m11M07a, file = a_file)
+# qsave(m11M07a, a_file)
 # precis(m11M07a, depth = 2)
 ```
 
 and with quadratic approximation
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11M07b.rds")
-m11M07b <- readRDS(a_file)
+a_file <- here::here("fits", "m11M07b.qs")
+m11M07b <- qread(a_file)
 # m11M07b <- quap(
 #   dataChimp,
 #   flist = alist(
@@ -289,7 +290,7 @@ m11M07b <- readRDS(a_file)
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 1.5),
 #     b[treatment] ~ dnorm(0, 0.5)))
-# saveRDS(m11M07b, file = a_file)
+# qsave(m11M07b, a_file)
 # precis(m11M07b, depth = 2)
 ```
 
@@ -312,8 +313,8 @@ $$
 The fit with Hamiltonian MCMC
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11M07c.rds")
-m11M07c <- readRDS(a_file)
+a_file <- here::here("fits", "m11M07c.qs")
+m11M07c <- qread(a_file)
 # message("22 divergent pairs after warmup, examine pairs() plot for diagnosis")
 # m11M07c <- ulam(
 #   data = dataChimp,
@@ -324,15 +325,15 @@ m11M07c <- readRDS(a_file)
 #     b[treatment] ~ dnorm(0, 0.5)),
 #   chains = 4, log_lik = TRUE
 #   )
-# saveRDS(m11M07c, file = a_file)
+# qsave(m11M07c, a_file)
 # precis(m11M07c, depth = 2)
 ```
 
 and with quadratic approximation
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "m11M07d.rds")
-m11M07d <- readRDS(a_file)
+a_file <- here::here("fits", "m11M07d.qs")
+m11M07d <- qread(a_file)
 # m11M07d <- quap(
 #   dataChimp,
 #   flist = alist(
@@ -340,7 +341,7 @@ m11M07d <- readRDS(a_file)
 #     logit(p) <- a[actor] + b[treatment],
 #     a[actor] ~ dnorm(0, 10),
 #     b[treatment] ~ dnorm(0, 0.5)))
-# saveRDS(m11M07d, file = a_file)
+# qsave(m11M07d, a_file)
 # precis(m11M07d, depth = 2)
 ```
 
@@ -399,8 +400,8 @@ $$
 the fit *including* Hawaii is
 
 ```{r}
-a_file <- here::here(getwd(), "fits", "b11M08a.rds")
-b11M08a <- readRDS(a_file)
+a_file <- here::here("fits", "b11M08a.qs")
+b11M08a <- qread(a_file)
 # b11M08a <- brm(data = dataKline,
 #              family = poisson,
 #              formula = bf(total_tools ~ a + b * log_pop_s,
@@ -410,15 +411,15 @@ b11M08a <- readRDS(a_file)
 #                        prior(normal(0, 0.2), nlpar = b)),
 #              cores = detectCores(), seed = 11)
 # b11M08a <- brms::add_criterion(b11M08a, criterion = c("waic", "loo"))
-# saveRDS(b11M08a, file = a_file)
+# qsave(b11M08a, a_file)
 summary(b11M08a)
 ```
 
 and the fit *excluding* Hawaii is
 
 ```{r}
-a_file <- here::here(getwd(),"fits", "b11M08b.rds")
-b11M08b <- readRDS(a_file)
+a_file <- here::here("fits", "b11M08b.qs")
+b11M08b <- qread(a_file)
 # dh <- dataKline %>%
 #   filter(culture != "Hawaii")
 # b11M08b <- brm(data = dh,
@@ -430,7 +431,7 @@ b11M08b <- readRDS(a_file)
 #                        prior(normal(0, 0.2), nlpar = b)),
 #              cores = detectCores(), seed = 11)
 # b11M08b <- brms::add_criterion(b11M08b, criterion = c("waic", "loo"))
-# saveRDS(b11M08b, file = a_file)
+# qsave(b11M08b, a_file)
 summary(b11M08b)
 ```
 
