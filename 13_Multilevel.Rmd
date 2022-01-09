@@ -1,19 +1,236 @@
 ```{r include=FALSE}
 library(rethinking)
 library(brms)
-library(tidyr)
-library(dplyr)
-library(ggplot2)
-library(paletteer)
-library(bayesplot)
+library(INLA)
+library(qs)
+library(dplyr, quietly = TRUE)
+library(tidyr, quietly = TRUE)
+library(tidybayes, quietly = TRUE)
+library(modelr)
+library(scales)
+library(loo)
+library(simstudy)
+library(dagitty, quietly = TRUE)
+library(ggdag, quietly = TRUE)
+library(posterior)
+library(ggdist, quietly = TRUE)
+library(ggmcmc, quietly = TRUE)
+library(bayesplot, quietly = TRUE)
+library(patchwork, quietly = TRUE)
+library(paletteer, quietly = TRUE)
+library(gt)
 ```
+
+
+
+```{r}
+# these options help stan run faster
+# source: http://mjskay.github.io/tidybayes/articles/tidy-brms.html
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+```
+
 
 
 # Multilevel Models {#MLM}
 
+We set the current theme used for plotting
+
+```{r}
+theme_set(ggthemes::theme_solarized_2())
+```
+
+
 
 ## 13E1 {-#prac13E1}
 
-```{r echo=FALSE}
-message("TODO")
+$\alpha_{tank} \ sim \mathcal{N}(0, 1)$ should produce more shrinkage because
+$\sigma = 1$ will force a smaller estimate than with $\sigma = 2$.
+
+
+## 13E2 {-#prac13E2}
+
+See section 13.1, p. 403 for example.
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{Binomial}(1, p_i) \\
+logit(p_i) &= \alpha_{group[i]} + \beta x_i \\
+\alpha_{j} &\sim \mathcal{N}(\bar{\alpha}, \sigma_{\alpha}) \\
+\beta &\sim \mathcal{N}(0, 0.5) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 1.5) \\
+\sigma_{\alpha} &\sim \mathcal{Exponential}(1)
+\end{align*}
+$$
+
+
+## 13E3 {-#prac13E3}
+
+See section 13.1, p. 403 for example.
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{N}(\mu, \sigma) \\
+\mu_i &= \alpha_{group[i]} + \beta x_i \\
+\alpha_{j} &\sim \mathcal{N}(\bar{\alpha}, \sigma_{\alpha}) \\
+\beta &\sim \mathcal{N}(0, 1) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 5) \\
+\sigma_{\alpha} &\sim \mathcal{Exp}(1) \\
+\sigma &\sim \mathcal{Exp}(1)
+\end{align*}
+$$
+
+
+## 13E4 {-#prac13E4}
+
+
+See section 11.2 for Poisson regression.
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} &= \alpha_{group[i]} \\
+\alpha_j &\sim \mathcal{N}(\bar{\alpha}, \sigma_\alpha) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 5) \\
+\sigma_{\alpha} &\sim \mathcal{Exp}(1) \\
+\end{align*}
+$$
+
+
+## 13E5 {-#prac13E5}
+
+
+See rethinking box at the beginning of section 13.3 on cross-classification.
+
+$$
+\begin{align*}
+y_i &\sim \mathcal{Poisson}(\lambda_i) \\
+\log{\lambda_i} &= \alpha_{group[i]} + \beta_{type[i]} \\
+\alpha_j &\sim \mathcal{N}(\bar{\alpha}, \sigma_\alpha) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 5) \\
+\sigma_{\alpha} &\sim \mathcal{Exp}(1) \\
+\beta_j &\sim \mathcal{N}(\bar{\beta}, \sigma_\beta) \\
+\bar{\beta} &\sim \mathcal{N}(0, 5) \\
+\sigma_{\beta} &\sim \mathcal{Exp}(1) \\
+\end{align*}
+$$
+
+
+
+## 13M1 {-#prac13M1}
+
+The problem mentions $size$ and $pred$ as *effects* to add to the intercept.
+Therefore they must be considered as predictors with numerical values and are
+converted to dummy variables
+
+
+```{r}
+data(reedfrogs)
+dataFrogs <- reedfrogs %>%
+  mutate(tank = factor(seq_len(n())),
+         pred = if_else(pred == "pred", 1, 0),
+         size = if_else(size == "big", 1, 0))
+rm(reedfrogs)
+skimr::skim(dataFrogs)
 ```
+
+and the model would be
+
+
+$$
+\begin{align*}
+surv_i &\sim \mathcal{Binomial}(n_i, p_i) \\
+logit(p_i) &= \alpha_{tank[i]} + \beta_{pred} \cdot pred_i + \beta_{size} \cdot size_i \\
+\alpha_j &\sim \mathcal{N}(\bar{\alpha}, \sigma) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 1.5) \\
+\beta_{pred}, \beta_{size} &\sim \mathcal{N}(0, 0.5)\\
+\sigma &\sim \mathcal{Exponential}(1)
+\end{align*}
+$$
+
+The problem mentions $size$ and $pred$ as *effects* to add to the intercept.
+Therefore they must be considered as predictors with numerical values.
+
+```{r}
+a_file <- here::here("fits", "b13M01a.qs")
+b13M01a <- qread(a_file)
+# b13M01a <- brm(
+#   data = dataFrogs,
+#   family = binomial,
+#   surv | trials(density) ~ 1 + (1 | tank),
+#   prior = c(prior(normal(0, 1.5), class = Intercept),
+#             prior(exponential(1), class = sd)),
+#   cores = detectCores(), seed = 13)
+# b13M01a <- add_criterion(b13M01a, c("loo", "waic"))
+# qsave(b13M01a, a_file)
+
+# cretae the list holding the fits
+models <- list()
+models <- within(models, {
+  formulas <- list(
+    "b13M01b" = bf(surv | trials(density) ~ 1 + (1 | tank) + pred),
+    "b13M01c" = bf(surv | trials(density) ~ 1 + (1 | tank) + size),
+    "b13M01d" = bf(surv | trials(density) ~ 1 + (1 | tank) + pred + size),
+    "b13M01e" = bf(surv | trials(density) ~ 1 + (1 | tank) + pred + size + pred * size))
+})
+
+a_file <- here::here("fits", "b13M01list.qs")
+models$fits <- qread(a_file)
+# create the fits
+# models$fits <- purrr::map(.x = models$formulas, .f = function(x) {
+#   m <- update(b13M01a,
+#               newdata = dataFrogs,
+#               formula = x,
+#               prior = prior(normal(0, 0.5), class = b))
+#   m <- add_criterion(m, c("loo", "waic"))
+# })
+# qsave(models$fits, a_file)
+
+models$summ <- purrr::map_dfr(.x = models$fits, .f = function(x) {
+  spread_draws(model = x, sd_tank__Intercept) %>%
+    summarize_draws()
+  }, 
+  .id = "fit")
+models$summ <- models$summ %>%
+  mutate(caption = case_when(fit == "b13M01b" ~ "pred",
+                   fit == "b13M01c" ~ "size",
+                   fit == "b13M01d" ~ "pred + size",
+                   fit == "b13M01e" ~ "pred + size + pred:size",
+                   TRUE ~ as.character(fit)))
+# glimpse(models$summ)
+
+ggplot(models$summ, aes(x = mean, xmin = q5, xmax = q95, y = caption, color = fit)) +
+  geom_pointinterval(fatten_point = 3, size = 5) +
+  ggrepel::geom_text_repel(aes(label = round(mean, 2)), color= "midnightblue") +
+  scale_color_paletteer_d("awtools::bpalette") +
+  theme(legend.position = "none") +
+  labs(title = "90% interval of sd_tank__Intercept",
+       x = "sd_tank__Intercept", y = NULL)
+```
+
+The question concerns *the inferred variation variation across tanks*. This means
+comparing $\sigma_{tank}$, i.e. $sd_tank__Intercept$, across the models.
+
+If predictors would ocontain all the information then $\sigma_{tank}$ would be
+zero.  The results above show that $size$ is a predictor that has little effect
+on the outcome.
+
+
+## 13M2 {-#prac13M2}
+
+```{r}
+loo_compare(models$fits$b13M01b, models$fits$b13M01c, models$fits$b13M01d, 
+            models$fits$b13M01e, criterion = "waic")
+```
+
+b13M01c is the model with $size$ only which confirms our conclusion in 13M1
+that it is the least informative model.
+
+
+Note however, that other predictors in combination with $size$ might actually
+make it more relevant. So the above is not an absolute conclusion.
+
+
+## 13M3 {-#prac13M3}
+
+
