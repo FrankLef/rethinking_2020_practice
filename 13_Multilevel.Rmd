@@ -59,7 +59,7 @@ logit(p_i) &= \alpha_{group[i]} + \beta x_i \\
 \alpha_{j} &\sim \mathcal{N}(\bar{\alpha}, \sigma_{\alpha}) \\
 \beta &\sim \mathcal{N}(0, 0.5) \\
 \bar{\alpha} &\sim \mathcal{N}(0, 1.5) \\
-\sigma_{\alpha} &\sim \mathcal{Exponential}(1)
+\sigma_{\alpha} &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
 
@@ -144,7 +144,7 @@ logit(p_i) &= \alpha_{tank[i]} + \beta_{pred} \cdot pred_i + \beta_{size} \cdot 
 \alpha_j &\sim \mathcal{N}(\bar{\alpha}, \sigma) \\
 \bar{\alpha} &\sim \mathcal{N}(0, 1.5) \\
 \beta_{pred}, \beta_{size} &\sim \mathcal{N}(0, 0.5)\\
-\sigma &\sim \mathcal{Exponential}(1)
+\sigma &\sim \mathcal{Exp}(1)
 \end{align*}
 $$
 
@@ -233,4 +233,110 @@ make it more relevant. So the above is not an absolute conclusion.
 
 ## 13M3 {-#prac13M3}
 
+I could not find the way to do this practice with `brms`. Kurtz also
+says something similiar in section 13.4.
 
+```{r}
+message("NOTE: Practice cannot be done with brms (?)")
+```
+
+
+
+See model `m13.2` in section 13.1, p. 403,for the basic Reed frog varying 
+intercept model. With the Cauchy distribution, it will be
+
+
+
+$$
+\begin{align*}
+surv_i &\sim \mathcal{Binomial}(n_i, p_i) \\
+logit(p_i) &= \alpha_{tank[i]} \\
+\alpha_{tank} &\sim \mathcal{Cauchy}(\bar{\alpha}, \sigma) \\
+\bar{\alpha} &\sim \mathcal{N}(0, 1.5) \\
+\sigma &\sim \mathcal{Exponential}(1)
+\end{align*}
+$$
+
+
+
+```{r}
+a_file <- here::here("fits", "m13M03.qs")
+m13M03 <- qread(a_file)
+# dat <- dataFrogs %>%
+#   select(surv, density, tank)
+# m13M03 <- ulam(
+#   flist = alist(
+#     surv ~ dbinom(density, p),
+#     logit(p) <- a[tank],
+#     a[tank] ~ dcauchy(a_bar, sigma),
+#     a_bar ~ dnorm(0, 1),
+#     sigma ~ dexp(1)),
+#   data = dat,
+#   log_lik = TRUE
+# )
+qsave(m13M03, a_file)
+summary(m13M03)
+```
+
+
+
+
+The code below are experiments in trying to do this with `brms`
+
+
+```{r}
+# a_file <- here::here("fits", "b13M03.qs")
+# b13M03 <- qread(a_file)
+# b13M03 <- brm(
+#   data = dataFrogs,
+#   family = binomial,
+#   surv | trials(density) ~ 1 + (1 | tank),
+#   prior = c(prior(cauchy(0, 1), class = Intercept),
+#             prior(exponential(1), class = sd)),
+#   cores = detectCores(),
+#   sample_prior = TRUE, seed = 13)
+# b13M03 <- add_criterion(b13M03, c("loo", "waic"))
+# qsave(b13M03, a_file)
+# summary(b13M03)
+# prior_summary(b13M03)
+# b13M03
+# (b13M03)
+# help(brmsfamily)
+```
+
+
+
+
+
+```{r}
+# a_file <- here::here("fits", "b13M03a.qs")
+# b13M03a <- qread(a_file)
+# b13M03a <- brm(
+#   data = dataFrogs,
+#   family = binomial,
+#   formula = bf(surv | trials(density) ~ (1 | tank),
+#                tank ~ 
+#                tank ~ 1 + a + b,
+#                a ~ 1,
+#                b ~ 1,
+#                nl = TRUE),
+#   prior = c(prior(cauchy(a, b), clsss = Intercept),
+#             prior(normal(0, 1), class = b, nlpar = a),
+#             prior(exponential(1), class = b, nlpar = b)),
+#   cores = detectCores())
+# b13M03a <- add_criterion(b13M03a, c("loo", "waic"))
+# qsave(b13M03a, a_file)
+# summary(b13M03a)
+# 
+# help(brmsformula)
+```
+
+
+## 13M4 {-#prac13M4}
+
+```{r}
+message("TODO: Same as 13M3. Could not find the way to do this with brms.")
+```
+
+
+## 13M5 {-#prac13M5}
